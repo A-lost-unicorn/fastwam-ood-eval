@@ -1,0 +1,9 @@
+channels:
+  - conda-forge
+channel_priority: strict
+auto_activate_base: false
+# Runtime commands also set these to absolute project paths, avoiding ~/.conda.
+envs_dirs:
+  - .conda/envs
+pkgs_dirs:
+  - .conda/pkgs

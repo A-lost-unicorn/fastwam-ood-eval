@@ -1,0 +1,4 @@
+category: camera_viewpoints
+upstream_category: Camera Viewpoints
+level_mapping: {easy: [1, 2], medium: [3], hard: [4, 5]}
+

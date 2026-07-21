@@ -1,0 +1,41 @@
+experiment:
+  name: mock_smoke
+  output_dir: outputs/mock_smoke
+  seed: 20260721
+  overwrite: false
+  resume: true
+  save_video: false
+  save_failure_video_only: true
+  log_level: INFO
+hardware:
+  devices: [0, 1, 2, 3]
+  workers_per_gpu: 1
+  precision: fp32
+  max_gpu_memory_gb: 0
+  enable_tf32: false
+checkpoint:
+  path: null
+  model_name: mock
+  config_path: null
+benchmark:
+  backend: mock
+  suite: libero_spatial
+  suite_config: configs/suites/libero_spatial.yaml
+  tasks: [0]
+  episodes_per_task: 2
+  max_steps: 6
+  num_steps_wait: 0
+  control_horizon: 2
+  image_size: [32, 32]
+perturbation:
+  enabled: true
+  category: [camera_viewpoints, light_conditions]
+  level: [easy]
+  parameters: {}
+recording:
+  fps: 10
+  save_observations: false
+  save_actions: true
+  save_robot_state: true
+  video_format: mp4
+

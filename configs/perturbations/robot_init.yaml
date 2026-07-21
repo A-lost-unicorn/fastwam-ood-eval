@@ -1,0 +1,4 @@
+category: robot_initial_states
+upstream_category: Robot Initial States
+level_mapping: {easy: [1, 2], medium: [3], hard: [4, 5]}
+

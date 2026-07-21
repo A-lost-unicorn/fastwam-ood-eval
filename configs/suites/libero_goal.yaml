@@ -1,0 +1,13 @@
+suite: libero_goal
+tasks:
+  - {id: 0, name: open_the_middle_drawer_of_the_cabinet}
+  - {id: 1, name: put_the_bowl_on_the_stove}
+  - {id: 2, name: put_the_wine_bottle_on_top_of_the_cabinet}
+  - {id: 3, name: open_the_top_drawer_and_put_the_bowl_inside}
+  - {id: 4, name: put_the_bowl_on_top_of_the_cabinet}
+  - {id: 5, name: push_the_plate_to_the_front_of_the_stove}
+  - {id: 6, name: put_the_cream_cheese_in_the_bowl}
+  - {id: 7, name: turn_on_the_stove}
+  - {id: 8, name: put_the_bowl_on_the_plate}
+  - {id: 9, name: put_the_wine_bottle_on_the_rack}
+

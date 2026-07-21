@@ -1,0 +1,13 @@
+suite: libero_object
+tasks:
+  - {id: 0, name: pick_up_the_alphabet_soup_and_place_it_in_the_basket}
+  - {id: 1, name: pick_up_the_cream_cheese_and_place_it_in_the_basket}
+  - {id: 2, name: pick_up_the_salad_dressing_and_place_it_in_the_basket}
+  - {id: 3, name: pick_up_the_bbq_sauce_and_place_it_in_the_basket}
+  - {id: 4, name: pick_up_the_ketchup_and_place_it_in_the_basket}
+  - {id: 5, name: pick_up_the_tomato_sauce_and_place_it_in_the_basket}
+  - {id: 6, name: pick_up_the_butter_and_place_it_in_the_basket}
+  - {id: 7, name: pick_up_the_milk_and_place_it_in_the_basket}
+  - {id: 8, name: pick_up_the_chocolate_pudding_and_place_it_in_the_basket}
+  - {id: 9, name: pick_up_the_orange_juice_and_place_it_in_the_basket}
+

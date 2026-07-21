@@ -1,0 +1,4 @@
+category: light_conditions
+upstream_category: Light Conditions
+level_mapping: {easy: [1, 2], medium: [3], hard: [4, 5]}
+

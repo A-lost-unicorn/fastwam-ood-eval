@@ -1,0 +1,4 @@
+category: background_textures
+upstream_category: Background Textures
+level_mapping: {easy: [1, 2], medium: [3], hard: [4, 5]}
+

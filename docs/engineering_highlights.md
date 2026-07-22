@@ -9,11 +9,13 @@
 | 项目 | 状态 | 可用证据 |
 | --- | --- | --- |
 | 配置、planner、adapter、分片、resume、聚合 | 已实现 | `src/`、`configs/`、`tests/` |
-| 自动化测试 | 已通过 | `pytest -q`：29 passed；不代表真实仿真通过 |
+| 自动化测试 | 已通过 | `pytest -q`：43 passed；包含 PyTorch 2.6+ 安全边界、LIBERO-Plus init-state 路由与 10,030 个官方变体全量路径审计 |
 | Conda 环境与激活入口 | 已配置 | `scripts/create_env.sh`、`scripts/activate_env.sh` |
-| checkpoint/stats | 未下载 | `checkpoints/fastwam_release/` 仅有 `.gitkeep` |
-| LIBERO-Plus assets | 未下载 | 目标 `third_party/LIBERO-plus/libero/libero/assets/` 不存在 |
-| 单卡 Clean/OOD smoke | 未执行 | 无真实 episode result/video |
+| checkpoint/stats | 已下载并人工校验 | checkpoint SHA-256 `1000437c...a49579`；stats SHA-256 `30f81ad7...68638` |
+| FastWAM 公共运行时模型 | 已下载并逐文件校验 | `scripts/download_fastwam_runtime_models.sh`；T5、VAE、tokenizer 共约 11.9 GiB |
+| LIBERO-Plus assets | 已下载并检查目录结构 | `articulated_objects/`、`new_objects/`、`scenes/`、`textures/` 等已就位 |
+| 单卡 Clean smoke | 已通过 | 2026-07-22：2 episodes、2 success、0 exception；仅证明链路可用，不作为成功率估计 |
+| 单卡 OOD smoke | 已通过 | 2026-07-22：camera/light 共 4 episodes、4 success、0 exception；仅证明链路可用，不作为成功率估计 |
 | 三卡真实 pilot | 未执行 | 只有配置/规划能力，无真实 worker result |
 | full OOD 结果和鲁棒性结论 | 未执行 | 不得填写成功率或性能下降 |
 
@@ -21,16 +23,16 @@
 
 | 亮点 | 设计与价值 | 实现证据 | 验证状态 |
 | --- | --- | --- | --- |
-| 不侵入上游的适配层 | 不修改 Fast-WAM、LIBERO、LIBERO-Plus；复用官方 checkpoint loader、观测/动作处理和 success 判定 | `policy/fastwam_adapter.py`、`envs/libero_adapter.py` | 代码完成，真实 smoke 待验证 |
-| 同名 backend 隔离 | 原版与 Plus 都导出 `libero`；为每个进程生成隔离的 `LIBERO_CONFIG_PATH` 并只加载一个 checkout，避免 import/path 污染 | `envs/libero_adapter.py`、`evaluator.py` | 单元链路完成，真实 smoke 待验证 |
+| 不侵入上游的适配层 | 不修改 Fast-WAM、LIBERO、LIBERO-Plus；复用官方 checkpoint loader、观测/动作处理和 success 判定 | `policy/fastwam_adapter.py`、`envs/libero_adapter.py` | Clean 2-episode 与 Plus 4-episode smoke 均已验证 |
+| 同名 backend 隔离 | 原版与 Plus 都导出 `libero`；为每个进程生成隔离的 `LIBERO_CONFIG_PATH` 并只加载一个 checkout，避免 import/path 污染 | `envs/libero_adapter.py`、`evaluator.py` | Clean 与 Plus 已分别在真实独立进程验证 |
 | 可复现任务规划 | 每个 job 固化 suite、base/upstream task、seed、init index、扰动身份和策略身份；job ID 由规范化内容哈希生成 | `evaluation/jobs.py`、`job_manifest.jsonl` | 已单测 |
 | episode-level 多 GPU | 每 GPU 一个独立 evaluator，按 job hash 稳定分片；避免把独立 rollout 错做模型 DDP | `distributed_launcher.py`、`shard_jobs()` | 分片已单测，三卡真实运行待验证 |
-| 可恢复执行 | worker 逐 episode 追加并 `fsync` JSONL；默认跳过完成 job，支持 failed/all 重跑策略 | `evaluation/resume.py`、`schemas/episode_result.py` | 已单测 |
-| 科学比较门禁 | Clean/OOD 共用 seed 公式和 checkpoint；聚合时同一策略 checkpoint hash 不一致则拒绝比较 | `reproducibility.py`、`analysis/aggregate.py` | 已单测，真实配对待验证 |
+| 可恢复执行 | worker 逐 episode 追加并 `fsync` JSONL；默认跳过完成 job，支持 failed/all 重跑策略 | `evaluation/resume.py`、`schemas/episode_result.py` | 已单测；Clean smoke 用 `--rerun failed` 从两条真实 exception 恢复成功 |
+| 科学比较门禁 | Clean/OOD 共用 seed 公式和 checkpoint；聚合时同一策略 checkpoint hash 不一致则拒绝比较 | `reproducibility.py`、`analysis/aggregate.py` | 已单测；Clean/OOD smoke 的 checkpoint SHA-256 已实测一致 |
 | 上游协议显式化 | 区分 Clean 多 seed 与 Plus 每官方变体 1 次；`all_once` 强制 `episodes_per_task=1`，防止 10,030×20 的重复计算 | `config.py`、`jobs.py`、`eval_ood_full.yaml` | 已单测，正式 manifest 需重建 |
-| 可审计 OOD 元数据 | 记录官方 category、difficulty、classification ID、variant name、candidate/selection 信息和上游 commit | `jobs.py`、`episode_result.py` | planner 已验证，运行时参数采集仍有限 |
+| 可审计 OOD 元数据 | 记录官方 category、difficulty、classification ID、variant name、candidate/selection 信息和上游 commit | `jobs.py`、`episode_result.py` | 真实 Plus result 已验证，运行时底层数值参数采集仍有限 |
 | 研究结论防越界 | 明确 release Fast-WAM、Joint WAM、IDM 是不同架构/权重；训练配方不匹配时禁止把比较写成未来想象的因果增益 | `config.py`、`thought1_generalization.md` | 配置门禁已单测，匹配权重缺失 |
-| 失败分析闭环 | 记录 action/robot state trace、异常、失败视频和聚合统计，提供静态 failure review 页面 | `recording/`、`analysis/review.py` | mock/单测完成，真实失败样本待积累 |
+| 失败分析闭环 | 记录 action/robot state trace、异常、失败视频和聚合统计，提供静态 failure review 页面 | `recording/`、`analysis/review.py` | Clean/OOD smoke 已产出真实 trace/video；失败分类样本仍待积累 |
 
 ## 3. 难点、阻碍、方案与剩余风险
 
@@ -39,14 +41,14 @@
 - 问题：LIBERO README 的旧训练环境与 Fast-WAM 当前 Python/PyTorch/CUDA/MuJoCo 组合冲突；直接照两份安装文档叠加会降级 torch 或污染系统 Python。
 - 方案：以 Fast-WAM 的 Python 3.10、PyTorch 2.7.1+cu128 栈为主，在项目目录创建隔离 Conda 环境；不使用 sudo，不安装 LIBERO 的旧 torch 训练栈。
 - 证据：`scripts/create_env.sh`、`scripts/activate_env.sh`、`docs/environment_setup.md`。
-- 状态：环境已配置；真实 MuJoCo/Fast-WAM 联合 smoke 仍是最终兼容性证明。
+- 状态：环境已配置；2026-07-22 已通过真实 MuJoCo/Fast-WAM Clean smoke。PyTorch 2.6+ 的 init-state 兼容问题见 3.13。
 
 ### 3.2 原版 LIBERO 与 LIBERO-Plus 使用同一个 Python 包名
 
 - 问题：两者都导出 `libero==0.1.0`，同时 editable install 或同进程切换会得到依赖加载顺序相关的结果。
 - 方案：不同时安装两套包；adapter 在新进程中选择对应 checkout，并为每个实验写隔离路径配置。
 - 取舍：实现简单、无需 policy server；代价是 Clean/OOD 必须分进程运行。
-- 状态：实现完成，真实双 backend smoke 待验证。
+- 状态：Clean 与 Plus 已分别在独立真实评测进程完成 smoke；同一进程切换仍明确禁止。
 
 ### 3.3 评测单位容易被误解，可能放大到 200,600 次 rollout
 
@@ -60,14 +62,14 @@
 - 问题：如果 condition/category 参与 seed，或 Clean/OOD 使用不同 checkpoint，性能差无法归因于环境扰动。
 - 方案：seed 只由 base seed、suite、base task 和 episode index 派生；condition 不进入公式；结果记录 checkpoint SHA-256，聚合器校验一致性。
 - 取舍：`all_once` 的多个 OOD variant 都与同一 base task 的 Clean index 0 对照，这是 task-instance 协议下的一对多配对，不等同于每个 variant 有多个重复 seed。
-- 状态：单测完成，真实结果待验证。
+- 状态：单测完成；Clean/OOD smoke 的 checkpoint hash 一致，seed 0/1 可配对。正式统计仍需 full 实验。
 
 ### 3.5 海量独立 episode 的分布式调度与断点续跑
 
 - 问题：任务时长不同、进程可能中断；用 DDP 不会提高独立环境 rollout 的资源利用率，粗粒度文件覆盖又会丢失进度。
 - 方案：按 job hash 对 rank 稳定分片，每 GPU 一个模型/环境进程；每个 episode 完成即追加 durable JSONL；resume 按 job ID 去重。
 - 取舍：静态分片简单可复现，但极端任务时长差异可能造成尾部负载不均；如 pilot 证明明显失衡，再设计动态队列。
-- 状态：分片/resume 已单测，三卡负载与 EGL 行为待 pilot 测量。
+- 状态：resume 已经真实 exception→failed-only rerun 验证；三卡分片负载与 EGL 行为仍待 pilot 测量。
 
 ### 3.6 checkpoint 与 dataset stats 是一组实验条件
 
@@ -80,12 +82,12 @@
 
 - 问题：服务器无显示环境，torch 的可见 GPU 编号又会被 `CUDA_VISIBLE_DEVICES` 重映射。
 - 方案：使用 `MUJOCO_GL=egl`；单卡显式 `MUJOCO_EGL_DEVICE_ID=0`，torchrun 按 `LOCAL_RANK` 设置 EGL device 和 policy device。
-- 状态：launcher 已实现，真实三卡 EGL smoke 待验证。
+- 状态：单卡 GPU 0/EGL 已通过 Clean 2-episode 和 OOD 4-episode smoke；真实三卡 EGL 仍待验证。
 
 ### 3.8 “实际扰动参数”目前只做到可追溯，尚未完全结构化
 
 - 问题：官方 classification 只保证 task ID、类别和 difficulty；相机、光照、布局细节分散在 BDDL、XML、robot class、init files 和 wrapper 中。
-- 当前方案：保存 classification ID、variant name、官方类别/难度、selection metadata 和上游 commit，并用视频肉眼复核。
+- 当前方案：保存 classification ID、variant name、官方类别/难度、selection metadata 和上游 commit，并用视频肉眼复核。2026-07-22 的 OOD smoke 已确认 camera 构图变化和 light 明暗/阴影变化。
 - 缺口：尚未把实际 camera pose、FOV、light properties 等统一解析进 result；因此不能声称“底层数值参数已自动记录”。
 - 后续：为五类分别实现 runtime introspection/schema，并保存来源文件路径/hash；无法读取的字段显式记为 `unknown`。
 
@@ -99,7 +101,7 @@
 ### 3.10 视觉与 observation 证据仍不完整
 
 - 问题：当前视频只保存 `agentview_image`；`recording.save_observations` 已进入配置但尚未真正落盘，无法仅靠视频证明 wrist camera 正常。
-- 临时方案：smoke 强制保存所有 agent-view 视频，并结合 processed image shape、action trace 和 robot state 验收。
+- 临时方案：smoke 强制保存所有 agent-view 视频，并结合 processed image shape、action trace 和 robot state 验收。2026-07-22 的独立 reset probe 已确认 agent-view 与 wrist camera 都返回 `256×256×3`，但落盘视频仍只有 agent-view。
 - 后续：增加双相机 contact sheet/短视频及小尺寸 observation diagnostic，避免保存全量原始 observation 造成 I/O 爆炸。
 - 状态：已识别，未解决。
 
@@ -114,6 +116,25 @@
 - 问题：当前锁定 commit 根目录没有明确 LICENSE，不能推定沿用原版 LIBERO 的 MIT。
 - 方案：仅把上游作为 `third_party` checkout 使用，不复制或重新分发其代码/assets；在 `upstream_notes.md` 记录风险。
 - 状态：风险已识别，公开分发前仍需上游确认。
+
+### 3.13 PyTorch 2.6+ 默认安全加载与旧 LIBERO init-state 不兼容
+
+- 现象：release checkpoint 成功加载后，两个 Clean smoke job 都在 `environment.reset()` 报 `_pickle.UnpicklingError`；上游 `suite.get_task_init_states()` 调用未带参数的 `torch.load()`。
+- 根因：PyTorch 2.6 起 `torch.load()` 默认 `weights_only=True`，而 LIBERO 的 `.init/.pruned_init` 保存的是 NumPy 数组，不是纯 tensor state dict。
+- 方案：不修改 pinned `third_party/LIBERO`；在项目 adapter 中复现最小加载路径，并只对 checkout 内 `init_files/` 下、扩展名为 `.init` 或 `.pruned_init` 的常规文件显式使用 `weights_only=False`。
+- 安全取舍：旧 pickle 模式可能执行恶意 payload，因此先 `resolve(strict=True)`，拒绝通过符号链接或 `..` 逃出受信任根目录，并拒绝未知扩展名；该例外不用于 checkpoint 或用户任意路径。
+- 验证：新增 3 个回归测试；真实 `libero_spatial` task 0 reset 成功，两路相机正常；随后 `--rerun failed` 完成 2/2 episodes，聚合结果为 0 exception。
+- 证据：`src/fastwam_ood_eval/envs/libero_adapter.py`、`tests/test_libero_adapter.py`、`outputs/clean_smoke/workers/rank_0/episode_results.jsonl`、`outputs/clean_smoke/summary/metrics.json`。
+
+### 3.14 LIBERO-Plus 视觉变体不提供同名 init-state 文件
+
+- 现象：Plus checkpoint 和模型加载完成后，4 个 OOD smoke job 都在 `reset()` 立即失败；程序尝试读取带 `_view_...` 或 `_light_...` 后缀的 `.pruned_init`，但这些文件不存在。
+- 根因：LIBERO-Plus 的 BDDL task 是独立变体，但相机、光照、语言等视觉扰动有意复用基础任务的 init state；table/background、light 和 new-object/level 还有不同的路径重写规则。为修复 PyTorch 2.6 兼容而绕过上游 `get_task_init_states()` 后，项目只保留了安全加载，却遗漏了 Plus 的路径解析语义。
+- 方案：把“解析可信相对路径”和“显式 `weights_only=False` 加载”分层；Plus adapter 复现 pinned upstream 的顺序覆盖规则，new-object/level 文件从 `init_files/libero_newobj/` 读取并 reshape，同时抑制上游每次构造 suite 打印数千 task ID 的调试输出。
+- 关键细节：规则必须顺序覆盖而不是互斥 `elif`。例如基础任务名本身可能包含 `_table_center`，后续 `_light_`、`_tb_` 或 `_add_` 规则必须覆盖误匹配，否则仍会生成错误路径。
+- 验证：10 个规则/优先级单测，加上对官方 `task_classification.json` 全部 10,030 行的路径存在性审计；真实 reset probe 覆盖两条 camera、两条 light 变体；修复后 failed-only rerun 完成 4/4、0 exception。
+- 运行证据：四条 action trace 均为 finite 且非全零，末端执行器首末位移约 0.36–0.39 m；四个 MP4 均可解码，camera/light 首帧可见不同构图或明暗；Clean/OOD checkpoint SHA-256 均为 `1000437c...a49579`。
+- 证据：`src/fastwam_ood_eval/envs/libero_plus_adapter.py`、`tests/test_libero_plus_adapter.py`、`outputs/ood_smoke/summary/metrics.json`、`outputs/ood_smoke/summary/report.md`。
 
 ## 4. 简历表达素材
 
@@ -162,4 +183,3 @@
 - 失败和回滚也要记录，不能只保留成功路径。
 - 简历中的每个数字必须能追溯到 `experiment_manifest.json`、episode JSONL 或聚合报告。
 - 不把 mock、dry-run、plan、pytest 或 doctor 成功写成真实策略成功率。
-

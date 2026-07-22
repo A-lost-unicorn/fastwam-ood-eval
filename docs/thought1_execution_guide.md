@@ -2,7 +2,7 @@
 
 本文是“标准 LIBERO → LIBERO-Plus 环境扰动鲁棒性评测”的操作手册。它回答“按什么顺序做、每一步看什么证据、什么时候必须停”，不代替研究结论边界或实验结果。
 
-当前状态（2026-07-22）：代码、配置和本地 Conda 环境已经准备；官方 Fast-WAM checkpoint、配套 dataset stats 和 LIBERO-Plus assets 尚未下载，真实 Clean/OOD episode 尚未运行。本文中的下载和评测命令都只是待执行步骤，本次文档更新没有触发它们。
+当前状态（2026-07-22）：代码、配置、本地 Conda 环境、官方 Fast-WAM checkpoint/配套 stats、运行时公共模型和 LIBERO-Plus assets 均已准备。单卡 Clean smoke（2/2 completed）与单卡 OOD smoke（4/4 completed）已经通过；三卡 pilot 和 full 尚未运行。smoke 的小样本成功率只用于链路验收，不是性能结论。
 
 配套文档：
 
@@ -199,7 +199,8 @@ fastwam-ood plan \
   --config configs/eval_clean_smoke.yaml \
   --set experiment.save_failure_video_only=false
 
-CUDA_VISIBLE_DEVICES=0 MUJOCO_GL=egl MUJOCO_EGL_DEVICE_ID=0 \
+DIFFSYNTH_MODEL_BASE_PATH="$PWD/checkpoints" DIFFSYNTH_SKIP_DOWNLOAD=true \
+  CUDA_VISIBLE_DEVICES=0 MUJOCO_GL=egl MUJOCO_EGL_DEVICE_ID=0 \
   fastwam-ood evaluate \
   --config configs/eval_clean_smoke.yaml \
   --device cuda:0 \
@@ -216,14 +217,30 @@ CUDA_VISIBLE_DEVICES=0 MUJOCO_GL=egl MUJOCO_EGL_DEVICE_ID=0 \
 | 动作有效 | `workers/rank_0/traces/*.jsonl` | action 非空、全部 finite、不是全 0 |
 | 机器人运动 | 视频与 trace 中首末 `robot0_eef_pos` | 肉眼或状态差异可见 |
 | episode 结束 | `termination_reason` | 为 `success` 或 `max_steps`，不是异常退出 |
-| 结果落盘 | `episode_results.jsonl` | 每个 planned job 恰好一条可解析记录 |
+| 结果落盘 | worker JSONL、聚合后的 JSONL | 每个 planned job 恰好一条最新结果；worker JSONL 可保留同一 job 的历史重试记录 |
 
 快速检查工件：
 
 ```bash
 find outputs/clean_smoke/workers/rank_0 -maxdepth 2 -type f -print
-head -n 1 outputs/clean_smoke/workers/rank_0/episode_results.jsonl | python -m json.tool
+fastwam-ood aggregate --experiment-dir outputs/clean_smoke
+head -n 1 outputs/clean_smoke/summary/episode_results.jsonl | python -m json.tool
 ```
+
+如果某个 job 以 `exception` 或 `max_steps` 结束且问题已经修复，只重跑失败项：
+
+```bash
+DIFFSYNTH_MODEL_BASE_PATH="$PWD/checkpoints" DIFFSYNTH_SKIP_DOWNLOAD=true \
+  CUDA_VISIBLE_DEVICES=0 MUJOCO_GL=egl MUJOCO_EGL_DEVICE_ID=0 \
+  fastwam-ood evaluate \
+  --config configs/eval_clean_smoke.yaml \
+  --device cuda:0 \
+  --rerun failed \
+  --set experiment.save_failure_video_only=false
+```
+
+不要删除旧 JSONL；它是尝试历史。resume 与 aggregate 都会按 `job_id` 采用最后一条
+记录，因此修复后的结果会替代旧异常进入汇总，同时保留故障审计证据。
 
 检查 action 是否 finite 且不是全零：
 
@@ -263,6 +280,17 @@ CUDA_VISIBLE_DEVICES=0 MUJOCO_GL=egl MUJOCO_EGL_DEVICE_ID=0 \
   --set experiment.save_failure_video_only=false
 ```
 
+为避免模型加载阶段隐式联网，推荐与 Clean 一样显式设置本地模型目录：
+
+```bash
+DIFFSYNTH_MODEL_BASE_PATH="$PWD/checkpoints" DIFFSYNTH_SKIP_DOWNLOAD=true \
+  CUDA_VISIBLE_DEVICES=0 MUJOCO_GL=egl MUJOCO_EGL_DEVICE_ID=0 \
+  fastwam-ood evaluate \
+  --config configs/eval_ood_smoke.yaml \
+  --device cuda:0 \
+  --set experiment.save_failure_video_only=false
+```
+
 除 Clean 的全部验收项外，还要确认：
 
 1. 对照 Clean/OOD 视频，主相机视角、光照或背景确实按所选 variant 改变，而不是只有配置名变化。
@@ -272,6 +300,22 @@ CUDA_VISIBLE_DEVICES=0 MUJOCO_GL=egl MUJOCO_EGL_DEVICE_ID=0 \
 5. 所有 `skipped` 都有明确 `skip_reason`，且不进入成功率分母。
 
 当前 manifest 记录的是官方 variant 身份与分类元数据，不是所有底层相机位姿、光源参数或 XML 属性的规范化展开。数值级“实际扰动参数”尚未实现自动采集；在补齐运行时 introspection 前，必须依靠 variant 名称/ID、上游 commit、任务文件和视频共同审计，不能把这一项写成已自动验证。
+
+2026-07-22 的真实 OOD smoke 结果：camera/light 各 2 个变体，共 4/4 completed、4 success、0 exception。四条轨迹 action 均 finite 且非全零，末端执行器位移约 0.36–0.39 m，四个 MP4 均可解码；首帧抽检确认 camera 构图与 light 明暗/阴影确实变化。Clean/OOD checkpoint SHA-256 完全一致。证据位于 `outputs/ood_smoke/summary/` 和 `outputs/ood_smoke/workers/rank_0/`；该结果只证明链路，不用于估计正式 OOD 成功率。
+
+若修复异常后仅需恢复失败 job，使用：
+
+```bash
+DIFFSYNTH_MODEL_BASE_PATH="$PWD/checkpoints" DIFFSYNTH_SKIP_DOWNLOAD=true \
+  CUDA_VISIBLE_DEVICES=0 MUJOCO_GL=egl MUJOCO_EGL_DEVICE_ID=0 \
+  fastwam-ood evaluate \
+  --config configs/eval_ood_smoke.yaml \
+  --device cuda:0 \
+  --rerun failed \
+  --set experiment.save_failure_video_only=false
+```
+
+不要删除 worker JSONL 中的旧异常行；aggregate 按 `job_id` 采用最后一条记录，旧行保留为故障审计证据。Plus 的视觉变体经常复用基础任务 init state，因此缺少“与 variant 同名”的 `.pruned_init` 不代表 assets 下载不完整；应由 adapter 按 pinned upstream 规则解析，不能临时复制或伪造 init 文件。
 
 ## 7. 阶段 5：三卡小规模 pilot
 

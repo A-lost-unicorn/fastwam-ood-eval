@@ -107,16 +107,22 @@ CUDA_VISIBLE_DEVICES=0 MUJOCO_GL=egl MUJOCO_EGL_DEVICE_ID=0 \
 
 ## 3. 阶段 2：准备 LIBERO-Plus assets
 
-从官方数据仓库下载 `assets.zip`。注意解压目标是 `libero/libero/` 父目录，让压缩包生成 `assets/`；不要解压到已存在的 `assets/` 中，否则可能形成错误的 `assets/assets/`：
+从官方数据仓库下载 `assets.zip`。国内链路不稳定时，项目脚本默认使用非官方的 `hf-mirror.com`，只对这一次公开文件下载生效；它不会把镜像写入全局 Conda 环境，也会关闭 token 的隐式发送。脚本保留 `.incomplete`、使用单 worker 并在断流后自动重试：
 
 ```bash
-mkdir -p third_party/LIBERO-plus/.downloads
+bash scripts/download_libero_plus_assets.sh
+```
 
-huggingface-cli download Sylvest/LIBERO-plus \
-  assets.zip \
-  --repo-type dataset \
-  --local-dir third_party/LIBERO-plus/.downloads
+若镜像不可用，可在不删除断点文件的前提下切回官方源：
 
+```bash
+HF_ENDPOINT=https://huggingface.co \
+  bash scripts/download_libero_plus_assets.sh
+```
+
+下载成功后记录哈希。注意解压目标是 `libero/libero/` 父目录，让压缩包生成 `assets/`；不要解压到已存在的 `assets/` 中，否则可能形成错误的 `assets/assets/`：
+
+```bash
 sha256sum third_party/LIBERO-plus/.downloads/assets.zip
 unzip third_party/LIBERO-plus/.downloads/assets.zip \
   -d third_party/LIBERO-plus/libero/libero/

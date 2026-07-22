@@ -16,8 +16,9 @@
 | LIBERO-Plus assets | 已下载并检查目录结构 | `articulated_objects/`、`new_objects/`、`scenes/`、`textures/` 等已就位 |
 | 单卡 Clean smoke | 已通过 | 2026-07-22：2 episodes、2 success、0 exception；仅证明链路可用，不作为成功率估计 |
 | 单卡 OOD smoke | 已通过 | 2026-07-22：camera/light 共 4 episodes、4 success、0 exception；仅证明链路可用，不作为成功率估计 |
-| 三卡真实 pilot | 未执行 | 只有配置/规划能力，无真实 worker result |
-| full OOD 结果和鲁棒性结论 | 未执行 | 不得填写成功率或性能下降 |
+| 三卡真实 pilot | 已通过 | 2026-07-22：9 planned、8 completed、1 expected skipped、0 exception；三个 rank 均有真实结果 |
+| 正式 manifests | 已重建并审计 | 800 Clean；6,839 OOD planned=6,771 runnable+68 skipped；无正式 worker result |
+| full OOD 结果和鲁棒性结论 | 未执行 | 不得把 pilot 的 2/8 写成正式成功率或性能下降 |
 
 ## 2. 可以对外说明的工程亮点
 
@@ -26,7 +27,7 @@
 | 不侵入上游的适配层 | 不修改 Fast-WAM、LIBERO、LIBERO-Plus；复用官方 checkpoint loader、观测/动作处理和 success 判定 | `policy/fastwam_adapter.py`、`envs/libero_adapter.py` | Clean 2-episode 与 Plus 4-episode smoke 均已验证 |
 | 同名 backend 隔离 | 原版与 Plus 都导出 `libero`；为每个进程生成隔离的 `LIBERO_CONFIG_PATH` 并只加载一个 checkout，避免 import/path 污染 | `envs/libero_adapter.py`、`evaluator.py` | Clean 与 Plus 已分别在真实独立进程验证 |
 | 可复现任务规划 | 每个 job 固化 suite、base/upstream task、seed、init index、扰动身份和策略身份；job ID 由规范化内容哈希生成 | `evaluation/jobs.py`、`job_manifest.jsonl` | 已单测 |
-| episode-level 多 GPU | 每 GPU 一个独立 evaluator，按 job hash 稳定分片；避免把独立 rollout 错做模型 DDP | `distributed_launcher.py`、`shard_jobs()` | 分片已单测，三卡真实运行待验证 |
+| episode-level 多 GPU | 每 GPU 一个独立 evaluator，按 job hash 稳定分片；避免把独立 rollout 错做模型 DDP | `distributed_launcher.py`、`shard_jobs()` | 三卡真实 pilot 已验证 3/4/2 分片，无重复遗漏 |
 | 可恢复执行 | worker 逐 episode 追加并 `fsync` JSONL；默认跳过完成 job，支持 failed/all 重跑策略 | `evaluation/resume.py`、`schemas/episode_result.py` | 已单测；Clean smoke 用 `--rerun failed` 从两条真实 exception 恢复成功 |
 | 科学比较门禁 | Clean/OOD 共用 seed 公式和 checkpoint；聚合时同一策略 checkpoint hash 不一致则拒绝比较 | `reproducibility.py`、`analysis/aggregate.py` | 已单测；Clean/OOD smoke 的 checkpoint SHA-256 已实测一致 |
 | 上游协议显式化 | 区分 Clean 多 seed 与 Plus 每官方变体 1 次；`all_once` 强制 `episodes_per_task=1`，防止 10,030×20 的重复计算 | `config.py`、`jobs.py`、`eval_ood_full.yaml` | 已单测，正式 manifest 需重建 |
@@ -69,7 +70,7 @@
 - 问题：任务时长不同、进程可能中断；用 DDP 不会提高独立环境 rollout 的资源利用率，粗粒度文件覆盖又会丢失进度。
 - 方案：按 job hash 对 rank 稳定分片，每 GPU 一个模型/环境进程；每个 episode 完成即追加 durable JSONL；resume 按 job ID 去重。
 - 取舍：静态分片简单可复现，但极端任务时长差异可能造成尾部负载不均；如 pilot 证明明显失衡，再设计动态队列。
-- 状态：resume 已经真实 exception→failed-only rerun 验证；三卡分片负载与 EGL 行为仍待 pilot 测量。
+- 状态：resume 已经真实 exception→failed-only rerun 验证；三卡 pilot 的 3/4/2 静态分片均完成，无重复遗漏。pilot 样本太小，正式长任务的尾部负载仍需监控。
 
 ### 3.6 checkpoint 与 dataset stats 是一组实验条件
 
@@ -82,7 +83,7 @@
 
 - 问题：服务器无显示环境，torch 的可见 GPU 编号又会被 `CUDA_VISIBLE_DEVICES` 重映射。
 - 方案：使用 `MUJOCO_GL=egl`；单卡显式 `MUJOCO_EGL_DEVICE_ID=0`，torchrun 按 `LOCAL_RANK` 设置 EGL device 和 policy device。
-- 状态：单卡 GPU 0/EGL 已通过 Clean 2-episode 和 OOD 4-episode smoke；真实三卡 EGL 仍待验证。
+- 状态：单卡 GPU 0/EGL 与三卡 torchrun/EGL 均已通过真实运行；pilot 峰值显存约 23.8 GB/卡，无 OOM。
 
 ### 3.8 “实际扰动参数”目前只做到可追溯，尚未完全结构化
 

@@ -46,3 +46,26 @@ execution:
   planning_script: scripts/plan_thought1.sh
   worker_script: scripts/run_3gpu_eval.sh
   full_run_requires: CONFIRM_FULL_EVAL=YES
+  clean_smoke:
+    status: completed
+    completed: 2
+    exceptions: 0
+  ood_smoke:
+    status: completed
+    completed: 4
+    exceptions: 0
+  three_gpu_pilot:
+    status: completed
+    planned: 9
+    attempted: 8
+    successes: 2
+    exceptions: 0
+    skipped: 1
+    interpretation: runtime_validation_only
+  formal_manifest:
+    status: planned_not_executed
+    clean_runnable: 800
+    ood_runnable: 6771
+    ood_skipped: 68
+    ungraded_excluded: 121
+    remaining_rollouts: 7571

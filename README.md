@@ -52,6 +52,7 @@ clean_success_rate - ood_success_rate
 
 ### 文档导航
 
+- [思考点一阶段报告](docs/thought1_report.md)：当前结论、真实 smoke/pilot 证据、正式 manifest 与剩余计算量。
 - [思考点 1 实施与验收手册](docs/thought1_execution_guide.md)：checkpoint/assets、单卡 smoke、三卡 pilot 与正式运行门禁。
 - [工程亮点、难点与阻碍台账](docs/engineering_highlights.md)：工程复盘、未解决风险和简历素材。
 - [环境配置](docs/environment_setup.md)、[实验协议](docs/experiment_protocol.md)、[上游勘察](docs/upstream_notes.md)。
@@ -155,7 +156,7 @@ CUDA_VISIBLE_DEVICES=0 MUJOCO_GL=egl MUJOCO_EGL_DEVICE_ID=0 \
 
 ## 8. Clean baseline
 
-只有单卡 Clean/OOD smoke 和三卡 pilot 通过、并审核正式 manifest 后才运行 baseline：
+单卡 Clean/OOD smoke 和三卡 pilot 已通过，正式 manifest 也已审核。正式研究仍需要运行 800 个 Clean baseline：
 
 ```bash
 fastwam-ood plan --config configs/eval_clean_full.yaml
@@ -235,13 +236,14 @@ fastwam-ood review-failures --experiment-dir outputs/ood_full
 
 ## 15. 下一阶段路线
 
-先只生成四个 suite 的研究计划，不启动模型：
+四个 suite 的正式计划已经按当前协议生成并审计：800 Clean、6,771 OOD runnable 和 68 OOD skipped。下一阶段是在明确确认后执行 7,571 个真实 rollout；只运行 OOD 无法计算 Clean→OOD drop。
+
+配置或 classification 改变时，先重新规划但不启动模型：
 
 ```bash
-bash scripts/plan_thought1_pilot.sh  # 64-job pilot
 bash scripts/plan_thought1.sh
 ```
 
-然后完成所有 suite 的 Clean/OOD 配对基线和人工失败标注；再依据最敏感的扰动与失败类型提出下一阶段假设。任何 Future Adapter、Joint WAM 或历史记忆实验都应作为新的训练/消融项目，不混入本仓库第一阶段基线。
+正式运行后完成所有 suite 的 Clean/OOD combined aggregate 和人工失败标注；再依据最敏感的扰动与失败类型提出下一阶段假设。任何 Future Adapter、Joint WAM 或历史记忆实验都应作为新的训练/消融项目，不混入本仓库第一阶段基线。
 
 实施过程中的工程决策、阻碍和可量化简历素材持续记录在 [工程台账](docs/engineering_highlights.md)。

@@ -1,5 +1,7 @@
 # 思考点 1：unseen 泛化与未来想象
 
+当前阶段结果、正式 manifest 数量和资源预算见 [思考点一阶段报告](thought1_report.md)。
+
 ## 结论边界
 
 当前 release 能严谨完成的是“标准 LIBERO → LIBERO-Plus 环境扰动”的 zero-shot OOD 鲁棒性评测。其训练数据配置列出 `libero_spatial`、`libero_object`、`libero_goal` 和 `libero_10`，因此直接在这些 suite 上测试不能证明 unseen-object 或 unseen-task 泛化。LIBERO 与 RoboTwin 又使用不同平台接口和各自训练的 release checkpoint，不能把两个独立的同平台分数称为 cross-platform transfer。
@@ -20,16 +22,16 @@
 
 上游 `FastWAMJoint` 改变了 attention mask，使 action token 读取全部未来 video latent；`IDM` 则先生成未来视频再恢复动作。这些是不同的训练变体，必须加载各自 checkpoint。不能把 `libero_uncond` 权重加载进 `joint` 结构，也不能用是否保存视频冒充 on/off。
 
-## 三卡执行顺序
+## 三卡执行状态与顺序
 
-1. `bash scripts/plan_thought1_pilot.sh`：只生成 64 条 pilot job；每个 suite 选择 task 0，覆盖 Clean 与五类扰动×三档强度。
-2. 先运行单卡 Clean 和 OOD smoke；检查 action、成功判定、视频、variant metadata 和 resume。
-3. 使用 `configs/eval_ood_pilot.yaml` 做三卡真实链路 pilot；当前为 9 planned / 8 runnable / 1 skipped，用它估算每个 episode 的墙钟时间与三卡负载。
-4. `bash scripts/plan_thought1.sh`：按当前协议重新生成四个 suite 的 full manifest，不启动执行。当前 pinned 数据预期 7,639 planned（800 Clean；6,771 OOD runnable；68 OOD skipped），不是旧协议的 12,800。
-5. 审核新 manifest、排除 121 条无 difficulty 的 Goal/Light 记录并获得确认后，用 `scripts/run_3gpu_eval.sh` 分别运行每个计划单元。每个 rank 独立加载一个模型并按 job ID 分片。
-6. 每个策略先聚合 Clean/OOD；若以后取得匹配的 future checkpoint，再把两个策略目录作为 `--input-dir` 合并，读取 `future_imagination_comparisons`。
+1. 已完成单卡 Clean smoke：2/2 completed、0 exception。
+2. 已完成单卡 OOD smoke：camera/light 4/4 completed、0 exception。
+3. 已完成 `configs/eval_ood_pilot.yaml` 三卡真实 pilot：9 planned、8 completed、1 expected skipped、0 exception；三个 rank 均产生真实 episode result。
+4. 已重新执行 `bash scripts/plan_thought1.sh`：四个 suite 共 7,639 planned（800 Clean；6,771 OOD runnable；68 OOD skipped），不是旧协议的 12,800。
+5. 待执行 800 Clean 与 6,771 OOD rollout。每个 rank 独立加载一个模型并按 job ID 分片；默认 resume，不把合法 `max_steps` 当作系统异常反复重跑。
+6. 待把八个正式实验目录作为 `--input-dir` 合并聚合，生成 Clean/OOD drop、配对统计与分层报告。若以后取得匹配的 future checkpoint，再单独增加跨策略比较。
 
-旧的 12,800-job manifests 来自把 OOD 每个分层重复 20 次的计划，已经过期，不能直接执行。逐阶段命令和验收证据见 [实施与验收手册](thought1_execution_guide.md)。
+旧的 12,800-job manifests 来自把 OOD 每个分层重复 20 次的计划，已经过期，不能直接执行。当前正式 manifests 已按 task-instance 协议重建。逐阶段命令和验收证据见 [实施与验收手册](thought1_execution_guide.md)。
 
 Joint WAM 的 smoke 模板位于 `configs/ablations/`。它们可以执行 `plan`，但 `doctor` 会在匹配 checkpoint 和 stats 不存在时失败；这是有意的安全门禁。
 

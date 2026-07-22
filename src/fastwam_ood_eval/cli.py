@@ -98,8 +98,32 @@ def _doctor(args: argparse.Namespace) -> int:
     }
     packages = report["packages"]
     assert isinstance(packages, dict)
-    for name in ("yaml", "torch", "torchvision", "hydra", "libero", "imageio"):
+    for name in (
+        "yaml",
+        "torch",
+        "torchvision",
+        "hydra",
+        "imageio",
+        "fastwam",
+        "mujoco",
+        "robosuite",
+        "bddl",
+        "robomimic",
+    ):
         packages[name] = "available" if importlib.util.find_spec(name) is not None else "missing"
+    # The two upstreams publish the same top-level ``libero`` package. Installing
+    # either one globally makes backend selection order-dependent, so the
+    # evaluator loads the selected checkout through its adapter instead.
+    checkout_packages = {
+        "LIBERO": Path("third_party/LIBERO/libero/libero/__init__.py"),
+        "LIBERO-plus": Path("third_party/LIBERO-plus/libero/libero/__init__.py"),
+    }
+    available_checkouts = [name for name, path in checkout_packages.items() if path.is_file()]
+    packages["libero"] = (
+        f"available via checkout adapter ({', '.join(available_checkouts)})"
+        if available_checkouts
+        else "missing"
+    )
     upstreams = report["upstreams"]
     assert isinstance(upstreams, dict)
     for name, path in (

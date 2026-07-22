@@ -50,6 +50,12 @@ clean_success_rate - ood_success_rate
 完整可识别性审计见 [思考点 1 协议](docs/thought1_generalization.md)。
 当前实现与实验完成度逐项清单见 [思考点 1 readiness audit](docs/thought1_readiness.md)。
 
+### 文档导航
+
+- [思考点 1 实施与验收手册](docs/thought1_execution_guide.md)：checkpoint/assets、单卡 smoke、三卡 pilot 与正式运行门禁。
+- [工程亮点、难点与阻碍台账](docs/engineering_highlights.md)：工程复盘、未解决风险和简历素材。
+- [环境配置](docs/environment_setup.md)、[实验协议](docs/experiment_protocol.md)、[上游勘察](docs/upstream_notes.md)。
+
 ## 4. 项目架构图
 
 ```text
@@ -106,6 +112,8 @@ LIBERO-Plus 还需要单独下载 assets；无显示服务器需要 `MUJOCO_GL=e
 bash scripts/download_checkpoints.sh
 ```
 
+checkpoint、配套 stats 与 Plus assets 的分阶段准备和验收命令见 [实施手册](docs/thought1_execution_guide.md)。
+
 默认配置期望：
 
 ```text
@@ -143,7 +151,11 @@ CUDA_VISIBLE_DEVICES=0 MUJOCO_GL=egl MUJOCO_EGL_DEVICE_ID=0 \
   fastwam-ood evaluate --config configs/eval_clean_smoke.yaml --device cuda:0
 ```
 
+为了肉眼验收成功 episode，smoke 时还应将 `experiment.save_failure_video_only` 覆盖为 `false`；完整命令和 action/robot-state 检查见 [实施手册](docs/thought1_execution_guide.md)。
+
 ## 8. Clean baseline
+
+只有单卡 Clean/OOD smoke 和三卡 pilot 通过、并审核正式 manifest 后才运行 baseline：
 
 ```bash
 fastwam-ood plan --config configs/eval_clean_full.yaml
@@ -166,7 +178,7 @@ LIBERO-Plus 的扰动来自其 BDDL、场景 XML、robot class、init state 和 
 
 ## 10. 3 GPU 正式评测
 
-先确认 checkpoint、suite、task 子集、20+ episodes、最大步数、五类扰动、三个等级和输出目录。脚本要求显式确认：
+先确认 checkpoint/stats hash、suite、task 子集、最大步数、五类扰动、三个等级和输出目录。Clean 可使用多个 seed；LIBERO-Plus 正式计划必须保持每个官方 task variant 1 次，不能把 Clean 的 20 次口径复制到 OOD。还必须重新生成并审核 manifest，避免复用旧的重复采样计划。脚本要求显式确认：
 
 ```bash
 CUDA_VISIBLE_DEVICES=0,1,2 CONFIRM_FULL_EVAL=YES \
@@ -231,3 +243,5 @@ bash scripts/plan_thought1.sh
 ```
 
 然后完成所有 suite 的 Clean/OOD 配对基线和人工失败标注；再依据最敏感的扰动与失败类型提出下一阶段假设。任何 Future Adapter、Joint WAM 或历史记忆实验都应作为新的训练/消融项目，不混入本仓库第一阶段基线。
+
+实施过程中的工程决策、阻碍和可量化简历素材持续记录在 [工程台账](docs/engineering_highlights.md)。

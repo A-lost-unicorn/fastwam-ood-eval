@@ -8,7 +8,7 @@ This document distinguishes implementation readiness from empirical completion. 
 
 | Requirement | Implementation evidence | Empirical evidence required | Status |
 | --- | --- | --- | --- |
-| Three-GPU evaluation | Full configs use devices 0–2; `run_3gpu_eval.sh`; host doctor sees 3×47.37 GiB; 3-rank dry-run partitions all jobs | At least one real smoke episode per rank | Ready, not executed |
+| Three-GPU evaluation | Full configs use devices 0–2; `run_3gpu_eval.sh`; a previous host doctor recorded 3×47.37 GiB; 3-rank dry-run partitions jobs | At least one real smoke episode per rank in the target shell | Ready, not executed |
 | Cross-environment generalization | Same-checkpoint Clean/LIBERO-Plus pairing; five official categories; three difficulty bands; matched seed; per-policy checkpoint-hash guard | Clean and OOD episode JSONL plus aggregate report | Ready, no results |
 | Cross-object unseen generalization | Per-object/task aggregation and `libero_object` suite plan | A checkpoint trained with a frozen, disjoint object holdout and results on that holdout | Not identifiable with release checkpoint |
 | Cross-task unseen generalization | All four suite plans and task-level aggregation | A checkpoint trained without the frozen held-out tasks/suite and results on those tasks | Not identifiable with release checkpoint |
@@ -17,11 +17,12 @@ This document distinguishes implementation readiness from empirical completion. 
 
 ## Authoritative current-state evidence
 
-- `outputs/thought1/` contains eight full manifests, but no worker episode-result JSONL.
-- `outputs/thought1_pilot/` contains eight pilot manifests: 64 planned jobs, 59 runnable and 5 explicitly skipped; no episode was executed.
+- `outputs/thought1/` contains eight historical full manifests, but no worker episode-result JSONL. Those manifests use the obsolete repeated-20 OOD protocol and must be regenerated before evaluation.
+- `outputs/thought1_pilot/` contains eight historical planning-pilot manifests: 64 planned jobs, 59 runnable and 5 explicitly skipped; no episode was executed. Regenerate them to obtain the current schema.
+- The current four-suite full protocol is expected to plan 7,639 rows: 800 Clean plus 6,771 runnable and 68 skipped OOD rows. The 121 ungraded Goal/Light rows are explicitly outside the difficulty-stratified main result.
 - `outputs/ablations/` contains Joint WAM smoke manifests only; no Joint checkpoint or result exists.
-- Host hardware validation passes for three CUDA devices. The configured 23 GiB memory budget is below each reported 47.37 GiB capacity.
-- `pytest -q` passes 26 tests, covering configuration guards, deterministic sharding, resume, aggregation, mixed-policy handling and paired future/no-future statistics. These tests validate machinery, not robot-task performance.
+- A previous unrestricted host validation passed for three CUDA devices; the current restricted tool session cannot revalidate CUDA/NVML. The target shell must run configured doctor again before smoke.
+- `pytest -q` passes 29 tests, covering configuration/protocol guards, deterministic sharding, resume, aggregation, mixed-policy handling and paired future/no-future statistics. These tests validate machinery, not robot-task performance.
 
 ## Missing external artifacts
 

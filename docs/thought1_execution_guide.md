@@ -1,0 +1,323 @@
+# 思考点 1：实施与验收手册
+
+本文是“标准 LIBERO → LIBERO-Plus 环境扰动鲁棒性评测”的操作手册。它回答“按什么顺序做、每一步看什么证据、什么时候必须停”，不代替研究结论边界或实验结果。
+
+当前状态（2026-07-22）：代码、配置和本地 Conda 环境已经准备；官方 Fast-WAM checkpoint、配套 dataset stats 和 LIBERO-Plus assets 尚未下载，真实 Clean/OOD episode 尚未运行。本文中的下载和评测命令都只是待执行步骤，本次文档更新没有触发它们。
+
+配套文档：
+
+- [研究结论边界](thought1_generalization.md)：本阶段能回答和不能回答什么。
+- [完成度审计](thought1_readiness.md)：当前哪些内容已实现、哪些仍待实测。
+- [环境配置](environment_setup.md)：Python、PyTorch、CUDA、MuJoCo/EGL 兼容方案。
+- [实验协议](experiment_protocol.md)：配对、统计和成功率口径。
+- [上游勘察](upstream_notes.md)：锁定的上游 commit、真实 API 与许可证。
+
+## 0. 先锁定协议和安全门禁
+
+本项目采用当前锁定的 LIBERO-Plus 上游仓库所描述的 **10,030 个预生成 task-instance 协议**：正式 OOD 计划逐个枚举选中的官方变体，每个变体运行 1 次。它不是某些其他 wrapper 所采用的“标准 40 task、每 task 多次 rollout”接口；两种结果不能混称为同一协议。
+
+当前范围进一步限定为五类环境扰动：camera、light、background、robot initial state 和 object layout，不含 language 与 sensor noise。因此：
+
+- `10,030` 是七类扰动、四个 suite 的全 benchmark 总数，不是本项目当前配置的 job 数。
+- 当前五类有 6,892 条分类记录；其中 121 条 `libero_goal / Light Conditions` 没有官方 difficulty，不能擅自映射到 easy/medium/hard，当前分级主实验明确排除并报告它们。
+- 当前锁定分类文件下，四个 suite 的 full OOD 计划应为 6,771 个 runnable job，加 68 个用于审计缺失分层的 `skipped` 占位；Clean 为 800 个 job。上游或配置改变后，必须以新生成的 manifest 为准。
+- Clean 可用多个初始化 index/seed 建立稳定基线；当前 full 配置为每个标准 task 20 次。正式 Plus 使用 `variant_selection: all_once` 和 `episodes_per_task: 1`，每个官方变体只运行一次，并与同一基础 task 的 Clean index/seed 0 配对。
+
+安全门禁：
+
+1. 在单卡 Clean smoke、单卡 OOD smoke 和三卡 pilot 全部通过前，不运行 full 配置。
+2. 任何配置、分类文件或 planner 代码改变后，都要重新运行 `plan`。`evaluate` 会复用已有 `job_manifest.jsonl`，不会自动判断旧 manifest 已经过期。
+3. 每次 `plan` 后先审核 job 数、runnable/skipped 数和抽样记录，再决定是否运行。
+4. 不因追求“至少 20 次”而执行 `10,030 × 20`。这既是巨额重复计算，也不符合本项目采用的 upstream task-instance 协议。
+5. 不使用 `--overwrite`，除非已经明确决定重跑已有结果。
+
+## 1. 激活环境并做只读预检
+
+每次进入新 shell 后运行：
+
+```bash
+cd /data/HDD_16TB_WORK/users/tao/projects/fastwam-ood-eval
+source scripts/activate_env.sh
+```
+
+先确认当前解释器和基础工程状态：
+
+```bash
+which python
+python --version
+if command -v tree >/dev/null 2>&1; then
+  tree -L 3
+else
+  find . -maxdepth 3 -not -path './.git/*' -print | sort
+fi
+pytest -q
+fastwam-ood plan --config configs/eval_ood_smoke.yaml
+```
+
+`scripts/create_env.sh` 已把 `tree` 列为环境工具；早于该改动创建的环境可能没有它。`find` 只用于结构检查，不影响项目运行。
+
+`plan` 只生成/刷新 job manifest，不加载 checkpoint、模型或仿真器。由于外部工件尚未准备，带配置的 `doctor` 此时失败是预期现象；应在下面对应工件准备完成后再次执行。
+
+## 2. 阶段 1：准备 checkpoint 和配套 stats
+
+项目提供的规范入口是：
+
+```bash
+bash scripts/download_checkpoints.sh
+```
+
+它等价于官方发布页中的 LIBERO 子集下载命令；不要重复执行两种方式：
+
+```bash
+mkdir -p checkpoints/fastwam_release
+
+huggingface-cli download yuanty/fastwam \
+  libero_uncond_2cam224.pt \
+  libero_uncond_2cam224_dataset_stats.json \
+  --local-dir checkpoints/fastwam_release
+```
+
+下载后检查文件和哈希：
+
+```bash
+ls -lh checkpoints/fastwam_release
+sha256sum \
+  checkpoints/fastwam_release/libero_uncond_2cam224.pt \
+  checkpoints/fastwam_release/libero_uncond_2cam224_dataset_stats.json
+```
+
+至少应有：
+
+```text
+checkpoints/fastwam_release/
+├── libero_uncond_2cam224.pt
+└── libero_uncond_2cam224_dataset_stats.json
+```
+
+复现官方 release 基线时，必须固定使用随该 checkpoint 发布的 dataset stats。重新计算 stats 会改变动作归一化条件，只能作为显式的新实验条件，不能冒充官方基线。当前程序会哈希 checkpoint，但还不会自动证明 stats 与 checkpoint 配套，因此要保存两者的 SHA-256 和下载 revision。
+
+完成后执行 Clean 配置门禁：
+
+```bash
+CUDA_VISIBLE_DEVICES=0 MUJOCO_GL=egl MUJOCO_EGL_DEVICE_ID=0 \
+  fastwam-ood doctor --config configs/eval_clean_smoke.yaml
+```
+
+只有输出包含 `configuration valid`、`runtime paths present` 和 `configured CUDA inventory available` 时，才进入 Clean smoke。
+
+## 3. 阶段 2：准备 LIBERO-Plus assets
+
+从官方数据仓库下载 `assets.zip`。注意解压目标是 `libero/libero/` 父目录，让压缩包生成 `assets/`；不要解压到已存在的 `assets/` 中，否则可能形成错误的 `assets/assets/`：
+
+```bash
+mkdir -p third_party/LIBERO-plus/.downloads
+
+huggingface-cli download Sylvest/LIBERO-plus \
+  assets.zip \
+  --repo-type dataset \
+  --local-dir third_party/LIBERO-plus/.downloads
+
+sha256sum third_party/LIBERO-plus/.downloads/assets.zip
+unzip third_party/LIBERO-plus/.downloads/assets.zip \
+  -d third_party/LIBERO-plus/libero/libero/
+```
+
+最终应至少包含：
+
+```text
+third_party/LIBERO-plus/libero/libero/assets/
+├── articulated_objects/
+├── new_objects/
+├── stable_hope_objects/
+├── stable_scanned_objects/
+├── textures/
+├── turbosquid_objects/
+├── serving_region.xml
+├── wall_frames.stl
+└── wall.xml
+```
+
+验收：
+
+```bash
+test -d third_party/LIBERO-plus/libero/libero/assets/articulated_objects
+test -d third_party/LIBERO-plus/libero/libero/assets/new_objects
+test -d third_party/LIBERO-plus/libero/libero/assets/textures
+test -f third_party/LIBERO-plus/libero/libero/benchmark/task_classification.json
+
+CUDA_VISIBLE_DEVICES=0 MUJOCO_GL=egl MUJOCO_EGL_DEVICE_ID=0 \
+  fastwam-ood doctor --config configs/eval_ood_smoke.yaml
+```
+
+LIBERO 与 LIBERO-Plus 都导出名为 `libero` 的包。本项目按独立进程选择 checkout，不要在同一个 Python/notebook 进程里先后加载两个 backend。
+
+## 4. 阶段 3：单卡 Clean smoke test
+
+为了无论成功或失败都能肉眼检查视频，计划与执行时都覆盖 `save_failure_video_only=false`：
+
+```bash
+fastwam-ood plan \
+  --config configs/eval_clean_smoke.yaml \
+  --set experiment.save_failure_video_only=false
+
+CUDA_VISIBLE_DEVICES=0 MUJOCO_GL=egl MUJOCO_EGL_DEVICE_ID=0 \
+  fastwam-ood evaluate \
+  --config configs/eval_clean_smoke.yaml \
+  --device cuda:0 \
+  --set experiment.save_failure_video_only=false
+```
+
+这一阶段的验收目标不是成功率，而是完整链路：
+
+| 验收项 | 证据 | 通过条件 |
+| --- | --- | --- |
+| checkpoint 加载 | 运行日志、episode result 的 `checkpoint_hash` | 无 checkpoint/load exception，hash 非空 |
+| 环境 reset | `episode_results.jsonl` | `termination_reason` 不是 `exception` |
+| 主相机图像 | `workers/rank_0/videos/*.mp4`、`observation_image_shape` | agent view 清晰、方向正常、shape 合理 |
+| 动作有效 | `workers/rank_0/traces/*.jsonl` | action 非空、全部 finite、不是全 0 |
+| 机器人运动 | 视频与 trace 中首末 `robot0_eef_pos` | 肉眼或状态差异可见 |
+| episode 结束 | `termination_reason` | 为 `success` 或 `max_steps`，不是异常退出 |
+| 结果落盘 | `episode_results.jsonl` | 每个 planned job 恰好一条可解析记录 |
+
+快速检查工件：
+
+```bash
+find outputs/clean_smoke/workers/rank_0 -maxdepth 2 -type f -print
+head -n 1 outputs/clean_smoke/workers/rank_0/episode_results.jsonl | python -m json.tool
+```
+
+检查 action 是否 finite 且不是全零：
+
+```bash
+python - <<'PY'
+import json
+import math
+from pathlib import Path
+
+values = []
+for path in Path("outputs/clean_smoke/workers/rank_0/traces").glob("*.jsonl"):
+    for line in path.read_text(encoding="utf-8").splitlines():
+        action = json.loads(line)["action"]
+        if isinstance(action, list):
+            values.extend(float(value) for value in action)
+
+assert values, "no recorded actions"
+assert all(math.isfinite(value) for value in values), "NaN/Inf action detected"
+assert any(abs(value) > 1e-8 for value in values), "all actions are zero"
+print({"action_values": len(values), "max_abs": max(abs(value) for value in values)})
+PY
+```
+
+当前 recorder 只保存 `agentview_image`，因此视频不能单独证明 wrist camera 正常；原始 observation dump 也尚未实现。若两路相机都是正式验收要求，需要在 full 前补充专门诊断。
+
+## 5. 阶段 4：单卡 OOD smoke test
+
+```bash
+fastwam-ood plan \
+  --config configs/eval_ood_smoke.yaml \
+  --set experiment.save_failure_video_only=false
+
+CUDA_VISIBLE_DEVICES=0 MUJOCO_GL=egl MUJOCO_EGL_DEVICE_ID=0 \
+  fastwam-ood evaluate \
+  --config configs/eval_ood_smoke.yaml \
+  --device cuda:0 \
+  --set experiment.save_failure_video_only=false
+```
+
+除 Clean 的全部验收项外，还要确认：
+
+1. 对照 Clean/OOD 视频，主相机视角、光照或背景确实按所选 variant 改变，而不是只有配置名变化。
+2. `job_manifest.jsonl` 和 episode result 中存在 `classification_id`、`variant_name`、`official_category`、`official_difficulty` 和 selection metadata。
+3. Clean/OOD episode result 的 `checkpoint_hash` 完全一致。
+4. OOD 的 `(suite, base task, episode_seed)` 能在 Clean 结果中找到对应项。
+5. 所有 `skipped` 都有明确 `skip_reason`，且不进入成功率分母。
+
+当前 manifest 记录的是官方 variant 身份与分类元数据，不是所有底层相机位姿、光源参数或 XML 属性的规范化展开。数值级“实际扰动参数”尚未实现自动采集；在补齐运行时 introspection 前，必须依靠 variant 名称/ID、上游 commit、任务文件和视频共同审计，不能把这一项写成已自动验证。
+
+## 6. 阶段 5：三卡小规模 pilot
+
+运行 pilot 只选择三类：
+
+- `camera_viewpoints`：论文和上游报告的高敏感因素。
+- `robot_initial_states`：论文和上游报告的高敏感因素。
+- `objects_layout`：用于额外验证几何、物体资产和布局链路。
+
+先检查并重新生成 manifest：
+
+```bash
+CUDA_VISIBLE_DEVICES=0,1,2 MUJOCO_GL=egl \
+  fastwam-ood doctor --config configs/eval_ood_pilot.yaml
+
+fastwam-ood plan --config configs/eval_ood_pilot.yaml
+wc -l outputs/ood_pilot/job_manifest.jsonl
+```
+
+当前锁定配置计划 9 条：8 条 runnable、1 条 `skipped`。该 skip 来自 task 4 的 `objects_layout/easy` 没有官方候选，不是运行故障；若修改 task 子集，必须重新 plan 并重新记录计数。
+
+审核通过并明确决定启动小规模真实试运行后：
+
+```bash
+CUDA_VISIBLE_DEVICES=0,1,2 MUJOCO_GL=egl \
+torchrun \
+  --standalone \
+  --nproc_per_node=3 \
+  -m fastwam_ood_eval.cli distributed-evaluate \
+  --config configs/eval_ood_pilot.yaml
+```
+
+launcher 会按 `LOCAL_RANK` 选择 `cuda:0/1/2`，并在 EGL 模式下设置对应的 `MUJOCO_EGL_DEVICE_ID`。验收时检查三个 `workers/rank_*` 目录，合并后 `job_id` 不重复，并用真实 episode 墙钟时间估算 full 成本。
+
+不要把这个运行 pilot 与 `scripts/plan_thought1_pilot.sh` 混淆：前者是单个 suite、三类 easy 扰动的 3-GPU 真实链路测试；后者只生成四个 suite、五类三档的 64-job 规划矩阵，不启动模型。
+
+## 7. 正式计划与运行口径
+
+只有前五阶段全部通过后，才重新生成正式计划：
+
+```bash
+bash scripts/plan_thought1.sh
+```
+
+对当前 pinned classification 和当前五类分级配置，预期四个 suite 合计：
+
+```text
+Clean:        800 planned
+OOD:        6,839 planned = 6,771 runnable + 68 skipped audit rows
+Total:      7,639 planned
+Excluded:     121 ungraded Light Conditions rows（单独报告，不擅自分级）
+```
+
+每次都应重新从实际 manifest 计算这些数字；不要把它们当作跨上游版本的常量。正式执行仍需要逐个 suite 审核配置、checkpoint/stats hash、输出目录、视频策略和预计运行时间，并由用户显式确认后再调用三卡 launcher。
+
+## 8. 立即停止条件
+
+出现下列任一情况时停止扩大规模并保留现场：
+
+- checkpoint 或 stats 来源/hash 不明确；Clean/OOD checkpoint hash 不同。
+- reset、EGL、asset、camera 或 policy inference 出现 exception。
+- action 为空、含 NaN/Inf、全零，或 robot state/视频表明机器人不运动。
+- OOD 视频与 Clean 无可见差异，或 variant 元数据缺失。
+- manifest 的 job 数仍符合旧的重复 20 次模式，或 manifest schema 与当前 planner 不一致。
+- 三个 rank 出现重复 job、缺失结果、显存不足或大量 `exception`。
+- 预计 full 成本尚未依据 pilot 墙钟时间评估。
+
+## 9. 每阶段应保留的证据
+
+```text
+checkpoint/stats SHA-256
+assets.zip SHA-256 与来源 revision
+experiment_manifest.json
+job_manifest.jsonl
+workers/rank_*/episode_results.jsonl
+workers/rank_*/traces/*.jsonl
+smoke/pilot videos
+pytest 输出
+doctor 输出
+上游三个 commit SHA
+```
+
+官方来源：
+
+- [Fast-WAM release checkpoint 说明](https://github.com/yuantianyuan01/FastWAM#inference-with-released-checkpoints)
+- [Fast-WAM Hugging Face 模型库](https://huggingface.co/yuanty/fastwam)
+- [LIBERO-Plus 安装与评测说明](https://github.com/sylvestf/LIBERO-plus#evaluation)
+- [LIBERO-Plus assets](https://huggingface.co/datasets/Sylvest/LIBERO-plus/tree/main)

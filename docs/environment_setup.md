@@ -56,13 +56,12 @@ python -m fastwam_ood_eval.cli doctor --config configs/eval_clean_smoke.yaml
 
 torchrun worker 看到重新编号后的本地 GPU。若 MuJoCo 要求每进程独立 EGL ID，可由集群 launcher 按 `LOCAL_RANK` 设置；先用单 GPU smoke test 验证。
 
-## 4 GPU 检查与 smoke test
+## 3 GPU 检查与分阶段 smoke test
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,1,2,3 nvidia-smi --query-gpu=index,name,memory.total --format=csv
+CUDA_VISIBLE_DEVICES=0,1,2 nvidia-smi --query-gpu=index,name,memory.total --format=csv
 pytest -q
 fastwam-ood plan --config configs/eval_ood_smoke.yaml
-CUDA_VISIBLE_DEVICES=0 MUJOCO_GL=egl MUJOCO_EGL_DEVICE_ID=0 bash scripts/run_smoke_test.sh
 ```
 
-在 smoke test 成功前不要启动 full 配置。当前 checkout 没有 checkpoint/Plus assets 的验证记录；真实接口状态为未验证。
+不要在准备工件后直接用一个脚本连续启动 Clean、OOD 或 full。按 [思考点 1 实施与验收手册](thought1_execution_guide.md) 分别运行带配置的 doctor、单卡 Clean smoke、单卡 OOD smoke 和三卡 pilot，并在每一阶段检查工件后再继续。当前 checkout 没有 checkpoint/Plus assets 的验证记录；真实接口状态为未验证。

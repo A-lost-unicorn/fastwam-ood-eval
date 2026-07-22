@@ -49,7 +49,7 @@
 - 七个真实类别：`Objects Layout`、`Camera Viewpoints`、`Robot Initial States`、`Language Instructions`、`Light Conditions`、`Background Textures`、`Sensor Noise`。本阶段只选择其中前述五个环境类扰动，不包含 language/noise。
 - 难度是整数 1–5，不是 easy/medium/hard；另有 121 条 Light Conditions 的 difficulty 为 null，本项目不抽取这些记录。统一映射：easy=1–2、medium=3、hard=4–5，并把原始值写入每个 job。
 - camera/robot/noise 参数编码在带 `_view_..._initstate_...` 的 BDDL 路径中，由 `env_wrapper.ControlEnv` 解析；noise 确实在 observation wrapper 中实现。背景、光照和物体布局使用生成的 BDDL、scene XML、额外 objects 与 init files。本项目不自行造扰动。
-- README 要求每个 Plus task `num_trials_per_task=1`；本项目将每个 episode 映射到一个确定选择的官方 variant，而不是在同一 variant 上伪造多个强度。
+- README 要求每个 Plus task `num_trials_per_task=1`；正式配置以 `all_once` 枚举每个有难度标签的官方 variant 一次，smoke/pilot 才使用确定性 `sample`，不会在同一 variant 上机械重复 20 次。
 - assets：README 要求从 Hugging Face `Sylvest/LIBERO-plus` 下载 `assets.zip` 并解压到 `LIBERO-plus/libero/libero/assets`。
 - 安装：`setup.py` 导出同名 `libero==0.1.0`，且不声明 dependencies；`requirements.txt` 与原版接近，`extra_requirements.txt` 增加 usd-core、Wand、scikit-image 等。
 - 许可证风险：该 commit 根目录没有 `LICENSE`/`COPYING`，README 也未声明代码许可证。不能推定其沿用 LIBERO MIT；分发、修改或公开发布含其代码/资产前，应向上游确认许可证。本项目不复制 Plus 源码。

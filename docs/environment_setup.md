@@ -6,12 +6,15 @@
 
 ```bash
 bash scripts/fetch_upstreams.sh
+# 已配置项目本地环境时
+source scripts/activate_env.sh
+
+# 或者从零创建普通的命名 Conda 环境
 bash scripts/create_env.sh fastwam-ood
 conda activate fastwam-ood
-python -m pip install mujoco==3.3.2
 ```
 
-脚本不使用 sudo、不修改系统 Python。LIBERO-Plus README 还列出若干系统 library；本项目不会自动 sudo 安装。缺库时由管理员安装 `libexpat`、fontconfig、Python runtime 和 ImageMagick/Wand 对应开发包。
+脚本不使用 sudo、不修改系统 Python，并从 conda-forge 在环境内安装 ImageMagick/MagickWand。若宿主机仍缺少图形驱动或 EGL 等系统库，再由管理员补充。
 
 ## CUDA 检查
 

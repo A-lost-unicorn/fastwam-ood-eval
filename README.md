@@ -75,7 +75,13 @@ git -C third_party/LIBERO rev-parse HEAD
 git -C third_party/LIBERO-plus rev-parse HEAD
 ```
 
-推荐创建 Python 3.10 的独立 Conda 环境：
+当前 checkout 使用项目本地 Conda 环境时，只需：
+
+```bash
+source scripts/activate_env.sh
+```
+
+从零创建普通的命名 Conda 环境时使用：
 
 ```bash
 bash scripts/create_env.sh fastwam-ood

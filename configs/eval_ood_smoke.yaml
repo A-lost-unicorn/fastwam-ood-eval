@@ -37,6 +37,7 @@ perturbation:
   enabled: true
   category: [camera_viewpoints, light_conditions]
   level: [easy]
+  variant_selection: sample
   parameters:
     classification_path: third_party/LIBERO-plus/libero/libero/benchmark/task_classification.json
 recording:

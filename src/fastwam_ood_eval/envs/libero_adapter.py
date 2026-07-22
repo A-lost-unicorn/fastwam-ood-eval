@@ -73,7 +73,7 @@ class LiberoAdapter(BaseBenchmarkEnv):
         self.env.seed(job.episode_seed)
         self.env.reset()
         initial_states = suite.get_task_init_states(job.upstream_task_id)
-        obs = self.env.set_init_state(initial_states[job.episode_index % len(initial_states)])
+        obs = self.env.set_init_state(initial_states[job.initial_state_index % len(initial_states)])
         self.task_description = task.language
         self._success = False
         return obs

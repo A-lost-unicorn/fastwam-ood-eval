@@ -34,6 +34,7 @@ benchmark:
   image_size: [32, 32]
 perturbation:
   enabled: true
+  variant_selection: sample
   category: [camera_viewpoints, light_conditions]
   level: [easy]
   parameters: {}

@@ -41,4 +41,4 @@ def test_episode_result_round_trip():
     )
     result = EpisodeResult(**values)
     assert EpisodeResult.from_dict(result.to_dict()).to_dict() == result.to_dict()
-
+    assert result.initial_state_index == 0

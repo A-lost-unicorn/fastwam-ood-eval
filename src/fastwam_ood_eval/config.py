@@ -25,6 +25,7 @@ ALLOWED_CATEGORIES = {
     "objects_layout",
 }
 ALLOWED_POLICY_VARIANTS = {"fastwam", "joint_wam", "idm", "mock"}
+ALLOWED_VARIANT_SELECTIONS = {"sample", "all_once"}
 
 
 @dataclass(frozen=True)
@@ -108,6 +109,7 @@ class PerturbationConfig:
     enabled: bool = False
     categories: tuple[str, ...] = ()
     levels: tuple[str, ...] = ()
+    variant_selection: str = "sample"
     parameters: dict[str, Any] = field(default_factory=dict)
 
 
@@ -158,6 +160,7 @@ class EvalConfig:
                 "enabled": self.perturbation.enabled,
                 "category": list(self.perturbation.categories),
                 "level": list(self.perturbation.levels),
+                "variant_selection": self.perturbation.variant_selection,
                 "parameters": self.perturbation.parameters,
             },
             "recording": self.recording.__dict__,
@@ -278,6 +281,7 @@ def _build(data: Mapping[str, Any], source_path: Path) -> EvalConfig:
                 str(value)
                 for value in _as_list(pt.get("level", []), name="perturbation.level")
             ),
+            variant_selection=str(pt.get("variant_selection", "sample")).lower(),
             parameters=dict(pt.get("parameters", {})),
         ),
         recording=RecordingConfig(
@@ -351,8 +355,23 @@ def validate_config(cfg: EvalConfig) -> None:
             errors.append(f"illegal perturbation levels: {sorted(unknown_levels)}")
         if cfg.benchmark.backend not in {"libero_plus", "mock"}:
             errors.append("enabled perturbations require benchmark.backend=libero_plus or mock")
+        if cfg.perturbation.variant_selection not in ALLOWED_VARIANT_SELECTIONS:
+            errors.append(
+                "perturbation.variant_selection must be one of "
+                f"{sorted(ALLOWED_VARIANT_SELECTIONS)}"
+            )
+        if (
+            cfg.perturbation.variant_selection == "all_once"
+            and cfg.benchmark.episodes_per_task != 1
+        ):
+            errors.append(
+                "perturbation.variant_selection=all_once requires "
+                "benchmark.episodes_per_task=1 (the official LIBERO-Plus protocol)"
+            )
     elif cfg.benchmark.backend == "libero_plus":
         errors.append("benchmark.backend=libero_plus requires perturbation.enabled=true")
+    elif cfg.perturbation.variant_selection != "sample":
+        errors.append("disabled perturbations require perturbation.variant_selection=sample")
     if cfg.recording.video_format not in {"mp4", "avi"}:
         errors.append("recording.video_format must be mp4 or avi")
     if cfg.policy.variant not in ALLOWED_POLICY_VARIANTS:

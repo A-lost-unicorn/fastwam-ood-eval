@@ -27,6 +27,18 @@ def test_invalid_worker_count_rejected(tmp_path):
         load_config(path, ["hardware.workers_per_gpu=2"])
 
 
+def test_all_once_requires_one_trial_per_official_variant(tmp_path):
+    path = write_config(tmp_path, perturbation=True, episodes=2)
+    with pytest.raises(ConfigError, match="official LIBERO-Plus protocol"):
+        load_config(path, ["perturbation.variant_selection=all_once"])
+
+
+def test_unknown_variant_selection_rejected(tmp_path):
+    path = write_config(tmp_path, perturbation=True, episodes=1)
+    with pytest.raises(ConfigError, match="variant_selection"):
+        load_config(path, ["perturbation.variant_selection=repeat_twenty"])
+
+
 def test_future_imagination_requires_matching_upstream_variant(tmp_path):
     path = write_config(tmp_path)
     with pytest.raises(ConfigError, match="inconsistent with policy.variant"):

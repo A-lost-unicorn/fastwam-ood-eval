@@ -1,11 +1,11 @@
 experiment:
-  name: clean_full
-  output_dir: outputs/clean_full
+  name: ood_pilot
+  output_dir: outputs/ood_pilot
   seed: 20260721
   overwrite: false
   resume: true
   save_video: true
-  save_failure_video_only: true
+  save_failure_video_only: false
   log_level: INFO
 hardware:
   devices: [0, 1, 2]
@@ -24,21 +24,23 @@ policy:
   comparison_group: thought1_libero
   training_recipe_id: null
 benchmark:
-  backend: libero
+  backend: libero_plus
   suite: libero_spatial
   suite_config: configs/suites/libero_spatial.yaml
-  tasks: all
-  episodes_per_task: 20
+  tasks: [0, 4, 9]
+  episodes_per_task: 1
   max_steps: 400
   num_steps_wait: 30
   control_horizon: 10
   image_size: [256, 256]
 perturbation:
-  enabled: false
-  category: []
-  level: []
+  enabled: true
+  category: [camera_viewpoints, robot_initial_states, objects_layout]
+  level: [easy]
+  # Pilot is deliberately sampled. Formal evaluation uses all_once.
   variant_selection: sample
-  parameters: {}
+  parameters:
+    classification_path: third_party/LIBERO-plus/libero/libero/benchmark/task_classification.json
 recording:
   fps: 24
   save_observations: false

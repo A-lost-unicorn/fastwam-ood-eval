@@ -51,6 +51,7 @@ class EpisodeResult:
     test_time_future_imagination: bool = False
     comparison_group: str | None = None
     training_recipe_id: str | None = None
+    initial_state_index: int = 0
     extra: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:

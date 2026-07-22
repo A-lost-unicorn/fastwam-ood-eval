@@ -26,5 +26,6 @@ for suite in libero_spatial libero_object libero_goal libero_10; do
     --set "benchmark.suite_config=configs/suites/${suite}.yaml" \
     --set 'benchmark.tasks=[0]' \
     --set benchmark.episodes_per_task=1 \
+    --set perturbation.variant_selection=sample \
     --set "benchmark.max_steps=${max_steps}"
 done

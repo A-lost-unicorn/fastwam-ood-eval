@@ -37,6 +37,7 @@ perturbation:
   enabled: false
   category: []
   level: []
+  variant_selection: sample
   parameters: {}
 recording:
   fps: 24

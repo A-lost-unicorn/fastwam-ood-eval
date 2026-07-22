@@ -26,6 +26,7 @@ class EvaluationJob:
     upstream_task_name: str
     episode_index: int
     episode_seed: int
+    initial_state_index: int
     condition: str
     perturbation_category: str | None = None
     perturbation_level: str | None = None
@@ -46,6 +47,7 @@ class EvaluationJob:
         payload.setdefault("test_time_future_imagination", False)
         payload.setdefault("comparison_group", None)
         payload.setdefault("training_recipe_id", None)
+        payload.setdefault("initial_state_index", int(payload.get("episode_index", 0)))
         return cls(**payload)
 
 
@@ -128,6 +130,7 @@ def _make_job(
     level: str | None = None,
     parameters: dict[str, Any] | None = None,
     skip_reason: str | None = None,
+    initial_state_index: int | None = None,
 ) -> EvaluationJob:
     seed = episode_seed(cfg.experiment.seed, cfg.benchmark.suite, task["name"], episode_index)
     identity = {
@@ -139,6 +142,7 @@ def _make_job(
         "upstream_task_name": upstream_task_name,
         "episode_index": episode_index,
         "episode_seed": seed,
+        "initial_state_index": episode_index if initial_state_index is None else initial_state_index,
         "condition": condition,
         "perturbation_category": category,
         "perturbation_level": level,
@@ -188,16 +192,37 @@ def plan_jobs(cfg: EvalConfig) -> list[EvaluationJob]:
                     ]
                 else:
                     candidates = _variant_candidates(rows, task["name"], category, level)
-                for episode_index in range(cfg.benchmark.episodes_per_task):
+                if cfg.perturbation.variant_selection == "all_once":
+                    selected = list(enumerate(candidates))
+                else:
+                    offset = stable_int(cfg.experiment.seed, task["name"], category, level)
+                    selected = [
+                        (episode_index, candidates[(offset + episode_index) % len(candidates)])
+                        for episode_index in range(cfg.benchmark.episodes_per_task)
+                    ] if candidates else []
+
+                for selection_index, row in selected:
+                    # LIBERO-Plus treats every classification row as its own task. The
+                    # official num_trials_per_task=1 protocol therefore always uses
+                    # trial/init-state index zero for the exhaustive all_once plan.
+                    episode_index = (
+                        0
+                        if cfg.perturbation.variant_selection == "all_once"
+                        else selection_index
+                    )
                     if candidates:
-                        offset = stable_int(cfg.experiment.seed, task["name"], category, level)
-                        row = candidates[(offset + episode_index) % len(candidates)]
                         parameters = {
                             "official_category": row["category"],
                             "official_difficulty": row["difficulty_level"],
                             "variant_name": row["name"],
                             "classification_id": int(row["id"]),
-                            "selection_with_replacement": cfg.benchmark.episodes_per_task > len(candidates),
+                            "variant_selection": cfg.perturbation.variant_selection,
+                            "selection_index": selection_index,
+                            "candidate_count": len(candidates),
+                            "selection_with_replacement": (
+                                cfg.perturbation.variant_selection == "sample"
+                                and cfg.benchmark.episodes_per_task > len(candidates)
+                            ),
                         }
                         jobs.append(
                             _make_job(
@@ -210,13 +235,24 @@ def plan_jobs(cfg: EvalConfig) -> list[EvaluationJob]:
                                 category=category,
                                 level=level,
                                 parameters=parameters,
+                                initial_state_index=(
+                                    0
+                                    if cfg.perturbation.variant_selection == "all_once"
+                                    else selection_index
+                                ),
                             )
                         )
-                    else:
-                        reason = (
-                            f"No official LIBERO-Plus variant for task={task['name']}, "
-                            f"category={definition.upstream_category}, level={level}"
-                        )
+                if not candidates:
+                    reason = (
+                        f"No official LIBERO-Plus variant for task={task['name']}, "
+                        f"category={definition.upstream_category}, level={level}"
+                    )
+                    skipped_count = (
+                        1
+                        if cfg.perturbation.variant_selection == "all_once"
+                        else cfg.benchmark.episodes_per_task
+                    )
+                    for episode_index in range(skipped_count):
                         jobs.append(
                             _make_job(
                                 cfg,
@@ -227,8 +263,12 @@ def plan_jobs(cfg: EvalConfig) -> list[EvaluationJob]:
                                 upstream_task_name="",
                                 category=category,
                                 level=level,
-                                parameters={"official_category": definition.upstream_category},
+                                parameters={
+                                    "official_category": definition.upstream_category,
+                                    "variant_selection": cfg.perturbation.variant_selection,
+                                },
                                 skip_reason=reason,
+                                initial_state_index=0,
                             )
                         )
     return jobs

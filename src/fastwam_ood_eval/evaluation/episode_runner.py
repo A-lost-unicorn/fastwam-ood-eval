@@ -180,4 +180,5 @@ def run_episode(
         test_time_future_imagination=job.test_time_future_imagination,
         comparison_group=job.comparison_group,
         training_recipe_id=job.training_recipe_id,
+        initial_state_index=job.initial_state_index,
     )

@@ -15,7 +15,13 @@ from typing import Sequence
 from fastwam_ood_eval.analysis.aggregate import aggregate_experiment
 from fastwam_ood_eval.analysis.report import generate_report
 from fastwam_ood_eval.analysis.review import generate_failure_review
-from fastwam_ood_eval.config import ConfigError, EvalConfig, load_config, validate_runtime_paths
+from fastwam_ood_eval.config import (
+    ConfigError,
+    EvalConfig,
+    load_config,
+    validate_hardware_inventory,
+    validate_runtime_paths,
+)
 from fastwam_ood_eval.evaluation.distributed_launcher import distributed_evaluate
 from fastwam_ood_eval.evaluation.evaluator import evaluate_worker, git_commit, gpu_environment, plan_experiment
 from fastwam_ood_eval.logging_utils import configure_logging
@@ -134,13 +140,45 @@ def _doctor(args: argparse.Namespace) -> int:
         upstreams[name] = {"exists": path.is_dir(), "commit": git_commit(path)}
     status = 0
     if args.config:
+        errors: list[str] = []
         try:
             cfg = load_config(args.config, args.set)
-            validate_runtime_paths(cfg, require_checkpoint=True)
-            report["checks"] = ["configuration valid", "runtime paths present"]
         except ConfigError as exc:
-            report["checks"] = [f"ERROR: {exc}"]
+            errors.append(str(exc))
+            cfg = None
+        if cfg is not None:
+            try:
+                validate_runtime_paths(cfg, require_checkpoint=True)
+            except ConfigError as exc:
+                errors.append(str(exc))
+            gpu = report["gpu"]
+            assert isinstance(gpu, dict)
+            try:
+                validate_hardware_inventory(
+                    cfg,
+                    cuda_available=bool(gpu.get("cuda_available", False)),
+                    device_memory_gb=[
+                        float(device["total_memory_gb"])
+                        for device in gpu.get("torch_devices", [])
+                        if isinstance(device, dict) and "total_memory_gb" in device
+                    ],
+                    cuda_visible_devices=(
+                        str(gpu["cuda_visible_devices"])
+                        if gpu.get("cuda_visible_devices") not in (None, "")
+                        else None
+                    ),
+                )
+            except ConfigError as exc:
+                errors.append(str(exc))
+        if errors:
+            report["checks"] = [f"ERROR: {error}" for error in errors]
             status = 1
+        else:
+            report["checks"] = [
+                "configuration valid",
+                "runtime paths present",
+                "configured CUDA inventory available",
+            ]
     print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
     return status
 

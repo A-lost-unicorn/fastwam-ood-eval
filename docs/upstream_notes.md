@@ -22,6 +22,15 @@
 - 未提供：policy server/client；逐 episode JSONL；配对 seed；稳健 resume；失败视频-only；推理 latency/显存统计。
 - 许可证：仓库根目录 `LICENSE` 是 MIT（2026 FastWAM Authors）。
 
+### 测试时未来想象的代码级语义
+
+- release 只提供 `libero_uncond_2cam224.pt`，对应 `FastWAM`/`libero_uncond_2cam224_1e-4`。
+- `FastWAM._build_mot_attention_mask()` 的 action→video 区域只开放首帧 token；`infer_action()` 只编码首帧并缓存其 KV，然后去噪 action。因此 release 动作推理不依赖预测未来帧。
+- 对 uncond 模型调用 `infer_joint()` 虽会额外生成视频，但相同 attention mask 仍禁止 action 读取未来 token；不能将 `visualize_future_video=true/false` 当作 future imagination on/off。
+- `FastWAMJoint` 覆盖 attention mask，让 action 读取全部 video token；其 `infer_action()` 实际共同去噪未来视频 latent 与 action。`FastWAMIDM` 则先生成未来视频，再由动作分支读取视频。
+- 三种上游 task 配置分别为 `libero_uncond_*`、`libero_joint_*`、`libero_idm_*`，属于需要各自训练 checkpoint 的模型变体。当前 README/Hugging Face 下载命令只列 uncond release，故本项目不声称已具备 on/off 因果消融条件。
+- 2026-07-22 再核对官方 Hugging Face 模型页，文件仍只有 LIBERO/RoboTwin uncond checkpoint。第三方 BadWAM 模型页新提供 Joint/IDM 权重，但只声明使用默认 task 配置（Joint metadata 标 step 21700），未给出足以确认其与官方 uncond 初始化、seed、优化预算和精确数据版本配对的证据，且许可证标为 `other`。本项目只把它们列为可选的相关性基线，不自动下载，也不授予因果解释资格。
+
 ## LIBERO
 
 - README 安装示例固定 Python 3.8.13、PyTorch 1.11/cu113，`requirements.txt` 固定 NumPy 1.22.4、Hydra 1.2、robosuite 1.4.0 等。

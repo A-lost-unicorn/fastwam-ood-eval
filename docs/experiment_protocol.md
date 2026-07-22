@@ -9,4 +9,8 @@
 7. CI 是 episode Bernoulli 指标的 2,000 次确定性 bootstrap percentile interval。
 8. 优先报告 paired seed 的 clean-success/OOD-failure、clean-failure/OOD-success、both-success、both-failure。
 
-正式运行前确认：suite、任务集合、每条件 episode 数（至少 20）、checkpoint/hash、五类扰动、easy/medium/hard 映射、max steps、control horizon、4 个 GPU、视频策略和输出目录。
+9. 每个结果显式记录 `policy_variant` 与 `test_time_future_imagination`。Clean/OOD checkpoint hash 只允许在同一策略变体内相同；不同策略的 checkpoint 本来就应不同。
+10. 未来想象比较按 `(suite, task, episode seed, condition, category, level, official variant)` 配对，报告配对成功率差、bootstrap CI 与 exact McNemar p-value。
+11. 只有两个策略显式声明同一个非空 `training_recipe_id` 时，报告才允许把未来想象比较标为配方匹配的架构消融；否则只作相关性描述。
+
+正式运行前确认：suite、任务集合、每条件 episode 数（至少 20）、checkpoint/hash、五类扰动、easy/medium/hard 映射、max steps、control horizon、3 个 GPU、视频策略和输出目录。

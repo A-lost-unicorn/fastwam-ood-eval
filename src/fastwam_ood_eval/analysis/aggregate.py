@@ -10,7 +10,12 @@ from pathlib import Path
 from typing import Any, Callable, Iterable
 
 from fastwam_ood_eval.analysis.confidence_intervals import bootstrap_mean_ci
-from fastwam_ood_eval.analysis.robustness_metrics import absolute_drop, paired_outcomes, relative_drop
+from fastwam_ood_eval.analysis.robustness_metrics import (
+    absolute_drop,
+    paired_outcomes,
+    paired_policy_comparisons,
+    relative_drop,
+)
 from fastwam_ood_eval.evaluation.episode_runner import percentile
 from fastwam_ood_eval.evaluation.resume import load_result_records
 
@@ -31,6 +36,7 @@ def load_results(experiment_dir: Path, input_dirs: Iterable[Path] = ()) -> list[
         records.values(),
         key=lambda row: (
             str(row.get("suite")),
+            str(row.get("policy_variant", "unspecified")),
             int(row.get("task_id", -1)),
             str(row.get("condition")),
             str(row.get("perturbation_category")),
@@ -120,50 +126,129 @@ def aggregate_experiment(experiment_dir: Path, input_dirs: Iterable[Path] = ()) 
 
     by_task = _group_summary(
         rows,
-        lambda row: (row.get("suite"), row.get("task_id"), row.get("task_name"), row.get("condition")),
-        ("suite", "task_id", "task_name", "condition"),
+        lambda row: (
+            row.get("policy_variant", "unspecified"),
+            row.get("suite"),
+            row.get("task_id"),
+            row.get("task_name"),
+            row.get("condition"),
+        ),
+        ("policy_variant", "suite", "task_id", "task_name", "condition"),
     )
     by_perturbation = _group_summary(
         rows,
         lambda row: (
+            row.get("policy_variant", "unspecified"),
             row.get("condition"),
             row.get("perturbation_category") or "clean",
         ),
-        ("condition", "perturbation_category"),
+        ("policy_variant", "condition", "perturbation_category"),
     )
     by_level = _group_summary(
         rows,
-        lambda row: (row.get("condition"), row.get("perturbation_level") or "clean"),
-        ("condition", "perturbation_level"),
+        lambda row: (
+            row.get("policy_variant", "unspecified"),
+            row.get("condition"),
+            row.get("perturbation_level") or "clean",
+        ),
+        ("policy_variant", "condition", "perturbation_level"),
+    )
+    by_policy = _group_summary(
+        rows,
+        lambda row: (
+            row.get("policy_variant", "unspecified"),
+            bool(row.get("test_time_future_imagination", False)),
+        ),
+        ("policy_variant", "test_time_future_imagination"),
     )
     _write_csv(summary_dir / "summary_by_task.csv", by_task)
     _write_csv(summary_dir / "summary_by_perturbation.csv", by_perturbation)
     _write_csv(summary_dir / "summary_by_level.csv", by_level)
+    _write_csv(summary_dir / "summary_by_policy.csv", by_policy)
     failures = [row for row in rows if not row.get("success") and row.get("termination_reason") != "skipped"]
     _write_csv(summary_dir / "failures.csv", failures)
 
     clean_rows = [row for row in rows if row.get("condition") == "clean"]
     ood_rows = [row for row in rows if row.get("condition") == "ood"]
-    clean_hashes = {str(row["checkpoint_hash"]) for row in clean_rows if row.get("checkpoint_hash")}
-    ood_hashes = {str(row["checkpoint_hash"]) for row in ood_rows if row.get("checkpoint_hash")}
-    if clean_hashes and ood_hashes and clean_hashes != ood_hashes:
-        raise ValueError(
-            "Clean and OOD checkpoint hashes differ; refusing to compute a robustness comparison: "
-            f"clean={sorted(clean_hashes)}, ood={sorted(ood_hashes)}"
+    variants = sorted({str(row.get("policy_variant", "unspecified")) for row in rows})
+    robustness_by_policy: list[dict[str, Any]] = []
+    checkpoint_hashes_by_policy: dict[str, dict[str, list[str]]] = {}
+    for variant in variants:
+        variant_rows = [row for row in rows if str(row.get("policy_variant", "unspecified")) == variant]
+        variant_clean = [row for row in variant_rows if row.get("condition") == "clean"]
+        variant_ood = [row for row in variant_rows if row.get("condition") == "ood"]
+        variant_clean_hashes = {
+            str(row["checkpoint_hash"]) for row in variant_clean if row.get("checkpoint_hash")
+        }
+        variant_ood_hashes = {
+            str(row["checkpoint_hash"]) for row in variant_ood if row.get("checkpoint_hash")
+        }
+        if variant_clean_hashes and variant_ood_hashes and variant_clean_hashes != variant_ood_hashes:
+            raise ValueError(
+                "Clean and OOD checkpoint hashes differ within policy variant; refusing to compute a "
+                f"robustness comparison: variant={variant}, clean={sorted(variant_clean_hashes)}, "
+                f"ood={sorted(variant_ood_hashes)}"
+            )
+        variant_clean_summary = summarize_rows(variant_clean)
+        variant_ood_summary = summarize_rows(variant_ood)
+        robustness_by_policy.append(
+            {
+                "policy_variant": variant,
+                "test_time_future_imagination": any(
+                    bool(row.get("test_time_future_imagination", False)) for row in variant_rows
+                ),
+                "clean": variant_clean_summary,
+                "ood": variant_ood_summary,
+                "absolute_success_drop": absolute_drop(
+                    variant_clean_summary["success_rate"], variant_ood_summary["success_rate"]
+                ),
+                "relative_success_drop": relative_drop(
+                    variant_clean_summary["success_rate"], variant_ood_summary["success_rate"]
+                ),
+                "paired": paired_outcomes(variant_rows),
+            }
         )
+        checkpoint_hashes_by_policy[variant] = {
+            "clean": sorted(variant_clean_hashes),
+            "ood": sorted(variant_ood_hashes),
+        }
     clean_summary = summarize_rows(clean_rows)
     ood_summary = summarize_rows(ood_rows)
+    single_policy = len(variants) <= 1
+    clean_hashes = {
+        checkpoint_hash
+        for hashes in checkpoint_hashes_by_policy.values()
+        for checkpoint_hash in hashes["clean"]
+    }
+    ood_hashes = {
+        checkpoint_hash
+        for hashes in checkpoint_hashes_by_policy.values()
+        for checkpoint_hash in hashes["ood"]
+    }
     metrics = {
         "all": summarize_rows(rows),
         "clean": clean_summary,
         "ood": ood_summary,
-        "absolute_success_drop": absolute_drop(clean_summary["success_rate"], ood_summary["success_rate"]),
-        "relative_success_drop": relative_drop(clean_summary["success_rate"], ood_summary["success_rate"]),
-        "paired": paired_outcomes(rows),
+        "absolute_success_drop": (
+            absolute_drop(clean_summary["success_rate"], ood_summary["success_rate"])
+            if single_policy
+            else None
+        ),
+        "relative_success_drop": (
+            relative_drop(clean_summary["success_rate"], ood_summary["success_rate"])
+            if single_policy
+            else None
+        ),
+        "paired": paired_outcomes(rows) if single_policy else {},
+        "mixed_policy_variants": not single_policy,
+        "robustness_by_policy": robustness_by_policy,
+        "future_imagination_comparisons": paired_policy_comparisons(rows),
         "checkpoint_hashes": {"clean": sorted(clean_hashes), "ood": sorted(ood_hashes)},
+        "checkpoint_hashes_by_policy": checkpoint_hashes_by_policy,
         "by_task": by_task,
         "by_perturbation": by_perturbation,
         "by_level": by_level,
+        "by_policy": by_policy,
     }
     (summary_dir / "metrics.json").write_text(
         json.dumps(metrics, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"

@@ -176,5 +176,8 @@ def run_episode(
         error=error,
         worker_rank=worker_rank,
         status="skipped" if termination == "skipped" else "completed",
+        policy_variant=job.policy_variant,
+        test_time_future_imagination=job.test_time_future_imagination,
+        comparison_group=job.comparison_group,
+        training_recipe_id=job.training_recipe_id,
     )
-

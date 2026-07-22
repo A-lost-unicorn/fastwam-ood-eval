@@ -2,7 +2,7 @@
 
 ## 1. 这个项目研究什么
 
-这个项目只回答一个问题：**同一份 Fast-WAM 权重在标准 LIBERO 和环境发生分布外变化的 LIBERO-Plus 中，成功率会下降多少？**
+这个项目第一阶段严格回答一个问题：**同一份 Fast-WAM 权重在标准 LIBERO 和环境发生分布外变化的 LIBERO-Plus 中，成功率会下降多少？** 同时为“测试时未来想象是否改善 unseen 泛化”保留可审计的跨策略配对统计，但不会把不匹配的 checkpoint 比较包装成因果结论。
 
 标准评测的心智模型是：
 
@@ -38,7 +38,17 @@ clean_success_rate - ood_success_rate
 
 ## 3. 当前阶段不做什么
 
-不训练 Fast-WAM，不修改主模型，不实现 Future Adapter、Joint WAM 或历史记忆，也不把仿真 OOD 结论外推成真机结论。未运行的实验不会填入虚构结果。
+不训练 Fast-WAM，不修改主模型，不在本项目中实现 Future Adapter、Joint WAM 或历史记忆，也不把仿真 OOD 结论外推成真机结论。若以后提供上游已经实现且训练配方匹配的 Joint WAM/IDM checkpoint，本项目只负责调用和公平评测。未运行的实验不会填入虚构结果。
+
+当前 pinned Fast-WAM 代码与 release 权重带来四个结论边界：
+
+- 跨环境：可评测。训练配置只列标准 LIBERO 数据，LIBERO-Plus 官方变体可作为 unseen environment shift。
+- 跨物体、跨任务：可按 `libero_object` 和各 suite 报告性能，但 release 训练配置已经包含全部四个 suite，不能称为 unseen-object 或 unseen-task。
+- 跨平台：当前不可评测。同一策略没有同时兼容 LIBERO 与 RoboTwin 的 observation/action/权重。
+- 未来想象：release `libero_uncond` 的动作仅读取当前首帧 token。保存预测视频不等于启用未来想象；因果对照需要训练配方匹配的 `joint`/`idm` checkpoint。
+
+完整可识别性审计见 [思考点 1 协议](docs/thought1_generalization.md)。
+当前实现与实验完成度逐项清单见 [思考点 1 readiness audit](docs/thought1_readiness.md)。
 
 ## 4. 项目架构图
 
@@ -154,19 +164,19 @@ CUDA_VISIBLE_DEVICES=0 MUJOCO_GL=egl MUJOCO_EGL_DEVICE_ID=0 \
 
 LIBERO-Plus 的扰动来自其 BDDL、场景 XML、robot class、init state 和 observation wrapper，不在本项目中伪造图像。
 
-## 10. 4 GPU 正式评测
+## 10. 3 GPU 正式评测
 
 先确认 checkpoint、suite、task 子集、20+ episodes、最大步数、五类扰动、三个等级和输出目录。脚本要求显式确认：
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,1,2,3 CONFIRM_FULL_EVAL=YES \
-  bash scripts/run_4gpu_eval.sh configs/eval_ood_full.yaml
+CUDA_VISIBLE_DEVICES=0,1,2 CONFIRM_FULL_EVAL=YES \
+  bash scripts/run_3gpu_eval.sh configs/eval_ood_full.yaml
 ```
 
 等价核心命令：
 
 ```bash
-torchrun --standalone --nproc_per_node=4 \
+torchrun --standalone --nproc_per_node=3 \
   -m fastwam_ood_eval.cli distributed-evaluate \
   --config configs/eval_ood_full.yaml
 ```
@@ -180,7 +190,7 @@ fastwam-ood aggregate --experiment-dir outputs/ood_full
 fastwam-ood report --experiment-dir outputs/ood_full
 ```
 
-输出位于 `summary/`：JSONL、episode CSV、按任务/扰动/等级 CSV、failures、metrics 和 `report.md`。成功率 CI 使用固定随机种子的 95% bootstrap；若同时聚合 Clean 与 OOD 记录，还会给出配对 seed 的四格计数。Clean 与 OOD 分在两个目录时，建立一个比较输出目录并显式传入两者：
+输出位于 `summary/`：JSONL、episode CSV、按策略/任务/扰动/等级 CSV、failures、metrics 和 `report.md`。成功率 CI 使用固定随机种子的 95% bootstrap；若同时聚合 Clean 与 OOD 记录，还会给出配对 seed 的四格计数。Clean 与 OOD 分在两个目录时，建立一个比较输出目录并显式传入两者：
 
 ```bash
 fastwam-ood aggregate --experiment-dir outputs/clean_vs_ood \
@@ -213,4 +223,11 @@ fastwam-ood review-failures --experiment-dir outputs/ood_full
 
 ## 15. 下一阶段路线
 
-先完成所有 suite 的 Clean/OOD 配对基线和人工失败标注；再依据最敏感的扰动与失败类型提出下一阶段假设。任何 Future Adapter、Joint WAM 或历史记忆实验都应作为新的训练/消融项目，不混入本仓库第一阶段基线。
+先只生成四个 suite 的研究计划，不启动模型：
+
+```bash
+bash scripts/plan_thought1_pilot.sh  # 64-job pilot
+bash scripts/plan_thought1.sh
+```
+
+然后完成所有 suite 的 Clean/OOD 配对基线和人工失败标注；再依据最敏感的扰动与失败类型提出下一阶段假设。任何 Future Adapter、Joint WAM 或历史记忆实验都应作为新的训练/消融项目，不混入本仓库第一阶段基线。

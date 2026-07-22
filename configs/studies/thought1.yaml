@@ -1,0 +1,48 @@
+study:
+  name: thought1_unseen_generalization
+  available_devices: [0, 1, 2]
+  policy_release: libero_uncond_2cam224
+  policy_variant: fastwam
+  test_time_future_imagination: false
+
+training_evidence:
+  source: third_party/FastWAM/configs/data/libero_2cam.yaml
+  seen_suites: [libero_spatial, libero_object, libero_goal, libero_10]
+  seen_platforms: [LIBERO]
+  uses_libero_plus_variants: false
+
+cells:
+  environment_shift:
+    status: runnable
+    claim: unseen environment robustness on official LIBERO-Plus variants
+    protocol: paired clean/OOD base task and episode seed, identical checkpoint
+  object_suite:
+    status: diagnostic_only
+    claim: performance by object task, not unseen-object generalization
+    reason: the release training config includes libero_object
+  task_suite:
+    status: diagnostic_only
+    claim: performance by task suite, not unseen-task generalization
+    reason: the release training config includes all four evaluated LIBERO suites
+  platform_shift:
+    status: blocked
+    claim: none
+    reason: LIBERO and RoboTwin release checkpoints are platform-specific; no shared cross-platform policy adapter/checkpoint is available
+  future_imagination:
+    status: blocked
+    claim: none
+    reason: the release is uncond Fast-WAM; a recipe-matched Joint WAM or IDM checkpoint is required for a causal comparison
+    official_checkpoint_repository: https://huggingface.co/yuanty/fastwam
+    third_party_candidates:
+      - https://huggingface.co/LIQIIIII/badwam-libero-joint-wam
+      - https://huggingface.co/LIQIIIII/badwam-libero-idm-wam
+    candidate_interpretation: associational_only_until_training_parity_is_proven
+    config_templates:
+      - configs/ablations/eval_clean_joint_smoke.template.yaml
+      - configs/ablations/eval_ood_joint_smoke.template.yaml
+
+execution:
+  pilot_planning_script: scripts/plan_thought1_pilot.sh
+  planning_script: scripts/plan_thought1.sh
+  worker_script: scripts/run_3gpu_eval.sh
+  full_run_requires: CONFIRM_FULL_EVAL=YES

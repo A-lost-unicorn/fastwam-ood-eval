@@ -43,6 +43,34 @@ def generate_report(experiment_dir: Path, metrics: dict[str, Any] | None = None)
     clean = metrics["clean"]
     ood = metrics["ood"]
     paired = metrics["paired"]
+    mixed_policies = bool(metrics.get("mixed_policy_variants", False))
+    paired_text = (
+        "N/A at the mixed-policy level; see the per-policy robustness records."
+        if mixed_policies
+        else (
+            f"clean-success/OOD-failure={paired['clean_success_ood_failure']}, "
+            f"clean-failure/OOD-success={paired['clean_failure_ood_success']}, "
+            f"both-success={paired['both_success']}, both-failure={paired['both_failure']}."
+        )
+    )
+    future_comparisons = metrics.get("future_imagination_comparisons", [])
+    future_comparison_text = (
+        _table(
+            future_comparisons,
+            [
+                ("comparison_group", "Group"),
+                ("no_future_variant", "No future"),
+                ("future_variant", "Future"),
+                ("paired_episodes", "Paired N"),
+                ("paired_success_rate_difference", "Future - no future"),
+                ("mcnemar_exact_p_value", "McNemar p"),
+                ("causal_interpretation_allowed", "Causal claim allowed"),
+                ("interpretation", "Interpretation"),
+            ],
+        )
+        if future_comparisons
+        else "No eligible future/no-future policy pair was found. Matching episode seeds alone are not enough; an explicit comparison group and matched training recipe are required for a causal claim."
+    )
     report = f"""# Fast-WAM OOD Evaluation Report
 
 > This report contains only records found on disk. `N/A` means that the corresponding experiment has not been run or aggregated.
@@ -62,6 +90,7 @@ def generate_report(experiment_dir: Path, metrics: dict[str, Any] | None = None)
 - Success rate: **{_fmt(clean['success_rate'], percent=True)}**
 - 95% bootstrap CI: [{_fmt(clean['success_ci95_low'], percent=True)}, {_fmt(clean['success_ci95_high'], percent=True)}]
 - Attempted / exceptions / skipped: {clean['attempted']} / {clean['exceptions']} / {clean['skipped']}
+- Mixed policy variants: {mixed_policies}; aggregate Clean/OOD drops are intentionally N/A when true.
 
 ## 3. OOD results
 
@@ -72,39 +101,44 @@ def generate_report(experiment_dir: Path, metrics: dict[str, Any] | None = None)
 
 ## 4. Robustness drop by perturbation
 
-{_table(metrics['by_perturbation'], [('perturbation_category', 'Perturbation'), ('attempted', 'N'), ('success_rate', 'Success rate'), ('success_ci95_low', 'CI low'), ('success_ci95_high', 'CI high')])}
+{_table(metrics['by_perturbation'], [('policy_variant', 'Policy'), ('perturbation_category', 'Perturbation'), ('attempted', 'N'), ('success_rate', 'Success rate'), ('success_ci95_low', 'CI low'), ('success_ci95_high', 'CI high')])}
 
 ## 5. Robustness drop by difficulty
 
-{_table(metrics['by_level'], [('perturbation_level', 'Level'), ('attempted', 'N'), ('success_rate', 'Success rate'), ('success_ci95_low', 'CI low'), ('success_ci95_high', 'CI high')])}
+{_table(metrics['by_level'], [('policy_variant', 'Policy'), ('perturbation_level', 'Level'), ('attempted', 'N'), ('success_rate', 'Success rate'), ('success_ci95_low', 'CI low'), ('success_ci95_high', 'CI high')])}
 
 ## 6. Task-level results
 
-{_table(metrics['by_task'], [('task_name', 'Task'), ('condition', 'Condition'), ('attempted', 'N'), ('success_rate', 'Success rate')])}
+{_table(metrics['by_task'], [('policy_variant', 'Policy'), ('task_name', 'Task'), ('condition', 'Condition'), ('attempted', 'N'), ('success_rate', 'Success rate')])}
 
-## 7. Latency and memory
+## 7. Future-imagination comparison
+
+{future_comparison_text}
+
+## 8. Latency and memory
 
 - Mean inference latency: {_fmt(metrics['all']['mean_inference_latency_ms'])} ms
 - P50 / P95 inference latency: {_fmt(metrics['all']['p50_inference_latency_ms'])} / {_fmt(metrics['all']['p95_inference_latency_ms'])} ms
 - Maximum recorded GPU peak memory: {_fmt(metrics['all']['gpu_peak_memory_mb'])} MB
 - Mean episode steps: {_fmt(metrics['all']['mean_steps'])}
 
-## 8. Failure cases
+## 9. Failure cases
 
 - Failures: {metrics['all']['failures']}
 - Exceptions: {metrics['all']['exceptions']}
 - Skipped incompatible jobs: {metrics['all']['skipped']}
-- Paired outcomes: clean-success/OOD-failure={paired['clean_success_ood_failure']}, clean-failure/OOD-success={paired['clean_failure_ood_success']}, both-success={paired['both_success']}, both-failure={paired['both_failure']}.
+- Paired outcomes: {paired_text}
 - Use `fastwam-ood review-failures --experiment-dir {experiment_dir}` for manual taxonomy labels.
 
-## 9. Limitations
+## 10. Limitations
 
 - Simulator OOD results do not establish real-robot OOD performance.
 - Unpaired or skipped variants weaken causal comparisons; paired-seed counts are shown separately.
 - LIBERO-Plus difficulty labels are upstream labels mapped as easy=1–2, medium=3, hard=4–5.
 - Manual failure labels are descriptive and are not an automated visual diagnosis.
+- The released `libero_uncond` checkpoint does not use predicted future frames to produce actions. A future-imagination claim requires a separately trained, recipe-matched Joint WAM/IDM checkpoint; merely saving predicted videos is not an ablation.
 
-## 10. Conclusion
+## 11. Conclusion
 
 This experiment can quantify which tested perturbations Fast-WAM is sensitive to and the measured gap between standard and OOD environments. It cannot establish that explicit future imagination would fix OOD failures, that Fast-WAM lacks world modelling, that every WAM should omit future imagination, or that simulated OOD results equal real-world OOD results.
 """
@@ -112,4 +146,3 @@ This experiment can quantify which tested perturbations Fast-WAM is sensitive to
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(report, encoding="utf-8")
     return output
-

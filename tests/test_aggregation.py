@@ -6,7 +6,13 @@ import pytest
 
 from fastwam_ood_eval.analysis.aggregate import aggregate_experiment, summarize_rows
 from fastwam_ood_eval.analysis.confidence_intervals import bootstrap_mean_ci
-from fastwam_ood_eval.analysis.robustness_metrics import absolute_drop, paired_outcomes, relative_drop
+from fastwam_ood_eval.analysis.robustness_metrics import (
+    absolute_drop,
+    exact_mcnemar_p_value,
+    paired_outcomes,
+    paired_policy_comparisons,
+    relative_drop,
+)
 
 
 def _row(job_id, condition, success, seed=1, category=None, termination="success"):
@@ -83,3 +89,66 @@ def test_mismatched_checkpoint_hashes_are_rejected(tmp_path):
     )
     with pytest.raises(ValueError, match="checkpoint hashes differ"):
         aggregate_experiment(tmp_path)
+
+
+def test_paired_future_imagination_comparison_requires_recipe_parity():
+    rows = []
+    for seed, no_future, future in ((1, False, True), (2, True, False), (3, False, True)):
+        for variant, uses_future, success in (
+            ("fastwam", False, no_future),
+            ("joint_wam", True, future),
+        ):
+            row = _row(f"{variant}-{seed}", "ood", success, seed=seed, category="camera")
+            row.update(
+                {
+                    "policy_variant": variant,
+                    "test_time_future_imagination": uses_future,
+                    "comparison_group": "paired",
+                    "training_recipe_id": "recipe-a",
+                    "perturbation_parameters": {"classification_id": 7},
+                }
+            )
+            rows.append(row)
+    comparison = paired_policy_comparisons(rows)[0]
+    assert comparison["paired_episodes"] == 3
+    assert comparison["future_success_no_future_failure"] == 2
+    assert comparison["future_failure_no_future_success"] == 1
+    assert comparison["paired_success_rate_difference"] == pytest.approx(1 / 3)
+    assert comparison["causal_interpretation_allowed"] is True
+    assert exact_mcnemar_p_value(2, 1) == 1.0
+
+    rows[-1]["training_recipe_id"] = "different-recipe"
+    comparison = paired_policy_comparisons(rows)[0]
+    assert comparison["causal_interpretation_allowed"] is False
+
+
+def test_multi_policy_aggregation_checks_hashes_within_variant(tmp_path):
+    worker = tmp_path / "workers" / "rank_0"
+    worker.mkdir(parents=True)
+    rows = []
+    for variant, uses_future, checkpoint_hash in (
+        ("fastwam", False, "hash-a"),
+        ("joint_wam", True, "hash-b"),
+    ):
+        for condition, success in (("clean", True), ("ood", variant == "joint_wam")):
+            row = _row(
+                f"{variant}-{condition}",
+                condition,
+                success,
+                category="camera" if condition == "ood" else None,
+            )
+            row.update(
+                {
+                    "policy_variant": variant,
+                    "test_time_future_imagination": uses_future,
+                    "checkpoint_hash": checkpoint_hash,
+                }
+            )
+            rows.append(row)
+    (worker / "episode_results.jsonl").write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8"
+    )
+    metrics = aggregate_experiment(tmp_path)
+    assert metrics["mixed_policy_variants"] is True
+    assert metrics["absolute_success_drop"] is None
+    assert len(metrics["robustness_by_policy"]) == 2

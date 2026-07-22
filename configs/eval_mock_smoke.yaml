@@ -8,7 +8,7 @@ experiment:
   save_failure_video_only: true
   log_level: INFO
 hardware:
-  devices: [0, 1, 2, 3]
+  devices: [0, 1, 2]
   workers_per_gpu: 1
   precision: fp32
   max_gpu_memory_gb: 0
@@ -17,6 +17,11 @@ checkpoint:
   path: null
   model_name: mock
   config_path: null
+policy:
+  variant: mock
+  test_time_future_imagination: false
+  comparison_group: null
+  training_recipe_id: null
 benchmark:
   backend: mock
   suite: libero_spatial
@@ -38,4 +43,3 @@ recording:
   save_actions: true
   save_robot_state: true
   video_format: mp4
-

@@ -18,6 +18,8 @@ def distributed_evaluate(
     rank = int(os.environ.get("RANK", "0"))
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
     local_rank = int(os.environ.get("LOCAL_RANK", str(rank)))
+    if os.environ.get("MUJOCO_GL", "").lower() == "egl":
+        os.environ.setdefault("MUJOCO_EGL_DEVICE_ID", str(local_rank))
     selected_device = device or ("cpu" if cfg.benchmark.backend == "mock" else f"cuda:{local_rank}")
     return evaluate_worker(
         cfg,
@@ -27,4 +29,3 @@ def distributed_evaluate(
         dry_run=dry_run,
         rerun=rerun,
     )
-

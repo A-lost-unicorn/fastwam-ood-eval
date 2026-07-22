@@ -24,6 +24,23 @@ ALLOWED_CATEGORIES = {
     "robot_initial_states",
     "objects_layout",
 }
+ALLOWED_POLICY_VARIANTS = {"fastwam", "joint_wam", "idm", "mock"}
+
+
+@dataclass(frozen=True)
+class PolicyConfig:
+    """Policy identity needed for scientifically valid cross-model comparisons.
+
+    ``test_time_future_imagination`` is metadata about the upstream architecture,
+    not a cosmetic video-recording switch. Fast-WAM uses current-frame video
+    tokens, Joint WAM jointly denoises future-video/action tokens, and IDM first
+    predicts a future video before recovering actions.
+    """
+
+    variant: str = "fastwam"
+    test_time_future_imagination: bool = False
+    comparison_group: str | None = None
+    training_recipe_id: str | None = None
 
 
 def _required(data: Mapping[str, Any], key: str, section: str) -> Any:
@@ -112,6 +129,7 @@ class EvalConfig:
     perturbation: PerturbationConfig
     recording: RecordingConfig
     source_path: Path
+    policy: PolicyConfig = field(default_factory=PolicyConfig)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -143,6 +161,7 @@ class EvalConfig:
                 "parameters": self.perturbation.parameters,
             },
             "recording": self.recording.__dict__,
+            "policy": self.policy.__dict__,
         }
 
 
@@ -193,6 +212,9 @@ def _build(data: Mapping[str, Any], source_path: Path) -> EvalConfig:
     bm = data["benchmark"]
     pt = data["perturbation"]
     rec = data["recording"]
+    policy = data.get("policy", {})
+    if not isinstance(policy, Mapping):
+        raise ConfigError("Invalid top-level section: policy")
 
     tasks_raw = _required(bm, "tasks", "benchmark")
     if tasks_raw in (None, "all"):
@@ -220,7 +242,10 @@ def _build(data: Mapping[str, Any], source_path: Path) -> EvalConfig:
             log_level=str(ex.get("log_level", "INFO")).upper(),
         ),
         hardware=HardwareConfig(
-            devices=tuple(int(value) for value in _as_list(hw.get("devices", [0]), name="hardware.devices")),
+            devices=tuple(
+                int(value)
+                for value in _as_list(hw.get("devices", [0]), name="hardware.devices")
+            ),
             workers_per_gpu=int(hw.get("workers_per_gpu", 1)),
             precision=str(hw.get("precision", "bf16")).lower(),
             max_gpu_memory_gb=float(hw.get("max_gpu_memory_gb", 23.0)),
@@ -245,8 +270,14 @@ def _build(data: Mapping[str, Any], source_path: Path) -> EvalConfig:
         ),
         perturbation=PerturbationConfig(
             enabled=bool(pt.get("enabled", False)),
-            categories=tuple(str(value) for value in _as_list(pt.get("category", []), name="perturbation.category")),
-            levels=tuple(str(value) for value in _as_list(pt.get("level", []), name="perturbation.level")),
+            categories=tuple(
+                str(value)
+                for value in _as_list(pt.get("category", []), name="perturbation.category")
+            ),
+            levels=tuple(
+                str(value)
+                for value in _as_list(pt.get("level", []), name="perturbation.level")
+            ),
             parameters=dict(pt.get("parameters", {})),
         ),
         recording=RecordingConfig(
@@ -257,6 +288,25 @@ def _build(data: Mapping[str, Any], source_path: Path) -> EvalConfig:
             video_format=str(rec.get("video_format", "mp4")),
         ),
         source_path=source_path,
+        policy=PolicyConfig(
+            variant=str(
+                policy.get(
+                    "variant",
+                    "mock" if str(bm.get("backend", "")).lower() == "mock" else "fastwam",
+                )
+            ).lower(),
+            test_time_future_imagination=bool(policy.get("test_time_future_imagination", False)),
+            comparison_group=(
+                str(policy["comparison_group"]).strip()
+                if policy.get("comparison_group") not in (None, "")
+                else None
+            ),
+            training_recipe_id=(
+                str(policy["training_recipe_id"]).strip()
+                if policy.get("training_recipe_id") not in (None, "")
+                else None
+            ),
+        ),
     )
     validate_config(cfg)
     return cfg
@@ -272,6 +322,10 @@ def validate_config(cfg: EvalConfig) -> None:
         errors.append("hardware.devices must contain at least one device")
     if len(set(cfg.hardware.devices)) != len(cfg.hardware.devices):
         errors.append("hardware.devices must not contain duplicates")
+    if any(device < 0 for device in cfg.hardware.devices):
+        errors.append("hardware.devices must contain non-negative device indices")
+    if cfg.hardware.max_gpu_memory_gb < 0:
+        errors.append("hardware.max_gpu_memory_gb must be non-negative")
     if cfg.hardware.workers_per_gpu != 1:
         errors.append("hardware.workers_per_gpu must be 1 for the supported episode sharding design")
     if cfg.benchmark.backend not in ALLOWED_BACKENDS:
@@ -301,6 +355,37 @@ def validate_config(cfg: EvalConfig) -> None:
         errors.append("benchmark.backend=libero_plus requires perturbation.enabled=true")
     if cfg.recording.video_format not in {"mp4", "avi"}:
         errors.append("recording.video_format must be mp4 or avi")
+    if cfg.policy.variant not in ALLOWED_POLICY_VARIANTS:
+        errors.append(f"policy.variant must be one of {sorted(ALLOWED_POLICY_VARIANTS)}")
+    expected_future = {"fastwam": False, "joint_wam": True, "idm": True, "mock": False}
+    if (
+        cfg.policy.variant in expected_future
+        and cfg.policy.test_time_future_imagination != expected_future[cfg.policy.variant]
+    ):
+        errors.append(
+            "policy.test_time_future_imagination is inconsistent with policy.variant: "
+            f"{cfg.policy.variant} requires {expected_future[cfg.policy.variant]}"
+        )
+    if cfg.benchmark.backend == "mock" and cfg.policy.variant != "mock":
+        errors.append("benchmark.backend=mock requires policy.variant=mock")
+    if cfg.benchmark.backend != "mock" and cfg.policy.variant == "mock":
+        errors.append("real benchmark backends cannot use policy.variant=mock")
+    model_markers = {
+        "fastwam": "_uncond_",
+        "joint_wam": "_joint_",
+        "idm": "_idm_",
+    }
+    marker = model_markers.get(cfg.policy.variant)
+    if marker and marker not in cfg.checkpoint.model_name:
+        errors.append(
+            f"policy.variant={cfg.policy.variant} requires checkpoint.model_name containing {marker!r}; "
+            "future imagination is not a runtime visualization toggle"
+        )
+    if marker and cfg.checkpoint.path is not None and marker not in cfg.checkpoint.path.name:
+        errors.append(
+            f"policy.variant={cfg.policy.variant} requires a checkpoint filename containing {marker!r}; "
+            "do not load an uncond checkpoint into a future-imagination architecture"
+        )
     if errors:
         raise ConfigError("Invalid configuration:\n- " + "\n- ".join(errors))
 
@@ -334,6 +419,49 @@ def validate_runtime_paths(cfg: EvalConfig, *, require_checkpoint: bool = True) 
             missing.append(f"Fast-WAM config: {cfg.checkpoint.config_path}")
     if missing:
         raise ConfigError("Missing runtime prerequisites:\n- " + "\n- ".join(missing))
+
+
+def validate_hardware_inventory(
+    cfg: EvalConfig,
+    *,
+    cuda_available: bool,
+    device_memory_gb: Sequence[float],
+    cuda_visible_devices: str | None = None,
+) -> None:
+    """Validate a real-evaluation config against the visible CUDA inventory."""
+    if cfg.benchmark.backend == "mock":
+        return
+    errors: list[str] = []
+    if not cuda_available:
+        errors.append("CUDA is not available for a real benchmark backend")
+    visible_count = len(device_memory_gb)
+    if len(cfg.hardware.devices) > visible_count:
+        errors.append(
+            f"configuration requests {len(cfg.hardware.devices)} GPUs {cfg.hardware.devices}, "
+            f"but only {visible_count} CUDA devices are visible"
+        )
+
+    # With CUDA_VISIBLE_DEVICES set, torch re-numbers the selected devices from
+    # zero. Otherwise configuration indices address the physical torch inventory.
+    inventory_indices = (
+        tuple(range(len(cfg.hardware.devices)))
+        if cuda_visible_devices not in (None, "")
+        else cfg.hardware.devices
+    )
+    for configured_device, inventory_index in zip(cfg.hardware.devices, inventory_indices):
+        if inventory_index >= visible_count:
+            errors.append(
+                f"configured GPU {configured_device} resolves to unavailable CUDA index {inventory_index}"
+            )
+            continue
+        available_gb = float(device_memory_gb[inventory_index])
+        if available_gb + 1e-6 < cfg.hardware.max_gpu_memory_gb:
+            errors.append(
+                f"GPU {configured_device} has {available_gb:.1f} GiB, below configured memory budget "
+                f"{cfg.hardware.max_gpu_memory_gb:.1f} GiB"
+            )
+    if errors:
+        raise ConfigError("Hardware inventory mismatch:\n- " + "\n- ".join(errors))
 
 
 def load_config(path: str | Path, overrides: Sequence[str] = ()) -> EvalConfig:

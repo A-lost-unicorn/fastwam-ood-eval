@@ -47,6 +47,10 @@ class EpisodeResult:
     status: str = "completed"
     failure_category: str | None = None
     failure_notes: str | None = None
+    policy_variant: str = "unspecified"
+    test_time_future_imagination: bool = False
+    comparison_group: str | None = None
+    training_recipe_id: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -73,4 +77,3 @@ def append_result(path: Path, result: EpisodeResult) -> None:
             os.fsync(handle.fileno())
         except OSError:
             pass
-

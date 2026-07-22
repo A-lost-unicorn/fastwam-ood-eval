@@ -1,6 +1,6 @@
 experiment:
-  name: clean_smoke
-  output_dir: outputs/clean_smoke
+  name: joint_clean_smoke
+  output_dir: outputs/ablations/joint_clean_smoke
   seed: 20260721
   overwrite: false
   resume: true
@@ -14,14 +14,19 @@ hardware:
   max_gpu_memory_gb: 23
   enable_tf32: true
 checkpoint:
-  path: checkpoints/fastwam_release/libero_uncond_2cam224.pt
-  model_name: libero_uncond_2cam224_1e-4
+  # This file is intentionally not downloaded by this project. A current
+  # third-party candidate is LIQIIIII/badwam-libero-joint-wam; its parity with
+  # the official uncond training run is not established.
+  path: checkpoints/fastwam_ablation/libero_joint_2cam224.pt
+  model_name: libero_joint_2cam224_1e-4
   config_path: third_party/FastWAM/configs/sim_libero.yaml
-  dataset_stats_path: checkpoints/fastwam_release/libero_uncond_2cam224_dataset_stats.json
+  dataset_stats_path: checkpoints/fastwam_ablation/libero_joint_2cam224_dataset_stats.json
 policy:
-  variant: fastwam
-  test_time_future_imagination: false
+  variant: joint_wam
+  test_time_future_imagination: true
   comparison_group: thought1_libero
+  # Set the same non-empty ID on both Fast-WAM and Joint WAM only when the
+  # data split, optimizer budget and training-seed protocol are proven matched.
   training_recipe_id: null
 benchmark:
   backend: libero

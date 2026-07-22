@@ -7,6 +7,7 @@ from the pinned upstream checkout.
 
 from __future__ import annotations
 
+import inspect
 import logging
 import sys
 import time
@@ -61,6 +62,25 @@ class FastWAMAdapter(BasePolicy):
             upstream_cfg = compose(config_name=config_path.stem, overrides=overrides)
         dtype = official._mixed_precision_to_model_dtype(upstream_cfg.get("mixed_precision", "bf16"))
         model = instantiate(upstream_cfg.model, model_dtype=dtype, device=self.device)
+        expected_classes = {
+            "fastwam": "FastWAM",
+            "joint_wam": "FastWAMJoint",
+            "idm": "FastWAMIDM",
+        }
+        expected_class = expected_classes[self.cfg.policy.variant]
+        actual_class = type(model).__name__
+        if actual_class != expected_class:
+            raise RuntimeError(
+                f"policy.variant={self.cfg.policy.variant} expected upstream class {expected_class}, "
+                f"but Hydra instantiated {actual_class}"
+            )
+        if self.cfg.policy.test_time_future_imagination:
+            infer_parameters = inspect.signature(model.infer_action).parameters
+            if "num_video_frames" not in infer_parameters:
+                raise RuntimeError(
+                    f"{actual_class}.infer_action has no num_video_frames argument; "
+                    "future-imagination semantics cannot be verified"
+                )
         official._load_model_checkpoint(model, str(self.cfg.checkpoint.path))
         self.model = model.to(self.device).eval()
         stats = load_dataset_stats_from_json(str(self.cfg.checkpoint.dataset_stats_path))
@@ -127,4 +147,3 @@ class FastWAMAdapter(BasePolicy):
         del self.model
         if self.torch.cuda.is_available():
             self.torch.cuda.empty_cache()
-

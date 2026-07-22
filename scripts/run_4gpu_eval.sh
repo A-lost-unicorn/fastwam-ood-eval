@@ -7,6 +7,6 @@ if [[ "${CONFIRM_FULL_EVAL:-}" != "YES" ]]; then
 fi
 config="${1:-configs/eval_ood_full.yaml}"
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3}"
-python -m fastwam_ood_eval.cli plan --config "$config"
-torchrun --standalone --nproc_per_node=4 -m fastwam_ood_eval.cli distributed-evaluate --config "$config"
-
+python -m fastwam_ood_eval.cli plan --config "$config" --set 'hardware.devices=[0,1,2,3]'
+torchrun --standalone --nproc_per_node=4 -m fastwam_ood_eval.cli distributed-evaluate \
+  --config "$config" --set 'hardware.devices=[0,1,2,3]'

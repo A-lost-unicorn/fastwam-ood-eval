@@ -31,13 +31,22 @@ class EvaluationJob:
     perturbation_level: str | None = None
     perturbation_parameters: dict[str, Any] = field(default_factory=dict)
     skip_reason: str | None = None
+    policy_variant: str = "unspecified"
+    test_time_future_imagination: bool = False
+    comparison_group: str | None = None
+    training_recipe_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "EvaluationJob":
-        return cls(**data)
+        payload = dict(data)
+        payload.setdefault("policy_variant", "unspecified")
+        payload.setdefault("test_time_future_imagination", False)
+        payload.setdefault("comparison_group", None)
+        payload.setdefault("training_recipe_id", None)
+        return cls(**payload)
 
 
 def _job_id(payload: dict[str, Any]) -> str:
@@ -134,6 +143,10 @@ def _make_job(
         "perturbation_category": category,
         "perturbation_level": level,
         "perturbation_parameters": parameters or {},
+        "policy_variant": cfg.policy.variant,
+        "test_time_future_imagination": cfg.policy.test_time_future_imagination,
+        "comparison_group": cfg.policy.comparison_group,
+        "training_recipe_id": cfg.policy.training_recipe_id,
     }
     return EvaluationJob(job_id=_job_id(identity), skip_reason=skip_reason, **identity)
 
@@ -248,4 +261,3 @@ def shard_jobs(jobs: Iterable[EvaluationJob], rank: int, world_size: int) -> lis
     if world_size <= 0 or not 0 <= rank < world_size:
         raise ValueError(f"Invalid rank/world_size: rank={rank}, world_size={world_size}")
     return [job for job in jobs if int(job.job_id[:16], 16) % world_size == rank]
-

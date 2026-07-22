@@ -8,7 +8,7 @@ experiment:
   save_failure_video_only: true
   log_level: INFO
 hardware:
-  devices: [0, 1, 2, 3]
+  devices: [0, 1, 2]
   workers_per_gpu: 1
   precision: bf16
   max_gpu_memory_gb: 23
@@ -18,6 +18,11 @@ checkpoint:
   model_name: libero_uncond_2cam224_1e-4
   config_path: third_party/FastWAM/configs/sim_libero.yaml
   dataset_stats_path: checkpoints/fastwam_release/libero_uncond_2cam224_dataset_stats.json
+policy:
+  variant: fastwam
+  test_time_future_imagination: false
+  comparison_group: thought1_libero
+  training_recipe_id: null
 benchmark:
   backend: libero_plus
   suite: libero_spatial

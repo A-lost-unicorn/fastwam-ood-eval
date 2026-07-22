@@ -38,7 +38,7 @@ def write_config(
             "log_level": "WARNING",
         },
         "hardware": {
-            "devices": [0, 1, 2, 3],
+            "devices": [0, 1, 2],
             "workers_per_gpu": 1,
             "precision": "fp32",
             "max_gpu_memory_gb": 23,

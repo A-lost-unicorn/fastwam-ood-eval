@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from fastwam_ood_eval.checkpoint import cached_sha256_file
-from fastwam_ood_eval.config import EvalConfig, validate_runtime_paths
+from fastwam_ood_eval.config import EvalConfig, validate_hardware_inventory, validate_runtime_paths
 from fastwam_ood_eval.envs.base import BaseBenchmarkEnv
 from fastwam_ood_eval.envs.libero_adapter import LiberoAdapter
 from fastwam_ood_eval.envs.libero_plus_adapter import LiberoPlusAdapter
@@ -72,6 +72,17 @@ def gpu_environment() -> dict[str, Any]:
                 "torch_cuda_version": torch.version.cuda,
                 "cuda_available": torch.cuda.is_available(),
                 "cuda_device_count": torch.cuda.device_count(),
+                "torch_devices": [
+                    {
+                        "index": index,
+                        "name": torch.cuda.get_device_name(index),
+                        "total_memory_gb": round(
+                            torch.cuda.get_device_properties(index).total_memory / 2**30,
+                            3,
+                        ),
+                    }
+                    for index in range(torch.cuda.device_count())
+                ],
             }
         )
     except ImportError:
@@ -154,6 +165,11 @@ def evaluate_worker(
     if manifest_path.is_file():
         jobs = read_jobs(manifest_path)
     else:
+        if world_size > 1:
+            raise RuntimeError(
+                f"Distributed evaluation requires a precomputed manifest: {manifest_path}. "
+                f"Run `fastwam-ood plan --config {cfg.source_path}` before torchrun."
+            )
         manifest_path, jobs = plan_experiment(cfg)
     assigned = shard_jobs(jobs, rank, world_size)
     all_result_paths = list((cfg.experiment.output_dir / "workers").glob("rank_*/episode_results.jsonl"))
@@ -188,6 +204,15 @@ def evaluate_worker(
             import torch
         except ImportError as exc:
             raise RuntimeError("PyTorch is not installed in the active environment") from exc
+        validate_hardware_inventory(
+            cfg,
+            cuda_available=torch.cuda.is_available(),
+            device_memory_gb=[
+                torch.cuda.get_device_properties(index).total_memory / 2**30
+                for index in range(torch.cuda.device_count())
+            ],
+            cuda_visible_devices=os.environ.get("CUDA_VISIBLE_DEVICES"),
+        )
         if selected_device.startswith("cuda") and not torch.cuda.is_available():
             raise RuntimeError(f"Requested {selected_device}, but torch.cuda.is_available() is false")
         if selected_device.startswith("cuda"):

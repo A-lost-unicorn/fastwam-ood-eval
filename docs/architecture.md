@@ -14,3 +14,13 @@ CLI → config → job manifest → rank shard → backend package selection
 ```
 
 原版与 Plus 不能在同一 Python 进程切换。一个实验配置只能选择一个 backend；`aggregate --input-dir CLEAN --input-dir OOD` 可把两个实验的 worker JSONL 合并后做配对分析。
+
+策略身份不是从视频保存选项推测，而是由配置显式声明并与上游 task/checkpoint 文件名交叉校验：
+
+```text
+fastwam  + *_uncond_* → 当前帧动作推理，无测试时未来想象
+joint_wam + *_joint_* → 联合未来视频/action latent 去噪
+idm      + *_idm_*    → 先预测未来视频，再反推动作
+```
+
+聚合器先在每个策略内部计算 Clean→OOD drop，再在同一 `comparison_group` 中对 future/no-future 结果做 episode 配对。多策略混合时不输出容易误读的全局 Clean→OOD drop。

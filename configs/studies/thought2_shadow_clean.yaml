@@ -1,0 +1,67 @@
+experiment:
+  name: thought2_shadow_clean
+  output_dir: outputs/thought2_shadow_clean
+  seed: 20260721
+  overwrite: false
+  resume: true
+  save_video: false
+  save_failure_video_only: true
+  log_level: INFO
+hardware:
+  devices: [0]
+  workers_per_gpu: 1
+  precision: bf16
+  max_gpu_memory_gb: 40
+  enable_tf32: true
+checkpoint:
+  path: checkpoints/fastwam_release/libero_uncond_2cam224.pt
+  model_name: libero_uncond_2cam224_1e-4
+  config_path: third_party/FastWAM/configs/sim_libero.yaml
+  dataset_stats_path: checkpoints/fastwam_release/libero_uncond_2cam224_dataset_stats.json
+policy:
+  variant: fastwam
+  test_time_future_imagination: false
+  comparison_group: thought1_libero
+  training_recipe_id: null
+benchmark:
+  backend: libero
+  suite: libero_spatial
+  suite_config: configs/suites/libero_spatial.yaml
+  tasks: [0]
+  episodes_per_task: 2
+  max_steps: 400
+  num_steps_wait: 30
+  control_horizon: 10
+  image_size: [256, 256]
+perturbation:
+  enabled: false
+  category: []
+  level: []
+  variant_selection: sample
+  parameters: {}
+recording:
+  fps: 24
+  save_observations: false
+  save_actions: true
+  save_robot_state: true
+  video_format: mp4
+diagnostics:
+  enabled: true
+  mode: action_conditioned_future
+  source_experiment_id: clean_smoke
+  source_output_dir: outputs/clean_smoke
+  num_video_frames: null
+  num_inference_steps: 20
+  max_probes_per_episode: 2
+  probe_strategy: evenly_spaced
+  explicit_replan_indices: []
+  isolate_rng: true
+  diagnostic_seed_offset: 1000000
+  save_predicted_video: true
+  save_actual_video: true
+  save_side_by_side_video: true
+  save_latents: false
+  static_motion_threshold: 1.0
+  motion_epsilon: 1.0e-8
+  control_frequency_hz: 20.0
+

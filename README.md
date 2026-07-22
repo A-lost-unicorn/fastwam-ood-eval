@@ -54,6 +54,8 @@ clean_success_rate - ood_success_rate
 
 - [思考点一阶段报告](docs/thought1_report.md)：当前结论、真实 smoke/pilot 证据、正式 manifest 与剩余计算量。
 - [思考点 1 实施与验收手册](docs/thought1_execution_guide.md)：checkpoint/assets、单卡 smoke、三卡 pilot 与正式运行门禁。
+- [思考点二上游审计](docs/thought2_upstream_audit.md)：`infer_joint()`、官方预处理、动作语义、VAE、时间对齐和 release 能力门禁。
+- [思考点二概念说明](docs/thought2_concepts.md)：Shadow Diagnostics 的研究问题、旁观语义和因果边界。
 - [工程亮点、难点与阻碍台账](docs/engineering_highlights.md)：工程复盘、未解决风险和简历素材。
 - [环境配置](docs/environment_setup.md)、[实验协议](docs/experiment_protocol.md)、[上游勘察](docs/upstream_notes.md)。
 
@@ -211,7 +213,51 @@ fastwam-ood aggregate --experiment-dir outputs/clean_vs_ood \
   --input-dir outputs/ood_full
 ```
 
-## 12. 查看失败视频
+## 12. 思考点二：Shadow Future Diagnostics
+
+思考点二是独立、显式启用的旁观诊断链路。它先调用原 `FastWAMAdapter.act()` 得到将要执行的 action chunk，再尝试用同一模型的视频分支预测 future；预测结果从不反馈给策略或环境。实际环境始终执行原 action，诊断结果只写入新的 `outputs/thought2_*` 目录。普通的 `plan`、`evaluate`、`distributed-evaluate`、`aggregate` 和 `report` 不会隐式开启它。
+
+先确保对应的思考点一 source experiment 已真实执行过，且 manifest 中记录了非空的 checkpoint hash 与 Fast-WAM commit；仅运行 `plan` 得到的 `checkpoint_hash=null` 不足以开始真实诊断。随后可做不加载模型和环境的只读检查：
+
+```bash
+fastwam-ood diagnose-future \
+  --config configs/studies/thought2_shadow_smoke.yaml \
+  --device cuda:0 \
+  --dry-run
+```
+
+单卡模型/episode smoke 的精确命令是：
+
+```bash
+CUDA_VISIBLE_DEVICES=0 MUJOCO_GL=egl MUJOCO_EGL_DEVICE_ID=0 \
+  fastwam-ood diagnose-future \
+  --config configs/studies/thought2_shadow_smoke.yaml \
+  --device cuda:0
+```
+
+三卡 episode-level pilot 的精确命令是：
+
+```bash
+CUDA_VISIBLE_DEVICES=0,1,2 MUJOCO_GL=egl \
+torchrun --standalone --nproc_per_node=3 \
+  -m fastwam_ood_eval.cli distributed-diagnose-future \
+  --config configs/studies/thought2_shadow_ood.yaml
+```
+
+该 OOD 配置只读复用已真实执行的 `outputs/ood_pilot`，选取 task 0/4/9 的三个 camera-viewpoint job；按既有 `job_id` 分片时三个 rank 各分到一个 episode。
+
+当前 release `libero_uncond_2cam224` 的 `video_expert.action_conditioned=false`。即使未来提供 action-conditioned 结构，pinned `first_frame_causal` 会使任意 future frame 的传递依赖闭包覆盖完整 32-action horizon，超过思考点一固定的 `control_horizon=10`；上游 `strict=False` checkpoint loader 还要求额外验证 action-embedding 权重和可信训练 provenance。当前 matched-checkpoint allowlist 为空。因此以上真实命令会在环境 reset 和 action sampling 前触发能力门禁；这是预期的科研安全行为，不会自动降级为 unconditional future，也不会改变思考点一控制语义。
+
+诊断聚合与报告使用独立命令：
+
+```bash
+fastwam-ood aggregate-diagnostics \
+  --experiment-dir outputs/thought2_shadow_smoke
+fastwam-ood report-diagnostics \
+  --experiment-dir outputs/thought2_shadow_smoke
+```
+
+## 13. 查看失败视频
 
 ```bash
 fastwam-ood review-failures --experiment-dir outputs/ood_full
@@ -220,11 +266,11 @@ fastwam-ood review-failures --experiment-dir outputs/ood_full
 
 页面不需要后端；标注保存在浏览器 localStorage，并可导出 `annotations.json`。默认只保留失败视频。
 
-## 13. 如何理解结果
+## 14. 如何理解结果
 
 报告能够说明 Fast-WAM 对已测扰动是否敏感、哪类/哪个强度下降最大，以及标准分布与 OOD 分布的实测差距。它不能说明显式未来想象一定能修复 OOD、Fast-WAM 完全没有世界建模能力、所有 WAM 都不需要未来想象，或仿真与真机 OOD 等价。详细统计口径见 [实验协议](docs/experiment_protocol.md)。
 
-## 14. 常见报错
+## 15. 常见报错
 
 - `checkpoint ... missing`：运行下载脚本，或覆盖 `checkpoint.path` 和 `checkpoint.dataset_stats_path`。
 - `A different libero package is already loaded`：Clean/OOD 必须分别启动新进程，不要在 notebook 内切换 backend。
@@ -234,7 +280,7 @@ fastwam-ood review-failures --experiment-dir outputs/ood_full
 
 更多见 [故障排查](docs/troubleshooting.md)。
 
-## 15. 下一阶段路线
+## 16. 下一阶段路线
 
 四个 suite 的正式计划已经按当前协议生成并审计：800 Clean、6,771 OOD runnable 和 68 OOD skipped。下一阶段是在明确确认后执行 7,571 个真实 rollout；只运行 OOD 无法计算 Clean→OOD drop。
 

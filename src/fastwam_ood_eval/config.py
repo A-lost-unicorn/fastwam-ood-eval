@@ -26,6 +26,8 @@ ALLOWED_CATEGORIES = {
 }
 ALLOWED_POLICY_VARIANTS = {"fastwam", "joint_wam", "idm", "mock"}
 ALLOWED_VARIANT_SELECTIONS = {"sample", "all_once"}
+ALLOWED_DIAGNOSTIC_MODES = {"action_conditioned_future"}
+ALLOWED_PROBE_STRATEGIES = {"first", "evenly_spaced", "explicit_replan_indices"}
 
 
 @dataclass(frozen=True)
@@ -123,6 +125,36 @@ class RecordingConfig:
 
 
 @dataclass(frozen=True)
+class DiagnosticsConfig:
+    """Configuration for the opt-in Thought 2 shadow subsystem.
+
+    This is deliberately not an evaluation/recording switch.  Ordinary
+    ``plan``/``evaluate`` commands ignore it; only the diagnostic CLI consumes
+    it.  Keeping the defaults disabled preserves Thought 1 behavior for every
+    existing YAML file.
+    """
+
+    enabled: bool = False
+    mode: str = "action_conditioned_future"
+    num_video_frames: int | None = None
+    num_inference_steps: int = 20
+    max_probes_per_episode: int = 2
+    probe_strategy: str = "evenly_spaced"
+    explicit_replan_indices: tuple[int, ...] = ()
+    isolate_rng: bool = True
+    diagnostic_seed_offset: int = 1_000_000
+    save_predicted_video: bool = True
+    save_actual_video: bool = True
+    save_side_by_side_video: bool = True
+    save_latents: bool = False
+    source_experiment_id: str | None = None
+    source_output_dir: Path | None = None
+    static_motion_threshold: float = 1.0
+    motion_epsilon: float = 1e-8
+    control_frequency_hz: float | None = None
+
+
+@dataclass(frozen=True)
 class EvalConfig:
     experiment: ExperimentConfig
     hardware: HardwareConfig
@@ -132,9 +164,10 @@ class EvalConfig:
     recording: RecordingConfig
     source_path: Path
     policy: PolicyConfig = field(default_factory=PolicyConfig)
+    diagnostics: DiagnosticsConfig = field(default_factory=DiagnosticsConfig)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "experiment": {
                 **self.experiment.__dict__,
                 "output_dir": str(self.experiment.output_dir),
@@ -166,6 +199,19 @@ class EvalConfig:
             "recording": self.recording.__dict__,
             "policy": self.policy.__dict__,
         }
+        # Do not perturb existing Thought 1 manifests merely because the code
+        # knows about an opt-in subsystem.
+        if self.diagnostics.enabled:
+            payload["diagnostics"] = {
+                **self.diagnostics.__dict__,
+                "explicit_replan_indices": list(self.diagnostics.explicit_replan_indices),
+                "source_output_dir": (
+                    str(self.diagnostics.source_output_dir)
+                    if self.diagnostics.source_output_dir is not None
+                    else None
+                ),
+            }
+        return payload
 
 
 def _parse_override_value(raw: str) -> Any:
@@ -218,6 +264,9 @@ def _build(data: Mapping[str, Any], source_path: Path) -> EvalConfig:
     policy = data.get("policy", {})
     if not isinstance(policy, Mapping):
         raise ConfigError("Invalid top-level section: policy")
+    diagnostics = data.get("diagnostics", {})
+    if not isinstance(diagnostics, Mapping):
+        raise ConfigError("Invalid top-level section: diagnostics")
 
     tasks_raw = _required(bm, "tasks", "benchmark")
     if tasks_raw in (None, "all"):
@@ -309,6 +358,44 @@ def _build(data: Mapping[str, Any], source_path: Path) -> EvalConfig:
                 str(policy["training_recipe_id"]).strip()
                 if policy.get("training_recipe_id") not in (None, "")
                 else None
+            ),
+        ),
+        diagnostics=DiagnosticsConfig(
+            enabled=bool(diagnostics.get("enabled", False)),
+            mode=str(diagnostics.get("mode", "action_conditioned_future")).lower(),
+            num_video_frames=(
+                None
+                if diagnostics.get("num_video_frames") in (None, "")
+                else int(diagnostics["num_video_frames"])
+            ),
+            num_inference_steps=int(diagnostics.get("num_inference_steps", 20)),
+            max_probes_per_episode=int(diagnostics.get("max_probes_per_episode", 2)),
+            probe_strategy=str(diagnostics.get("probe_strategy", "evenly_spaced")).lower(),
+            explicit_replan_indices=tuple(
+                int(value)
+                for value in _as_list(
+                    diagnostics.get("explicit_replan_indices", []),
+                    name="diagnostics.explicit_replan_indices",
+                )
+            ),
+            isolate_rng=bool(diagnostics.get("isolate_rng", True)),
+            diagnostic_seed_offset=int(diagnostics.get("diagnostic_seed_offset", 1_000_000)),
+            save_predicted_video=bool(diagnostics.get("save_predicted_video", True)),
+            save_actual_video=bool(diagnostics.get("save_actual_video", True)),
+            save_side_by_side_video=bool(diagnostics.get("save_side_by_side_video", True)),
+            save_latents=bool(diagnostics.get("save_latents", False)),
+            source_experiment_id=(
+                str(diagnostics["source_experiment_id"]).strip()
+                if diagnostics.get("source_experiment_id") not in (None, "")
+                else None
+            ),
+            source_output_dir=_path_or_none(diagnostics.get("source_output_dir")),
+            static_motion_threshold=float(diagnostics.get("static_motion_threshold", 1.0)),
+            motion_epsilon=float(diagnostics.get("motion_epsilon", 1e-8)),
+            control_frequency_hz=(
+                None
+                if diagnostics.get("control_frequency_hz") in (None, "")
+                else float(diagnostics["control_frequency_hz"])
             ),
         ),
     )
@@ -405,6 +492,59 @@ def validate_config(cfg: EvalConfig) -> None:
             f"policy.variant={cfg.policy.variant} requires a checkpoint filename containing {marker!r}; "
             "do not load an uncond checkpoint into a future-imagination architecture"
         )
+    diagnostics = cfg.diagnostics
+    if diagnostics.mode not in ALLOWED_DIAGNOSTIC_MODES:
+        errors.append(f"diagnostics.mode must be one of {sorted(ALLOWED_DIAGNOSTIC_MODES)}")
+    if diagnostics.probe_strategy not in ALLOWED_PROBE_STRATEGIES:
+        errors.append(
+            "diagnostics.probe_strategy must be one of "
+            f"{sorted(ALLOWED_PROBE_STRATEGIES)}"
+        )
+    if diagnostics.num_video_frames is not None:
+        if diagnostics.num_video_frames <= 1:
+            errors.append("diagnostics.num_video_frames must be greater than 1")
+        elif diagnostics.num_video_frames % 4 != 1:
+            errors.append("diagnostics.num_video_frames must satisfy T % 4 == 1")
+    if diagnostics.num_inference_steps <= 0:
+        errors.append("diagnostics.num_inference_steps must be positive")
+    if not 1 <= diagnostics.max_probes_per_episode <= 2:
+        errors.append("diagnostics.max_probes_per_episode must be 1 or 2 in the first protocol")
+    if diagnostics.diagnostic_seed_offset < 0:
+        errors.append("diagnostics.diagnostic_seed_offset must be non-negative")
+    if len(set(diagnostics.explicit_replan_indices)) != len(
+        diagnostics.explicit_replan_indices
+    ) or any(index < 0 for index in diagnostics.explicit_replan_indices):
+        errors.append("diagnostics.explicit_replan_indices must be unique non-negative integers")
+    if diagnostics.probe_strategy == "explicit_replan_indices":
+        if not diagnostics.explicit_replan_indices:
+            errors.append(
+                "diagnostics.probe_strategy=explicit_replan_indices requires explicit indices"
+            )
+        if len(diagnostics.explicit_replan_indices) > diagnostics.max_probes_per_episode:
+            errors.append(
+                "diagnostics.explicit_replan_indices cannot exceed max_probes_per_episode"
+            )
+    elif diagnostics.explicit_replan_indices:
+        errors.append(
+            "diagnostics.explicit_replan_indices is only valid with "
+            "probe_strategy=explicit_replan_indices"
+        )
+    if diagnostics.static_motion_threshold < 0:
+        errors.append("diagnostics.static_motion_threshold must be non-negative")
+    if diagnostics.motion_epsilon <= 0:
+        errors.append("diagnostics.motion_epsilon must be positive")
+    if diagnostics.control_frequency_hz is not None and diagnostics.control_frequency_hz <= 0:
+        errors.append("diagnostics.control_frequency_hz must be positive when provided")
+    if diagnostics.enabled:
+        if diagnostics.source_experiment_id is None:
+            errors.append("enabled diagnostics require diagnostics.source_experiment_id")
+        if (
+            diagnostics.source_output_dir is not None
+            and diagnostics.source_output_dir.resolve() == cfg.experiment.output_dir.resolve()
+        ):
+            errors.append(
+                "diagnostics.source_output_dir must differ from experiment.output_dir"
+            )
     if errors:
         raise ConfigError("Invalid configuration:\n- " + "\n- ".join(errors))
 

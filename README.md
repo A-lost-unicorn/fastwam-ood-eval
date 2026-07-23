@@ -198,6 +198,15 @@ torchrun --standalone --nproc_per_node=3 \
 
 每个 rank 写入 `outputs/<experiment>/workers/rank_N/`。默认 resume 不重复已落盘 job；`--rerun failed` 只重跑 exception/max_steps，`--overwrite` 重跑全部已分配 job。
 
+单张 RTX 4090 顺序完成四个 suite 时使用项目脚本；它会自动激活本地环境并支持跨已有 `rank_*` 结果断点续跑：
+
+```bash
+CONFIRM_FULL_EVAL=YES GPU_ID=0 \
+  bash scripts/run_thought1_single_gpu_full.sh all
+```
+
+`all/clean/ood` 分别表示完整 Clean+OOD、仅 Clean、仅 OOD。单卡后台运行、显存门禁和日志监控见 [实施与验收手册](docs/thought1_execution_guide.md#81-单卡-rtx-4090-全量脚本)。
+
 ## 11. 聚合结果
 
 ```bash

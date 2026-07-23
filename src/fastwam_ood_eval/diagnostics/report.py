@@ -83,20 +83,86 @@ def generate_diagnostic_report(
         row for row in condition
         if "latency" in str(row.get("metric", "")) or "memory" in str(row.get("metric", ""))
     ]
+    config = manifest.get("config") if isinstance(manifest.get("config"), Mapping) else {}
+    diagnostics = (
+        config.get("diagnostics")
+        if isinstance(config.get("diagnostics"), Mapping)
+        else {}
+    )
+    mode = str(diagnostics.get("mode", "unknown"))
+    if mode == "unconditional_future":
+        research_question = (
+            "Does the released Fast-WAM video branch's unconditional future agree with the "
+            "realized outcome of the separately chosen, unchanged Fast-WAM action, and do those "
+            "associations differ between success/failure or clean/OOD episodes? The protected "
+            "policy action is recorded but is not an input to the video branch."
+        )
+        causal_limitation = (
+            "`causal_interpretation_allowed=false`. The released `libero_uncond` video expert "
+            "conditions on the current observation, language, and proprioception, but not on the "
+            "protected policy action. Agreement therefore measures compatibility between an "
+            "unconditional task-conditioned future prior and the realized action outcome. It is "
+            "neither an action-conditioned dynamics prediction nor evidence that the action "
+            "reads or benefits from an explicit future."
+        )
+        conditioning_limitations = """- The protected policy action is deliberately not fed to the video branch. Motion-direction cosine compares the predicted visual-representation change with the realized post-action change; it is not a direct cosine between 7-DoF actions and pixels.
+- The released video and action experts may share training context, so agreement is an association and must not be described as causal dependence.
+- Direct failure attribution requires blinded human labels in addition to automatic representation metrics; ambiguous cases must remain ambiguous."""
+        temporal_architecture_limitation = (
+            "- Step alignment follows the official decoded-frame/action frequency ratio; it "
+            "does not imply that a decoded visual change can be mapped directly to one action "
+            "dimension."
+        )
+        answer_scope = (
+            "- Whether the release checkpoint's unconditional future matches the realized future "
+            "at exact control-step offsets.\n"
+            "- Whether unconditional future-consistency metrics are associated with successful "
+            "versus failed episodes.\n"
+            "- Whether OOD conditions or perturbation groups are associated with higher "
+            "future-prediction error."
+        )
+    else:
+        research_question = (
+            "Does an action-conditioned shadow future agree with what the unchanged Fast-WAM "
+            "action actually produces, and do those associations differ between success/failure "
+            "or clean/OOD episodes?"
+        )
+        causal_limitation = (
+            "`causal_interpretation_allowed=false`. The released `libero_uncond` video expert "
+            "has `action_conditioned=false` and the strict probe must reject it. Even with a "
+            "compatible checkpoint, the released Fast-WAM action branch does not read the "
+            "generated future. Success/failure differences therefore remain associations."
+        )
+        conditioning_limitations = """- For the audited T=9 path, direct action cross-attention forms two groups of 16, but `first_frame_causal` permits all future latents to exchange information. The transitive dependency closure of every future frame is therefore the full 32-action horizon. A horizon of 10 must be rejected before reset.
+- The released `libero_uncond` checkpoint cannot supply this action-conditioned diagnostic without a compatible checkpoint.
+- Upstream loads MoT with `strict=False`; real probes require exact action-embedding loading and a source-reviewed checkpoint/config/training-recipe allowlist."""
+        temporal_architecture_limitation = (
+            "- Temporal DiT patch sizes other than one have no proven decoded-frame action-"
+            "dependency mapping in this implementation and are rejected."
+        )
+        answer_scope = (
+            "- Whether a compatible action-conditioned shadow future matches the actually "
+            "observed future at covered temporal offsets.\n"
+            "- Whether future-consistency metrics are associated with successful versus failed "
+            "episodes.\n"
+            "- Whether OOD conditions or perturbation groups are associated with higher "
+            "future-prediction error."
+        )
     report = f"""# Fast-WAM Future Consistency Diagnostic
 
 ## 1. Research question
 
-Does an action-conditioned shadow future agree with what the unchanged Fast-WAM action actually produces, and do those associations differ between success/failure or clean/OOD episodes? This Phase 2 study measures consistency; it does not modify the Phase 1 policy or its executable action.
+{research_question} This Phase 2 study measures consistency; it does not modify the Phase 1 policy or its executable action.
 
 ## 2. Important causal limitation
 
-`causal_interpretation_allowed=false`. The released `libero_uncond` video expert has `action_conditioned=false` and can produce only an unconditional future; the strict action-conditioned probe must reject it before reset. Even with a compatible checkpoint, the released Fast-WAM action branch does not read the generated future. Therefore success/failure differences are associations and cannot show that explicit imagination would improve OOD performance.
+{causal_limitation}
 
 ## 3. Checkpoint and upstream provenance
 
 - Diagnostic experiment: `{manifest.get('experiment_id', experiment_dir.name)}`
 - Source experiment: `{manifest.get('source_experiment_id', source.get('source_experiment_id', 'unknown'))}`
+- Future mode: `{mode}`
 - Protocol fingerprint: `{manifest.get('protocol_fingerprint', 'unknown')}`
 - Provenance: `{json.dumps(manifest.get('provenance', {}), ensure_ascii=False, sort_keys=True)}`
 - Source manifest SHA-256: `{source.get('source_manifest_sha256', 'unknown')}`
@@ -133,11 +199,11 @@ Each group combines perturbation category and level; small groups are descriptiv
 
 ## 9. Static-future cases
 
-`static_future_cases.csv` lists probes whose predicted motion energy is at or below the configured threshold. Static is a thresholded representation-space diagnostic, not proof that the video model ignored the action or that the robot should not move.
+`static_future_cases.csv` lists probes whose predicted motion energy is at or below the configured threshold. Static is a thresholded representation-space diagnostic, not proof that the video model ignored available conditioning or that the robot should not move.
 
 ## 10. Visual case studies
 
-Per-rank `predicted_futures/` contains the full generated sequence; `actual_futures/` and `side_by_side/` contain only temporally aligned observations/comparisons. Optional arrays are isolated in `latents/`. Artifact paths are indexed by `all_diagnostics.csv`; Phase 1 `episode_results.jsonl` and source outputs remain untouched.
+Per-rank `current_frames/` contains each probe's input frame, `predicted_futures/` contains the full generated sequence, and `actual_futures/` plus `side_by_side/` contain only temporally aligned observations/comparisons. Optional arrays are isolated in `latents/`. Artifact paths are indexed by `all_diagnostics.csv`; Phase 1 `episode_results.jsonl` and source outputs remain untouched.
 
 Representative indexed side-by-side paths:
 
@@ -151,10 +217,8 @@ Representative indexed side-by-side paths:
 
 ## 12. Limitations
 
-- For the audited T=9 path, direct action cross-attention forms two groups of 16, but `first_frame_causal` permits all future latents to exchange information. The transitive dependency closure of every future frame is therefore the full 32-action horizon, not merely its direct 16-action group. A horizon of 10 must be rejected before reset. Increasing it requires a fresh, explicitly non-baseline source protocol; Phase 1 outputs must never be modified.
-- The released `libero_uncond` checkpoint has an unconditional video expert, so it cannot supply the requested action-conditioned diagnostic without a compatible checkpoint.
-- Upstream loads MoT with `strict=False`. A runtime architecture flag is not proof of matched training: real probes additionally require exact checkpoint action-embedding loading and a source-reviewed checkpoint-hash/Fast-WAM-commit/training-recipe allowlist. That allowlist is empty for the current release.
-- Temporal DiT patch sizes other than one have no proven decoded-frame dependency mapping in this implementation and are rejected.
+{conditioning_limitations}
+{temporal_architecture_limitation}
 - Step-offset alignment does not make configured-only wall-clock timestamps exact.
 - Decoded-frame VAE re-encodings are approximate, not native temporal video latents.
 - The configured static-motion threshold is a manifest-pinned initial diagnostic threshold; it must be calibrated on no-op/static smoke clips before formal interpretation. Representation direction is not physical optical-flow direction.
@@ -164,9 +228,7 @@ Representative indexed side-by-side paths:
 
 Can answer:
 
-- Whether a compatible shadow future matches the actually observed future at covered temporal offsets.
-- Whether future-consistency metrics are associated with successful versus failed episodes.
-- Whether OOD conditions or specific perturbation groups are associated with higher future-prediction error.
+{answer_scope}
 
 Cannot answer:
 

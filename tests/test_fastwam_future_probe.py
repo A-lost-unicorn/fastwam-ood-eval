@@ -452,6 +452,60 @@ class FastWAMFutureProbeTests(unittest.TestCase):
         self.assertEqual(adapter.official.obs_calls, [])
         self.assertEqual(adapter.model.infer_calls, [])
 
+    def test_unconditional_mode_uses_release_video_path_without_action_condition(self):
+        adapter = _make_adapter(
+            action_conditioned=False,
+            num_frames=9,
+            returned_frame_count=9,
+            action_horizon=32,
+            control_horizon=10,
+        )
+        probe = FastWAMFutureProbe(
+            adapter,
+            mode="unconditional_future",
+            numpy_module=self.fake_numpy,
+        )
+        actions = [[0.0, 0.0, 1.0]] * 32
+        original_actions = copy.deepcopy(actions)
+
+        output = probe.predict_unconditional_future(
+            {"pixels": "observation"},
+            actions,
+            diagnostic_seed=17,
+            num_video_frames=9,
+            num_inference_steps=2,
+        )
+
+        self.assertEqual(actions, original_actions)
+        self.assertIsNone(adapter.model.infer_calls[0]["action"])
+        self.assertFalse(output.metadata["action_conditioned"])
+        self.assertFalse(
+            output.metadata["protected_policy_action_used_as_video_condition"]
+        )
+        self.assertEqual(output.metadata["future_kind"], "unconditional")
+        self.assertEqual(
+            output.metadata["action_dependency_scope"],
+            "not_applicable_unconditional",
+        )
+        self.assertTrue(
+            probe.checkpoint_verification[
+                "unconditional_video_architecture_verified"
+            ]
+        )
+
+    def test_unconditional_mode_rejects_action_conditioned_video_expert(self):
+        adapter = _make_adapter(action_conditioned=True)
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            r"unconditional_future.*action_conditioned=false",
+        ):
+            FastWAMFutureProbe(
+                adapter,
+                mode="unconditional_future",
+                numpy_module=self.fake_numpy,
+            )
+
     def test_constructor_rejects_non_null_action_state_transforms(self):
         adapter = _make_adapter(action_state_transforms=["unsupported-transform"])
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from conftest import write_config
@@ -23,6 +25,16 @@ def test_dry_run_does_not_create_model_or_environment(tmp_path, monkeypatch):
 def test_mock_single_and_three_workers(tmp_path):
     cfg = load_config(write_config(tmp_path, perturbation=True, episodes=3))
     evaluator.plan_experiment(cfg)
+    manifest = json.loads(
+        (cfg.experiment.output_dir / "experiment_manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    for key in ("git_dirty", "fastwam_dirty", "libero_dirty", "libero_plus_dirty"):
+        assert manifest["provenance"][key] in (True, False, None)
+    assert manifest["provenance"]["libero_plus_dirty_ignored_untracked"] == [
+        ".downloads/"
+    ]
     total = 0
     for rank in range(3):
         total += evaluator.evaluate_worker(cfg, rank=rank, world_size=3)["completed"]

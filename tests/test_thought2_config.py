@@ -37,6 +37,25 @@ def test_invalid_diagnostic_video_length_is_rejected(tmp_path):
         load_config(path, ["diagnostics.num_video_frames=8"])
 
 
+def test_unconditional_future_mode_is_explicitly_supported(tmp_path):
+    path = write_config(tmp_path)
+    cfg = load_config(
+        path,
+        [
+            "diagnostics.enabled=true",
+            "diagnostics.source_experiment_id=thought1-source",
+            "diagnostics.mode=unconditional_future",
+        ],
+    )
+    assert cfg.diagnostics.mode == "unconditional_future"
+
+
+def test_unknown_diagnostic_mode_is_rejected(tmp_path):
+    path = write_config(tmp_path)
+    with pytest.raises(ConfigError, match="diagnostics.mode"):
+        load_config(path, ["diagnostics.mode=pretend_future"])
+
+
 def test_explicit_probe_strategy_requires_bounded_indices(tmp_path):
     path = write_config(tmp_path)
     with pytest.raises(ConfigError, match="requires explicit indices"):
@@ -50,4 +69,3 @@ def test_explicit_probe_strategy_requires_bounded_indices(tmp_path):
                 "diagnostics.max_probes_per_episode=1",
             ],
         )
-

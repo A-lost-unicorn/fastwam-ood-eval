@@ -29,6 +29,18 @@ class FastWAMAdapter(BasePolicy):
         self._load_upstream()
 
     def _load_upstream(self) -> None:
+        from fastwam_ood_eval.envs.libero_adapter import configure_libero_package
+
+        if self.cfg.benchmark.backend == "libero":
+            configure_libero_package(
+                Path("third_party/LIBERO"),
+                Path("outputs/runtime/libero"),
+            )
+        elif self.cfg.benchmark.backend == "libero_plus":
+            configure_libero_package(
+                Path("third_party/LIBERO-plus"),
+                Path("outputs/runtime/libero_plus"),
+            )
         fastwam_root = Path("third_party/FastWAM").resolve()
         experiment_root = fastwam_root / "experiments" / "libero"
         for path in (experiment_root, fastwam_root):

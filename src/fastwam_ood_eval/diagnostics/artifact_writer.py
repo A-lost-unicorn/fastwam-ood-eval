@@ -523,6 +523,17 @@ class DiagnosticArtifactWriter:
             return None
         return str(path.resolve().relative_to(self.output_dir.resolve()))
 
+    def write_image(self, path: Path, frame: Any) -> Path:
+        """Atomically write one RGB frame for direct per-probe inspection."""
+
+        from PIL import Image
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(path.stem + ".tmp" + path.suffix)
+        Image.fromarray(_to_rgb_uint8(frame)).save(temporary)
+        temporary.replace(path)
+        return path
+
     def write_video(self, path: Path, frames: Sequence[Any], *, fps: float | None = None) -> Path | None:
         if not frames:
             return None
@@ -564,6 +575,7 @@ class DiagnosticArtifactWriter:
         *,
         job_id: str,
         replan_index: int,
+        current_frame: Any | None = None,
         predicted_frames: Sequence[Any],
         actual_frames: Sequence[Any],
         side_by_side_predicted_frames: Sequence[Any] | None = None,
@@ -576,6 +588,15 @@ class DiagnosticArtifactWriter:
         save_latents: bool = False,
     ) -> dict[str, str | None]:
         stem = f"{job_id}__probe_{int(replan_index):04d}"
+        current_frame_path = (
+            self.write_image(
+                self.worker_dir / "current_frames" / f"{stem}.png",
+                current_frame,
+            )
+            if current_frame is not None
+            and (save_predicted or save_actual or save_side_by_side)
+            else None
+        )
         predicted_path = (
             self.write_video(
                 self.worker_dir / "predicted_futures" / f"{stem}.mp4",
@@ -628,6 +649,7 @@ class DiagnosticArtifactWriter:
             else None
         )
         return {
+            "current_frame_path": self._relative(current_frame_path),
             "predicted_video_path": self._relative(predicted_path),
             "actual_video_path": self._relative(actual_path),
             "side_by_side_video_path": self._relative(side_by_side_path),

@@ -52,10 +52,14 @@ clean_success_rate - ood_success_rate
 
 ### 文档导航
 
+- [研究总控与阶段状态](docs/research_index.md)：论文主线、证据等级、阶段隔离和当前优先级。
+- [实验、卡点与结论台账](docs/experiment_ledger.md)：已运行数字、失败尝试、可写与不可写结论。
 - [思考点一阶段报告](docs/thought1_report.md)：当前结论、真实 smoke/pilot 证据、正式 manifest 与剩余计算量。
 - [思考点 1 实施与验收手册](docs/thought1_execution_guide.md)：checkpoint/assets、单卡 smoke、三卡 pilot 与正式运行门禁。
 - [思考点二上游审计](docs/thought2_upstream_audit.md)：`infer_joint()`、官方预处理、动作语义、VAE、时间对齐和 release 能力门禁。
 - [思考点二概念说明](docs/thought2_concepts.md)：Shadow Diagnostics 的研究问题、旁观语义和因果边界。
+- [思考点二执行手册](docs/thought2_execution_guide.md)：2A/2B、真实命令、指标、阈值校准与人工盲审。
+- [思考点三 Adapter 方案](docs/thought3_adapter_plan.md)：cache、B0/A0/A1/A2/A4、公平训练与评测门禁。
 - [工程亮点、难点与阻碍台账](docs/engineering_highlights.md)：工程复盘、未解决风险和简历素材。
 - [环境配置](docs/environment_setup.md)、[实验协议](docs/experiment_protocol.md)、[上游勘察](docs/upstream_notes.md)。
 
@@ -226,45 +230,54 @@ fastwam-ood aggregate --experiment-dir outputs/clean_vs_ood \
 
 思考点二是独立、显式启用的旁观诊断链路。它先调用原 `FastWAMAdapter.act()` 得到将要执行的 action chunk，再尝试用同一模型的视频分支预测 future；预测结果从不反馈给策略或环境。实际环境始终执行原 action，诊断结果只写入新的 `outputs/thought2_*` 目录。普通的 `plan`、`evaluate`、`distributed-evaluate`、`aggregate` 和 `report` 不会隐式开启它。
 
+当前明确分为两种模式：
+
+- `unconditional_future`（2A）：适配官方 `libero_uncond` release；视频不读取受保护 action，只测未来先验与实际动作结果的一致性。
+- `action_conditioned_future`（2B）：要求可信 action-conditioned checkpoint、完整参数 provenance 和动作依赖覆盖；当前 release 必须被门禁拒绝。
+
 先确保对应的思考点一 source experiment 已真实执行过，且 manifest 中记录了非空的 checkpoint hash 与 Fast-WAM commit；仅运行 `plan` 得到的 `checkpoint_hash=null` 不足以开始真实诊断。随后可做不加载模型和环境的只读检查：
 
 ```bash
 fastwam-ood diagnose-future \
-  --config configs/studies/thought2_shadow_smoke.yaml \
+  --config configs/studies/thought2_unconditional_smoke.yaml \
   --device cuda:0 \
   --dry-run
 ```
 
-单卡模型/episode smoke 的精确命令是：
+单卡 2-step 模型/episode smoke 的精确命令是：
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 MUJOCO_GL=egl MUJOCO_EGL_DEVICE_ID=0 \
   fastwam-ood diagnose-future \
-  --config configs/studies/thought2_shadow_smoke.yaml \
+  --config configs/studies/thought2_unconditional_smoke.yaml \
   --device cuda:0
 ```
 
-三卡 episode-level pilot 的精确命令是：
+该真实 smoke 已于 2026-07-23 完成 1 job / 1 probe / 0 error，保存了当前帧、9 帧预测、3 帧实际对照、并排视频和完整动作；它只证明链路，不能当作成功率或未来质量结论。
+
+三卡 20-step episode-level pilot 的精确命令是：
 
 ```bash
 CUDA_VISIBLE_DEVICES=0,1,2 MUJOCO_GL=egl \
 torchrun --standalone --nproc_per_node=3 \
   -m fastwam_ood_eval.cli distributed-diagnose-future \
-  --config configs/studies/thought2_shadow_ood.yaml
+  --config configs/studies/thought2_unconditional_ood.yaml
 ```
 
 该 OOD 配置只读复用已真实执行的 `outputs/ood_pilot`，选取 task 0/4/9 的三个 camera-viewpoint job；按既有 `job_id` 分片时三个 rank 各分到一个 episode。
 
-当前 release `libero_uncond_2cam224` 的 `video_expert.action_conditioned=false`。即使未来提供 action-conditioned 结构，pinned `first_frame_causal` 会使任意 future frame 的传递依赖闭包覆盖完整 32-action horizon，超过思考点一固定的 `control_horizon=10`；上游 `strict=False` checkpoint loader 还要求额外验证 action-embedding 权重和可信训练 provenance。当前 matched-checkpoint allowlist 为空。因此以上真实命令会在环境 reset 和 action sampling 前触发能力门禁；这是预期的科研安全行为，不会自动降级为 unconditional future，也不会改变思考点一控制语义。
+2A 不能声称动作条件动力学或因果依赖。2B 仍使用 `thought2_shadow_*.yaml`：当前 release 的 `video_expert.action_conditioned=false`；即使未来提供新结构，pinned `first_frame_causal` 还会使 future frame 的传递依赖闭包覆盖完整 32-action horizon，超过阶段一固定的 `control_horizon=10`。上游 `strict=False` loader 也要求验证 action-embedding 实值和训练 provenance。当前 allowlist 为空，因此 2B 真实命令应在 reset/action 前失败，不能自动降级。
 
 诊断聚合与报告使用独立命令：
 
 ```bash
 fastwam-ood aggregate-diagnostics \
-  --experiment-dir outputs/thought2_shadow_smoke
+  --experiment-dir outputs/thought2_unconditional_smoke
 fastwam-ood report-diagnostics \
-  --experiment-dir outputs/thought2_shadow_smoke
+  --experiment-dir outputs/thought2_unconditional_smoke
 ```
+
+完整执行、自动指标、static 阈值校准和人工失败归因见 [阶段二手册](docs/thought2_execution_guide.md)。
 
 ## 13. 查看失败视频
 

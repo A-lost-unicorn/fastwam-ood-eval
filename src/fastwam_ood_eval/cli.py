@@ -416,12 +416,12 @@ def _diagnose_future_worker(
     )
     seed_everything(cfg.experiment.seed + rank)
 
-    # Ordering is intentional: the probe validates action-conditioned video
-    # support before any simulator is constructed, reset, or policy action is
-    # sampled.  The released unconditioned checkpoint therefore fails fast.
+    # Ordering is intentional: the probe validates the requested video
+    # semantics before any simulator is constructed, reset, or policy action is
+    # sampled. Incompatible checkpoints therefore fail fast.
     policy = _make_policy(cfg, selected_device)
     try:
-        probe = FastWAMFutureProbe(policy)
+        probe = FastWAMFutureProbe(policy, mode=cfg.diagnostics.mode)
     except AttributeError as exc:
         policy.close()
         raise RuntimeError(

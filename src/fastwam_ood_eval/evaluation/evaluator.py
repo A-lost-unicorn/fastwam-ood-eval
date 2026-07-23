@@ -43,6 +43,54 @@ def git_commit(path: Path) -> str | None:
         return None
 
 
+def git_dirty(
+    path: Path,
+    *,
+    ignored_untracked_prefixes: tuple[str, ...] = (),
+) -> bool | None:
+    """Return whether tracked or relevant untracked source differs from ``HEAD``.
+
+    Explicitly declared download/cache prefixes may be ignored, but tracked
+    changes are never ignored.  Callers must record any exclusion alongside
+    the returned value in experiment provenance.
+    """
+
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(path),
+                "status",
+                "--porcelain=v1",
+                "--untracked-files=all",
+                "-z",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        normalized_prefixes = tuple(
+            prefix.strip("/") + "/"
+            for prefix in ignored_untracked_prefixes
+            if prefix.strip("/")
+        )
+        for entry in result.stdout.split("\0"):
+            if not entry:
+                continue
+            status = entry[:2]
+            relative_path = entry[3:]
+            if status == "??" and any(
+                relative_path.startswith(prefix) for prefix in normalized_prefixes
+            ):
+                continue
+            return True
+        return False
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
 def gpu_environment() -> dict[str, Any]:
     report: dict[str, Any] = {
         "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
@@ -91,11 +139,20 @@ def gpu_environment() -> dict[str, Any]:
 
 
 def provenance(cfg: EvalConfig, *, hash_checkpoint: bool) -> dict[str, Any]:
+    libero_plus_dirty_ignored_untracked = [".downloads/"]
     return {
         "git_commit": git_commit(Path.cwd()),
+        "git_dirty": git_dirty(Path.cwd()),
         "fastwam_commit": git_commit(Path("third_party/FastWAM")),
+        "fastwam_dirty": git_dirty(Path("third_party/FastWAM")),
         "libero_commit": git_commit(Path("third_party/LIBERO")),
+        "libero_dirty": git_dirty(Path("third_party/LIBERO")),
         "libero_plus_commit": git_commit(Path("third_party/LIBERO-plus")),
+        "libero_plus_dirty": git_dirty(
+            Path("third_party/LIBERO-plus"),
+            ignored_untracked_prefixes=tuple(libero_plus_dirty_ignored_untracked),
+        ),
+        "libero_plus_dirty_ignored_untracked": libero_plus_dirty_ignored_untracked,
         "checkpoint": str(cfg.checkpoint.path) if cfg.checkpoint.path else None,
         "checkpoint_hash": (
             cached_sha256_file(cfg.checkpoint.path, cfg.experiment.output_dir / "checkpoint_hash.json")

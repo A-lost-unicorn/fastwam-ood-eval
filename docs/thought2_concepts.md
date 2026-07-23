@@ -20,24 +20,22 @@ success / failure
 
 ## 2. 思考点二想测什么
 
-目标协议把 future predictor 放在控制环之外：
+协议把 future predictor 放在控制环之外，并显式区分两个问题：
 
 ```text
-observation + 已经决定要执行的 action chunk
-                         ↓
-                shadow future predictor
-                         ↓
-                 predicted future
-                         │
-                         ├── compare ── action 执行后的 actual future
-                         ↓
-                  consistency metrics
+observation ──→ original action policy ──→ protected action ──→ environment
+     │                                                        │
+     └──→ 2A unconditional future ─────────────────────────────┤
+                                                              ▼
+                                                   actual future / metrics
+
+observation + protected action ──→ 2B action-conditioned future
 ```
 
 执行顺序非常重要：
 
 1. 先调用原来的 `FastWAMAdapter.act()`，把动作确定下来。
-2. Shadow predictor 复制这份动作并预测未来；它只旁观。
+2. Shadow predictor 复制动作用于哈希保护；2A 不把它输入视频分支，2B 才将其作为条件。
 3. 环境始终执行第 1 步得到的原始动作，绝不执行 shadow 调用返回的动作。
 4. 收集执行后的实际 observation，按上游真实时间比例与预测帧对齐。
 5. 比较预测与真实变化，并把结果写进独立 diagnostics 输出。
@@ -63,9 +61,14 @@ Pinned release 是 `libero_uncond`。它的动作分支只读取当前首帧 vid
 video_dit_config.action_conditioned = false
 ```
 
-所以它虽然能通过 `infer_joint()` 生成视频，但传入的 `action=` 不会进入视频分支。该输出是 observation/language/proprio-conditioned 的 **unconditional future**，不是已执行动作条件下的 future。
+所以它能通过 `infer_joint()` 生成 observation/language/proprio-conditioned 的 **unconditional future**，但传入的 `action=` 不会进入视频分支；它不是已执行动作条件下的 future。
 
-因此当前实现对 `mode: action_conditioned_future` 使用硬门禁：真实 release 遇到这个模式必须明确报错，不能把 unconditional video 换个名字当作 action-conditioned 结果。CPU mock 可以验证隔离、对齐、schema、聚合和报告，但不能解除这一科研语义限制。完整证据见 [上游审计](thought2_upstream_audit.md)。
+当前实现因此分成：
+
+- `mode: unconditional_future`：2A，允许当前 release，结果明确写 `action_conditioned_verified=false` 和 `causal_interpretation_allowed=false`。
+- `mode: action_conditioned_future`：2B，真实 release 必须明确报错，不能把 unconditional video 换个名字。
+
+2026-07-23 的 2A 真实 smoke 已完成 1 job / 1 probe / 0 error，证明官方 release 能在本机生成并保存未来。它只有 2 个去噪步和 1 个样本，只是链路证据。完整命令见 [执行手册](thought2_execution_guide.md)，上游语义证据见 [上游审计](thought2_upstream_audit.md)。
 
 ## 5. 时间对齐为什么不能按“一帧一步”处理
 
@@ -87,12 +90,16 @@ predicted frame 2  <-> 执行 8 个 action 后，offset 8
 
 ## 6. 本实验可以与不能支持的结论
 
-在取得真正支持 action conditioning 的匹配 checkpoint、并同时通过动作条件组覆盖门禁后，本实验可以说明：
+对当前 release，2A 在正式样本和阈值校准完成后可以说明：
+
+- unconditional future 与动作执行后的实际视觉变化是否相容。
+- 这种一致性是否与 episode 成功/失败相关。
+- OOD 是否伴随更高的一致性误差。
+- 哪些案例出现静止预测、错误目标进展或方向冲突。
+
+它不能说明该 future 是给定动作的动力学预测。取得真正支持 action conditioning 的匹配 checkpoint、并通过动作条件覆盖门禁后，2B 才可以进一步说明：
 
 - 视频分支对已执行动作条件下的未来预测是否准确。
-- 预测一致性是否与 episode 成功/失败相关。
-- OOD 是否伴随更高的未来预测误差。
-- 哪些扰动和哪些案例出现静止预测或明显方向不一致。
 
 本实验不能说明：
 
@@ -101,4 +108,4 @@ predicted frame 2  <-> 执行 8 个 action 后，offset 8
 - Joint/IDM 一定优于 Fast-WAM。
 - 仿真一致性可以直接外推到真机。
 
-对当前 `libero_uncond` release，还必须再收紧一句：它只能生成 unconditional future，不能产生本协议要求的 action-conditioned 科学结果。
+对当前 `libero_uncond` release，准确表述是：**它能够产生 2A 的 unconditional future consistency 工件，不能产生 2B 的 action-conditioned 科学结果。**

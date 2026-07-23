@@ -265,8 +265,9 @@ def test_probe_capability_failure_precedes_environment_construction(
         calls.append("policy")
         return Policy()
 
-    def make_probe(policy):
+    def make_probe(policy, *, mode):
         calls.append("probe")
+        assert mode == cfg.diagnostics.mode
         raise RuntimeError("checkpoint is not action-conditioned")
 
     def make_environment(config):

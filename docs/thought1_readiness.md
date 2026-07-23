@@ -1,6 +1,6 @@
 # 思考点一完成度审计
 
-审计日期：2026-07-22
+审计日期：2026-07-23
 
 本文只回答“哪些能力已经被真实运行验证、哪些结论仍缺数据”。完整阶段报告见 [thought1_report.md](thought1_report.md)。plan、doctor、pytest 和 smoke 都不能替代正式泛化结果。
 
@@ -31,7 +31,7 @@
 - 三卡 CUDA/EGL、每 GPU 一模型、job hash 分片、worker JSONL 和视频落盘均通过。
 - pilot 的 8 条 action trace 均 finite 且非全零，机器人末端执行器均发生明显位移。
 - aggregate 正确得到 8 attempted、2 success、6 failure、0 exception、1 skipped。
-- `pytest -q`：43 passed；测试证明评测机制，不证明模型泛化性能。
+- `pytest -q`：142 passed；覆盖阶段一评测和阶段二诊断链路。测试证明机制与门禁，不证明模型泛化性能。
 
 ## 正式 manifest 权威计数
 

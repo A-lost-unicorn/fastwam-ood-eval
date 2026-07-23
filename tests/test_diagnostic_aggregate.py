@@ -109,6 +109,16 @@ def test_aggregate_is_episode_weighted_and_filters_stale_protocol(tmp_path):
     assert metrics["causal_interpretation_allowed"] is False
     perturbation_csv = (tmp_path / "summary" / "consistency_by_perturbation.csv").read_text()
     assert "camera/easy" in perturbation_csv
+    manifest = json.loads(
+        (tmp_path / "diagnostic_manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["status"] == "aggregated"
+    assert manifest["aggregation"] == {
+        "episodes": 2,
+        "clips": 3,
+        "error_clips": 0,
+        "summary_dir": str(tmp_path / "summary"),
+    }
 
 
 def test_multi_input_rejects_incompatible_inference_protocols(tmp_path):

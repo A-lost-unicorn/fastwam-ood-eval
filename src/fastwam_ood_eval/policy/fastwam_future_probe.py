@@ -1,4 +1,4 @@
-"""Strict shadow future probe backed by an already-loaded FastWAMAdapter."""
+"""Strict shadow future probes backed by an already-loaded FastWAMAdapter."""
 
 from __future__ import annotations
 
@@ -63,22 +63,29 @@ def _clone_observation_value(value: Any) -> Any:
 
 
 class FastWAMFutureProbe:
-    """Generate an action-conditioned future without changing executable actions.
+    """Generate a shadow future without changing executable actions.
 
     The object owns no model: it reuses the exact model, processor, official
     helper module, Hydra config, device, and task state of ``FastWAMAdapter``.
-    Capability is validated at construction so an incompatible checkpoint
-    fails before a benchmark episode or policy action can begin.
+    ``unconditional_future`` is the release-compatible associational protocol;
+    ``action_conditioned_future`` retains the stricter checkpoint and temporal
+    dependency gates. Capability is validated at construction so an
+    incompatible checkpoint fails before a benchmark episode or policy action.
     """
 
     def __init__(
         self,
         adapter: Any,
         *,
+        mode: str = "action_conditioned_future",
         numpy_module: Any | None = None,
         _mock_checkpoint_verifier: Any | None = None,
     ) -> None:
+        if mode not in {"unconditional_future", "action_conditioned_future"}:
+            raise ValueError(f"Unsupported future probe mode: {mode!r}")
         self.adapter = adapter
+        self.mode = mode
+        self.future_mode = mode
         self.model = adapter.model
         self.processor = adapter.processor
         self.official = adapter.official
@@ -105,15 +112,22 @@ class FastWAMFutureProbe:
         self.validate_capability()
 
     def validate_capability(self) -> None:
-        """Reject models that cannot condition their video branch on actions."""
+        """Validate the exact video semantics requested by ``self.mode``."""
 
         video_expert = getattr(self.model, "video_expert", None)
-        if getattr(video_expert, "action_conditioned", None) is not True:
+        action_conditioned = getattr(video_expert, "action_conditioned", None)
+        if self.mode == "action_conditioned_future":
+            if action_conditioned is not True:
+                raise RuntimeError(
+                    "FastWAMFutureProbe rejects libero_uncond: "
+                    "model.video_expert.action_conditioned=false, so the checkpoint can only "
+                    "produce an unconditional future. Action-conditioned future diagnostics "
+                    "require action_conditioned=True."
+                )
+        elif action_conditioned is not False:
             raise RuntimeError(
-                "FastWAMFutureProbe rejects libero_uncond: "
-                "model.video_expert.action_conditioned=false, so the checkpoint can only produce an "
-                "unconditional future. Action-conditioned future diagnostics require "
-                "action_conditioned=True."
+                "unconditional_future requires a checkpoint whose video expert explicitly has "
+                "action_conditioned=false; use action_conditioned_future for conditioned models"
             )
         if getattr(self.model, "training", False) is True:
             raise RuntimeError(
@@ -140,17 +154,33 @@ class FastWAMFutureProbe:
         if missing:
             raise RuntimeError(f"model.infer_joint is missing required parameters: {missing}")
 
-        action_state_transforms = getattr(self.processor, "action_state_transforms", object())
-        if action_state_transforms is not None:
-            raise RuntimeError(
-                "FastWAM future diagnostics require processor.action_state_transforms is None. "
-                "The current LIBERO release uses no action-state transform; a non-null or "
-                "unknown transform cannot be skipped safely before official action normalization."
-            )
-
         self._validate_camera_concat()
-        self._expected_action_dim()
-        self._validate_action_conditioning_alignment()
+        if self.mode == "action_conditioned_future":
+            action_state_transforms = getattr(
+                self.processor,
+                "action_state_transforms",
+                object(),
+            )
+            if action_state_transforms is not None:
+                raise RuntimeError(
+                    "FastWAM future diagnostics require processor.action_state_transforms is None. "
+                    "The current LIBERO release uses no action-state transform; a non-null or "
+                    "unknown transform cannot be skipped safely before official action "
+                    "normalization."
+                )
+            self._expected_action_dim()
+            self._validate_action_conditioning_alignment()
+        else:
+            self._validate_unconditional_alignment()
+            self.checkpoint_verification = {
+                "unconditional_video_architecture_verified": True,
+                "video_expert_action_conditioned": False,
+                "scientific_scope": (
+                    "observation/language/proprio-conditioned future; protected policy actions "
+                    "are not inputs to the video branch"
+                ),
+            }
+            return
         checkpoint_path = str(
             getattr(getattr(self.adapter.cfg, "checkpoint", None), "path", "")
         )
@@ -163,6 +193,61 @@ class FastWAMFutureProbe:
         if checkpoint_identity != self._checkpoint_verified_identity:
             self.checkpoint_verification = self._verify_action_conditioned_checkpoint()
             self._checkpoint_verified_identity = checkpoint_identity
+
+    def _validate_unconditional_alignment(self) -> None:
+        """Validate release video timing without inventing action dependencies."""
+
+        self.action_video_freq_ratio = self._exact_positive_int(
+            self.upstream_cfg.data.train.action_video_freq_ratio,
+            "data.train.action_video_freq_ratio",
+        )
+        num_video_frames = self._exact_positive_int(
+            self.official._get_num_video_frames(self.upstream_cfg),
+            "official num_video_frames",
+        )
+        if num_video_frames <= 1:
+            raise RuntimeError(
+                "Unconditional future diagnostics require more than one video frame, "
+                f"got {num_video_frames}"
+            )
+        vae = getattr(self.model, "vae", None)
+        self.vae_temporal_downsample_factor = self._exact_positive_int(
+            getattr(vae, "temporal_downsample_factor", None),
+            "model.vae.temporal_downsample_factor",
+        )
+        tail_frames = num_video_frames - 1
+        if tail_frames % self.vae_temporal_downsample_factor != 0:
+            raise RuntimeError(
+                "Official video length cannot be aligned to the actual VAE temporal factor: "
+                f"num_video_frames={num_video_frames}, "
+                f"temporal_downsample_factor={self.vae_temporal_downsample_factor}"
+            )
+        patch_size = getattr(self.model.video_expert, "patch_size", None)
+        if not isinstance(patch_size, Sequence) or isinstance(patch_size, (str, bytes)):
+            raise RuntimeError(
+                "model.video_expert.patch_size must expose the actual three-dimensional DiT patch"
+            )
+        if len(patch_size) != 3:
+            raise RuntimeError(
+                "model.video_expert.patch_size must contain [temporal,height,width], "
+                f"got {patch_size!r}"
+            )
+        self.video_dit_temporal_patch_size = self._exact_positive_int(
+            patch_size[0],
+            "model.video_expert.patch_size[0]",
+        )
+        self.control_horizon = self._exact_positive_int(
+            self.adapter.cfg.benchmark.control_horizon,
+            "benchmark.control_horizon",
+        )
+        self.action_conditioning_latent_frame_count = 0
+        self.action_conditioning_group_count = 0
+        self.action_conditioning_group_size = 0
+        self.video_attention_mask_mode = str(
+            getattr(self.model.video_expert, "video_attention_mask_mode", "")
+        )
+        self.action_dependency_scope = "not_applicable_unconditional"
+        self.required_executed_actions_for_first_future = 0
 
     def _verify_action_conditioned_checkpoint(self) -> dict[str, Any]:
         """Prove both trusted provenance and actual action-embedding loading.
@@ -673,10 +758,64 @@ class FastWAMFutureProbe:
         num_video_frames: int | None,
         num_inference_steps: int,
     ) -> FutureProbeOutput:
-        """Generate a shadow future and discard the model's returned action."""
+        """Generate a future conditioned on a private copy of executable actions."""
 
-        # Re-check in case callers hot-swap model components after construction.
+        if self.mode != "action_conditioned_future":
+            raise RuntimeError(
+                "predict_action_conditioned_future requires mode='action_conditioned_future'"
+            )
         self.validate_capability()
+        normalized_actions, executable_hash = self._normalize_executable_actions(actions)
+        return self._generate_future(
+            observation,
+            actions,
+            action_condition=normalized_actions,
+            executable_hash=executable_hash,
+            diagnostic_seed=diagnostic_seed,
+            num_video_frames=num_video_frames,
+            num_inference_steps=num_inference_steps,
+        )
+
+    def predict_unconditional_future(
+        self,
+        observation: dict,
+        actions: Any,
+        *,
+        diagnostic_seed: int,
+        num_video_frames: int | None,
+        num_inference_steps: int,
+    ) -> FutureProbeOutput:
+        """Generate the release future without feeding policy actions to video."""
+
+        if self.mode != "unconditional_future":
+            raise RuntimeError(
+                "predict_unconditional_future requires mode='unconditional_future'"
+            )
+        self.validate_capability()
+        executable_hash = action_chunk_hash(actions)
+        return self._generate_future(
+            observation,
+            actions,
+            action_condition=None,
+            executable_hash=executable_hash,
+            diagnostic_seed=diagnostic_seed,
+            num_video_frames=num_video_frames,
+            num_inference_steps=num_inference_steps,
+        )
+
+    def _generate_future(
+        self,
+        observation: dict,
+        actions: Any,
+        *,
+        action_condition: Any | None,
+        executable_hash: str,
+        diagnostic_seed: int,
+        num_video_frames: int | None,
+        num_inference_steps: int,
+    ) -> FutureProbeOutput:
+        """Run the official joint video path and discard its returned action."""
+
         if isinstance(diagnostic_seed, bool):
             raise TypeError("diagnostic_seed must be an integer, not bool")
         diagnostic_seed = int(diagnostic_seed)
@@ -685,7 +824,6 @@ class FastWAMFutureProbe:
         if num_inference_steps <= 0:
             raise ValueError(f"num_inference_steps must be positive, got {num_inference_steps}")
 
-        normalized_actions, executable_hash = self._normalize_executable_actions(actions)
         np = require_numpy(self._numpy_module)
         inference_mode = getattr(self.torch, "inference_mode", None)
         inference_context = inference_mode() if callable(inference_mode) else nullcontext()
@@ -709,7 +847,11 @@ class FastWAMFutureProbe:
                 "input_image": image,
                 "num_video_frames": num_video_frames,
                 "action_horizon": self.action_horizon,
-                "action": normalized_actions.clone(),
+                "action": (
+                    action_condition.clone()
+                    if action_condition is not None
+                    else None
+                ),
                 "proprio": proprio,
                 "negative_prompt": str(evaluation_cfg.get("negative_prompt", "")),
                 "text_cfg_scale": float(evaluation_cfg.get("text_cfg_scale", 1.0)),
@@ -774,24 +916,40 @@ class FastWAMFutureProbe:
             )
         else:
             peak_semantics = "CUDA unavailable; GPU peak memory reported as zero"
+        action_conditioned = action_condition is not None
         metadata = {
-            "future_kind": "action_conditioned",
-            "action_conditioned": True,
+            "future_kind": (
+                "action_conditioned" if action_conditioned else "unconditional"
+            ),
+            "action_conditioned": action_conditioned,
+            "protected_policy_action_used_as_video_condition": action_conditioned,
             "diagnostic_seed": diagnostic_seed,
             "num_video_frames": num_video_frames,
             "num_inference_steps": num_inference_steps,
             "action_horizon": self.action_horizon,
             "action_dim": self._expected_action_dim(),
-            "normalized_action_shape": list(normalized_actions.shape),
-            "normalized_action_dtype": str(normalized_actions.dtype),
+            "normalized_action_shape": (
+                list(action_condition.shape) if action_conditioned else None
+            ),
+            "normalized_action_dtype": (
+                str(action_condition.dtype) if action_conditioned else None
+            ),
             "executable_action_sha256": executable_hash,
             "frame_control_offsets": frame_control_offsets,
             "action_video_freq_ratio": self.action_video_freq_ratio,
             "vae_temporal_downsample_factor": self.vae_temporal_downsample_factor,
             "video_dit_temporal_patch_size": self.video_dit_temporal_patch_size,
-            "action_conditioning_latent_frame_count": self.action_conditioning_latent_frame_count,
-            "action_conditioning_group_count": self.action_conditioning_group_count,
-            "action_conditioning_group_size": self.action_conditioning_group_size,
+            "action_conditioning_latent_frame_count": (
+                self.action_conditioning_latent_frame_count
+                if action_conditioned
+                else None
+            ),
+            "action_conditioning_group_count": (
+                self.action_conditioning_group_count if action_conditioned else None
+            ),
+            "action_conditioning_group_size": (
+                self.action_conditioning_group_size if action_conditioned else None
+            ),
             "video_attention_mask_mode": self.video_attention_mask_mode,
             "action_dependency_scope": self.action_dependency_scope,
             "required_executed_actions_for_first_future": (

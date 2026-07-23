@@ -1,4 +1,4 @@
-"""Model-agnostic protocol for opt-in future diagnostics.
+"""Model-agnostic protocols for opt-in future diagnostics.
 
 The probe is deliberately separate from :class:`BasePolicy`: callers must
 continue to execute the action chunk produced by the ordinary policy path and
@@ -13,7 +13,7 @@ from typing import Any, Protocol, runtime_checkable
 
 @dataclass
 class FutureProbeOutput:
-    """Non-serialized output of one action-conditioned future probe.
+    """Non-serialized output of one shadow future probe.
 
     Tensor/image values intentionally remain in memory.  Durable result schemas
     store only scalar metrics, metadata, and paths written by the artifact
@@ -31,7 +31,7 @@ class FutureProbeOutput:
 
 @runtime_checkable
 class SupportsFutureProbe(Protocol):
-    """Structural interface implemented by a shadow future predictor."""
+    """Legacy structural interface for an action-conditioned predictor."""
 
     def predict_action_conditioned_future(
         self,
@@ -44,3 +44,25 @@ class SupportsFutureProbe(Protocol):
     ) -> FutureProbeOutput:
         """Predict a future without changing the action chunk to be executed."""
 
+
+@runtime_checkable
+class SupportsUnconditionalFutureProbe(Protocol):
+    """Structural interface for a current-observation-conditioned predictor."""
+
+    def predict_unconditional_future(
+        self,
+        observation: dict,
+        actions: Any,
+        *,
+        diagnostic_seed: int,
+        num_video_frames: int | None,
+        num_inference_steps: int,
+    ) -> FutureProbeOutput:
+        """Predict without feeding the protected action chunk into the video branch."""
+
+
+__all__ = [
+    "FutureProbeOutput",
+    "SupportsFutureProbe",
+    "SupportsUnconditionalFutureProbe",
+]

@@ -1,4 +1,4 @@
-"""Independent shadow runner for action-conditioned future diagnostics.
+"""Independent shadow runner for future consistency diagnostics.
 
 The ordinary policy action is copied and hashed *before* the optional probe is
 called.  Only that protected copy is sent to the environment; probe outputs can
@@ -701,6 +701,19 @@ def _call_probe(
 ) -> FutureProbeOutput:
     context = RngIsolation(seed) if cfg.diagnostics.isolate_rng else nullcontext()
     with context:
+        if cfg.diagnostics.mode == "unconditional_future":
+            predictor = getattr(probe, "predict_unconditional_future", None)
+            if not callable(predictor):
+                raise RuntimeError(
+                    "unconditional_future requires predict_unconditional_future()"
+                )
+            return predictor(
+                observation,
+                actions,
+                diagnostic_seed=seed,
+                num_video_frames=cfg.diagnostics.num_video_frames,
+                num_inference_steps=cfg.diagnostics.num_inference_steps,
+            )
         return probe.predict_action_conditioned_future(
             observation,
             actions,
@@ -718,6 +731,15 @@ def validate_probe_capability(cfg: EvalConfig, probe: SupportsFutureProbe) -> bo
         validator()
         if cfg.benchmark.backend != "mock":
             verification = getattr(probe, "checkpoint_verification", None)
+            if cfg.diagnostics.mode == "unconditional_future":
+                if not isinstance(verification, Mapping) or (
+                    verification.get("unconditional_video_architecture_verified") is not True
+                ):
+                    raise RuntimeError(
+                        "A real unconditional future probe must verify that the video expert "
+                        "explicitly has action_conditioned=false"
+                    )
+                return False
             if not isinstance(verification, Mapping) or not (
                 verification.get("action_conditioning_parameters_loaded_verified") is True
                 and verification.get("action_conditioned_training_provenance_verified") is True
@@ -726,7 +748,7 @@ def validate_probe_capability(cfg: EvalConfig, probe: SupportsFutureProbe) -> bo
                     "A real future probe must prove both checkpoint parameter loading and "
                     "matched action-conditioned training provenance"
                 )
-        return True
+        return cfg.diagnostics.mode == "action_conditioned_future"
     if cfg.benchmark.backend != "mock":
         raise RuntimeError("A real future probe must provide validate_capability()")
     return False
@@ -768,7 +790,10 @@ def _probe_payload(
     approximate = bool(
         not alignment_dict.get("exact_step_mapping", False)
         or alignment_dict.get("timestamp_status") != "exact"
-        or not alignment_dict.get("action_conditioning_coverage_complete", False)
+        or (
+            cfg.diagnostics.mode == "action_conditioned_future"
+            and not alignment_dict.get("action_conditioning_coverage_complete", False)
+        )
     )
     probe_id = diagnostic_id(
         f"{job.job_id}:{replan_index}:{seed}",
@@ -824,6 +849,7 @@ def _probe_payload(
         "metric_metadata": dict(metric_metadata),
         "static_future_flag": metrics.get("static_future_flag", metrics.get("predicted_static")),
         "predicted_video_path": artifacts.get("predicted_video_path"),
+        "current_frame_path": artifacts.get("current_frame_path"),
         "actual_video_path": artifacts.get("actual_video_path"),
         "side_by_side_video_path": artifacts.get("side_by_side_video_path"),
         "latent_path": artifacts.get("latent_path"),
@@ -960,15 +986,25 @@ def run_diagnostic_episode(
             ratio, ratio_error = _action_video_frequency_ratio(cfg, probe, probe_output)
             if selected and ratio_error is not None:
                 probe_error = probe_error or ratio_error
-            (
-                group_size,
-                decoded_frames_per_group,
-                video_attention_mask_mode,
-                action_horizon,
-                geometry_error,
-            ) = (
-                _action_conditioning_geometry(cfg, probe, probe_output, ratio=ratio)
-            )
+            if cfg.diagnostics.mode == "action_conditioned_future":
+                (
+                    group_size,
+                    decoded_frames_per_group,
+                    video_attention_mask_mode,
+                    action_horizon,
+                    geometry_error,
+                ) = _action_conditioning_geometry(
+                    cfg,
+                    probe,
+                    probe_output,
+                    ratio=ratio,
+                )
+            else:
+                group_size = None
+                decoded_frames_per_group = None
+                video_attention_mask_mode = None
+                action_horizon = None
+                geometry_error = None
             if selected and geometry_error is not None:
                 probe_error = probe_error or geometry_error
 
@@ -1021,12 +1057,18 @@ def run_diagnostic_episode(
                 peak_memory_mb = (
                     float(probe_output.gpu_peak_memory_mb) if probe_output is not None else None
                 )
+                conditional_geometry_available = (
+                    group_size is not None
+                    and decoded_frames_per_group is not None
+                    and video_attention_mask_mode is not None
+                )
                 if (
                     predicted_frames
                     and ratio is not None
-                    and group_size is not None
-                    and decoded_frames_per_group is not None
-                    and video_attention_mask_mode is not None
+                    and (
+                        cfg.diagnostics.mode == "unconditional_future"
+                        or conditional_geometry_available
+                    )
                 ):
                     base_alignment = build_temporal_alignment(
                         origin_env_step=origin_env_step,
@@ -1036,14 +1078,47 @@ def run_diagnostic_episode(
                         control_frequency_hz=control_frequency_hz,
                         control_frequency_verified=control_frequency_verified,
                     )
-                    alignment, covered_indices = _annotate_action_coverage(
-                        base_alignment,
-                        executed_action_count=len(executed_actions),
-                        group_size=group_size,
-                        decoded_frames_per_group=decoded_frames_per_group,
-                        video_attention_mask_mode=video_attention_mask_mode,
-                        action_horizon=action_horizon,
-                    )
+                    if cfg.diagnostics.mode == "action_conditioned_future":
+                        assert group_size is not None
+                        assert decoded_frames_per_group is not None
+                        assert video_attention_mask_mode is not None
+                        alignment, covered_indices = _annotate_action_coverage(
+                            base_alignment,
+                            executed_action_count=len(executed_actions),
+                            group_size=group_size,
+                            decoded_frames_per_group=decoded_frames_per_group,
+                            video_attention_mask_mode=video_attention_mask_mode,
+                            action_horizon=action_horizon,
+                        )
+                    else:
+                        alignment = base_alignment.to_dict()
+                        covered_indices = {
+                            int(frame["predicted_frame_index"])
+                            for frame in alignment["frames"]
+                        }
+                        for frame in alignment["frames"]:
+                            frame.update(
+                                {
+                                    "action_conditioning_group": None,
+                                    "action_conditioning_action_start": None,
+                                    "action_conditioning_action_end_exclusive": None,
+                                    "direct_action_conditioning_action_start": None,
+                                    "direct_action_conditioning_action_end_exclusive": None,
+                                    "action_dependency_start": None,
+                                    "action_dependency_end_exclusive": None,
+                                    "action_conditioning_fully_executed": None,
+                                }
+                            )
+                        alignment.update(
+                            {
+                                "future_conditioning": (
+                                    "current_observation_language_proprio_without_policy_action"
+                                ),
+                                "action_conditioning_coverage_complete": None,
+                                "action_dependency_scope": "not_applicable_unconditional",
+                                "metric_aligned_frame_count": len(covered_indices),
+                            }
+                        )
                     aligned_predicted: list[Any] = []
                     aligned_actual: list[Any] = []
                     metric_frame_indices: list[int] = []
@@ -1073,7 +1148,11 @@ def run_diagnostic_episode(
                         "has_aligned_future": False,
                         "exact_step_mapping": False,
                         "timestamp_status": "unavailable",
-                        "action_conditioning_coverage_complete": False,
+                        "action_conditioning_coverage_complete": (
+                            False
+                            if cfg.diagnostics.mode == "action_conditioned_future"
+                            else None
+                        ),
                         "action_conditioning_group_size": group_size,
                         "decoded_frames_per_action_conditioning_group": decoded_frames_per_group,
                         "video_attention_mask_mode": video_attention_mask_mode,
@@ -1125,6 +1204,7 @@ def run_diagnostic_episode(
                     artifacts = writer.write_probe_artifacts(
                         job_id=job.job_id,
                         replan_index=replan_index,
+                        current_frame=actual_by_offset.get(0),
                         predicted_frames=predicted_frames,
                         actual_frames=aligned_actual,
                         side_by_side_predicted_frames=aligned_predicted,
@@ -1141,6 +1221,7 @@ def run_diagnostic_episode(
                         f"artifact_error: {type(exc).__name__}: {exc}\n{traceback.format_exc(limit=12)}"
                     )
                     artifacts = {
+                        "current_frame_path": None,
                         "predicted_video_path": None,
                         "actual_video_path": None,
                         "side_by_side_video_path": None,

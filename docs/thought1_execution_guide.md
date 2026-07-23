@@ -31,6 +31,9 @@
 3. 每次 `plan` 后先审核 job 数、runnable/skipped 数和抽样记录，再决定是否运行。
 4. 不因追求“至少 20 次”而执行 `10,030 × 20`。这既是巨额重复计算，也不符合本项目采用的 upstream task-instance 协议。
 5. 不使用 `--overwrite`，除非已经明确决定重跑已有结果。
+6. `FORMAL` run 要求项目、Fast-WAM、LIBERO 和 LIBERO-Plus 均为 clean
+   tree；manifest 中的 `git_dirty` 与三个上游 `*_dirty` 必须全为
+   `false`。含未提交代码的运行最多标为 PILOT。
 
 ## 1. 激活环境并做只读预检
 

@@ -4,12 +4,12 @@
 
 ## 1. 当前事实快照
 
-截至 2026-07-22：
+截至 2026-07-23：
 
 | 项目 | 状态 | 可用证据 |
 | --- | --- | --- |
 | 配置、planner、adapter、分片、resume、聚合 | 已实现 | `src/`、`configs/`、`tests/` |
-| 自动化测试 | 已通过 | `pytest -q`：43 passed；包含 PyTorch 2.6+ 安全边界、LIBERO-Plus init-state 路由与 10,030 个官方变体全量路径审计 |
+| 自动化测试 | 已通过 | `pytest -q`：142 passed；覆盖阶段一评测、PyTorch 2.6+ 安全边界、LIBERO-Plus 10,030 行路径审计和阶段二诊断门禁 |
 | Conda 环境与激活入口 | 已配置 | `scripts/create_env.sh`、`scripts/activate_env.sh` |
 | checkpoint/stats | 已下载并人工校验 | checkpoint SHA-256 `1000437c...a49579`；stats SHA-256 `30f81ad7...68638` |
 | FastWAM 公共运行时模型 | 已下载并逐文件校验 | `scripts/download_fastwam_runtime_models.sh`；T5、VAE、tokenizer 共约 11.9 GiB |
@@ -19,6 +19,8 @@
 | 三卡真实 pilot | 已通过 | 2026-07-22：9 planned、8 completed、1 expected skipped、0 exception；三个 rank 均有真实结果 |
 | 正式 manifests | 已重建并审计 | 800 Clean；6,839 OOD planned=6,771 runnable+68 skipped；无正式 worker result |
 | full OOD 结果和鲁棒性结论 | 未执行 | 不得把 pilot 的 2/8 写成正式成功率或性能下降 |
+| 阶段二 2A unconditional future | 链路已通过 | 2026-07-23：同一官方 checkpoint 完成 1 episode/1 probe 真实 GPU smoke；动作哈希前后不变，预测/实际未来工件可解码 |
+| 阶段二 2B action-conditioned future | 严格阻塞 | release 配置为 `action_conditioned=false`，且不存在通过 provenance 门禁的匹配 checkpoint |
 
 ## 2. 可以对外说明的工程亮点
 
@@ -30,10 +32,12 @@
 | episode-level 多 GPU | 每 GPU 一个独立 evaluator，按 job hash 稳定分片；避免把独立 rollout 错做模型 DDP | `distributed_launcher.py`、`shard_jobs()` | 三卡真实 pilot 已验证 3/4/2 分片，无重复遗漏 |
 | 可恢复执行 | worker 逐 episode 追加并 `fsync` JSONL；默认跳过完成 job，支持 failed/all 重跑策略 | `evaluation/resume.py`、`schemas/episode_result.py` | 已单测；Clean smoke 用 `--rerun failed` 从两条真实 exception 恢复成功 |
 | 科学比较门禁 | Clean/OOD 共用 seed 公式和 checkpoint；聚合时同一策略 checkpoint hash 不一致则拒绝比较 | `reproducibility.py`、`analysis/aggregate.py` | 已单测；Clean/OOD smoke 的 checkpoint SHA-256 已实测一致 |
-| 上游协议显式化 | 区分 Clean 多 seed 与 Plus 每官方变体 1 次；`all_once` 强制 `episodes_per_task=1`，防止 10,030×20 的重复计算 | `config.py`、`jobs.py`、`eval_ood_full.yaml` | 已单测，正式 manifest 需重建 |
+| 上游协议显式化 | 区分 Clean 多 seed 与 Plus 每官方变体 1 次；`all_once` 强制 `episodes_per_task=1`，防止 10,030×20 的重复计算 | `config.py`、`jobs.py`、`eval_ood_full.yaml` | 已单测；正式 manifest 已重建并审计 |
 | 可审计 OOD 元数据 | 记录官方 category、difficulty、classification ID、variant name、candidate/selection 信息和上游 commit | `jobs.py`、`episode_result.py` | 真实 Plus result 已验证，运行时底层数值参数采集仍有限 |
 | 研究结论防越界 | 明确 release Fast-WAM、Joint WAM、IDM 是不同架构/权重；训练配方不匹配时禁止把比较写成未来想象的因果增益 | `config.py`、`thought1_generalization.md` | 配置门禁已单测，匹配权重缺失 |
 | 失败分析闭环 | 记录 action/robot state trace、异常、失败视频和聚合统计，提供静态 failure review 页面 | `recording/`、`analysis/review.py` | Clean/OOD smoke 已产出真实 trace/video；失败分类样本仍待积累 |
+| 阶段二只读 shadow probe | 先冻结并哈希基线动作，再从同一 checkpoint 单独生成 future；current/predicted/actual/side-by-side 工件写入独立目录 | `policy/fastwam_future_probe.py`、`diagnostics/` | 2A 真实 GPU smoke 已验证；不会改写阶段一 source manifest/result |
+| 诊断语义双门禁 | 将 release 可支持的 unconditional consistency（2A）与需要匹配 action-conditioned checkpoint 的动力学一致性（2B）分开，禁止静默降级 | `config.py`、`fastwam_future_probe.py`、`thought2_upstream_audit.md` | 2A 实测通过；2B 对 release 预期拒绝 |
 
 ## 3. 难点、阻碍、方案与剩余风险
 
@@ -106,11 +110,12 @@
 - 后续：增加双相机 contact sheet/短视频及小尺寸 observation diagnostic，避免保存全量原始 observation 造成 I/O 爆炸。
 - 状态：已识别，未解决。
 
-### 3.11 Future imagination 的因果问题缺少匹配 checkpoint
+### 3.11 Future imagination 必须拆成一致性问题与因果问题
 
-- 问题：Fast-WAM release 的 uncond 动作路径不读取预测未来；Joint WAM/IDM 是不同模型和训练权重。不同来源 checkpoint 的胜负不能归因于“测试时开关未来想象”。
-- 方案：配置显式区分模型 variant，检查 checkpoint 命名，并要求相同非空 `training_recipe_id` 才允许因果表述。
-- 状态：评测框架已准备；官方匹配的 Joint/IDM checkpoint 不存在，本阶段保持阻塞而不伪造结论。
+- 问题：Fast-WAM release 的动作路径不读取预测未来，且 `video_expert.action_conditioned=false`。因此它可以离线产生 unconditional future，却不能证明动作依赖该未来，也不能回答“给定这组动作后的未来是否正确”。
+- 方案：阶段二拆成两个不混用的 protocol：2A `unconditional_future` 只测同一 checkpoint 的表征/方向一致性；2B `action_conditioned_future` 要求可信的 action-conditioned 参数、完整动作依赖覆盖和训练 provenance。
+- 因果边界：Joint WAM/IDM 是不同架构或权重；不同来源 checkpoint 的胜负不能归因于“测试时开关未来想象”。阶段三使用 frozen backbone、null-adapter control 和 K=0/1/2/4 配对训练，才是测试轻量未来输入因果作用的主路径。
+- 状态：2A 已完成真实 GPU smoke；2B 因 release 能力和匹配 checkpoint 缺失而严格阻塞，不能把 2A 改名为 2B。
 
 ### 3.12 LIBERO-Plus 许可证边界不清晰
 
@@ -136,6 +141,14 @@
 - 验证：10 个规则/优先级单测，加上对官方 `task_classification.json` 全部 10,030 行的路径存在性审计；真实 reset probe 覆盖两条 camera、两条 light 变体；修复后 failed-only rerun 完成 4/4、0 exception。
 - 运行证据：四条 action trace 均为 finite 且非全零，末端执行器首末位移约 0.36–0.39 m；四个 MP4 均可解码，camera/light 首帧可见不同构图或明暗；Clean/OOD checkpoint SHA-256 均为 `1000437c...a49579`。
 - 证据：`src/fastwam_ood_eval/envs/libero_plus_adapter.py`、`tests/test_libero_plus_adapter.py`、`outputs/ood_smoke/summary/metrics.json`、`outputs/ood_smoke/summary/report.md`。
+
+### 3.15 阶段二 probe 必须在构造环境前固定同名 LIBERO backend
+
+- 现象：阶段二首次真实运行在加载 checkpoint 后才发现 policy 的官方 evaluator 会先 import `libero`；原 adapter 只在环境构造时选择 Clean/Plus backend，诊断路径因此可能过早导入错误 checkout。
+- 难点：工作区可经 `/home/...` 和 `/data/...` 两条等价路径访问，而且顶层 `libero` 是 namespace package，`__file__` 可能为 `None`。仅比较字符串路径或 `module.__file__` 会误判同一 checkout。
+- 方案：增加可在 simulator 构造前调用的 backend 配置入口；对路径先 `resolve()`，同时检查 namespace package 的 `__path__`，并拒绝真正混用的 source root。
+- 验证：新增 symlink/namespace 回归测试；修复后同一官方 checkpoint 的 2A smoke 完成 1 episode/1 probe，生成 current、predicted、actual 和 side-by-side 工件，动作哈希前后相同。
+- 范围：这证明诊断链路和“只读 shadow”约束成立；单样本指标及 `max_steps=10` 的 smoke 终止都不是性能结论。
 
 ## 4. 简历表达素材
 

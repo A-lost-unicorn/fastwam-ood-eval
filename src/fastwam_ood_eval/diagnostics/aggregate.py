@@ -10,7 +10,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
-from fastwam_ood_eval.diagnostics.artifact_writer import _record_order
+from fastwam_ood_eval.diagnostics.artifact_writer import _atomic_json_write, _record_order
 
 
 KNOWN_METRICS = (
@@ -31,10 +31,12 @@ ALL_FIELDS = (
     "task_name", "episode_index", "episode_seed", "condition", "perturbation_category",
     "perturbation_level", "success", "termination_reason", "status", "num_video_frames",
     "num_inference_steps", "checkpoint", "checkpoint_hash", "fastwam_commit",
-    "action_conditioned_verified", "action_hash", "action_unchanged", "executed_action_count",
+    "mode", "action_conditioned_verified", "action_hash", "action_unchanged",
+    "executed_action_count",
     "alignment", "approximate_alignment",
     "aligned_future_frame_count", "static_future_flag", *KNOWN_METRICS,
-    "predicted_video_path", "actual_video_path", "side_by_side_video_path", "latent_path",
+    "current_frame_path", "predicted_video_path", "actual_video_path",
+    "side_by_side_video_path", "latent_path",
     "error", "protocol_fingerprint",
 )
 
@@ -533,6 +535,18 @@ def aggregate_diagnostics(
         json.dumps(metrics, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+    manifest_path = experiment_dir / "diagnostic_manifest.json"
+    if manifest_path.is_file():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if isinstance(manifest, dict):
+            manifest["status"] = "aggregated"
+            manifest["aggregation"] = {
+                "episodes": len(episodes),
+                "clips": len(rows),
+                "error_clips": status_counts["error"],
+                "summary_dir": str(summary_dir),
+            }
+            _atomic_json_write(manifest_path, manifest)
     return metrics
 
 

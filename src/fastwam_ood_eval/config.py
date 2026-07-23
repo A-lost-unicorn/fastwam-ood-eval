@@ -26,7 +26,10 @@ ALLOWED_CATEGORIES = {
 }
 ALLOWED_POLICY_VARIANTS = {"fastwam", "joint_wam", "idm", "mock"}
 ALLOWED_VARIANT_SELECTIONS = {"sample", "all_once"}
-ALLOWED_DIAGNOSTIC_MODES = {"action_conditioned_future"}
+ALLOWED_DIAGNOSTIC_MODES = {
+    "unconditional_future",
+    "action_conditioned_future",
+}
 ALLOWED_PROBE_STRATEGIES = {"first", "evenly_spaced", "explicit_replan_indices"}
 
 

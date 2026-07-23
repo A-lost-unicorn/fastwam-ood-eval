@@ -91,6 +91,26 @@ class Probe:
         )
 
 
+class UnconditionalProbe(Probe):
+    def predict_unconditional_future(
+        self, observation, actions, *, diagnostic_seed, num_video_frames, num_inference_steps
+    ):
+        output = super().predict_action_conditioned_future(
+            observation,
+            actions,
+            diagnostic_seed=diagnostic_seed,
+            num_video_frames=num_video_frames,
+            num_inference_steps=num_inference_steps,
+        )
+        output.metadata = {
+            "future_kind": "unconditional",
+            "action_conditioned": False,
+            "action_video_freq_ratio": 1,
+            "num_video_frames": 5,
+        }
+        return output
+
+
 def _cfg(tmp_path):
     return load_config(
         write_config(tmp_path, episodes=1),
@@ -270,6 +290,32 @@ def test_incomplete_action_conditioning_group_is_excluded(tmp_path):
     ]
     assert future_frames
     assert all(frame["action_conditioning_fully_executed"] is False for frame in future_frames)
+
+
+def test_unconditional_future_uses_temporal_alignment_without_action_coverage_gate(tmp_path):
+    cfg = _cfg(tmp_path)
+    cfg = replace(
+        cfg,
+        diagnostics=replace(cfg.diagnostics, mode="unconditional_future"),
+    )
+    job = plan_jobs(cfg)[0]
+    run_diagnostic_worker(
+        cfg,
+        policy=MockPolicy(2),
+        environment=RecordingEnv(),
+        probe=UnconditionalProbe(),
+        jobs=[job],
+        close_resources=False,
+    )
+    row = json.loads(
+        (cfg.experiment.output_dir / "workers/rank_0/diagnostics.jsonl").read_text()
+    )
+    assert row["status"] == "completed"
+    assert row["mode"] == "unconditional_future"
+    assert row["action_conditioned_verified"] is False
+    assert row["alignment"]["action_conditioning_coverage_complete"] is None
+    assert row["alignment"]["action_dependency_scope"] == "not_applicable_unconditional"
+    assert row["extra"]["aligned_future_frame_count"] == 2
 
 
 def test_first_frame_causal_uses_full_transitive_action_dependency(tmp_path):

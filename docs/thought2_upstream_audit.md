@@ -1,9 +1,12 @@
 # 思考点二上游审计：Fast-WAM 未来预测—动作—真实环境变化一致性
 
-审计日期：2026-07-22  
-思考点一基线 commit：`0df5fe224e5c5dd767ed105802821b69c141e041`  
-保护 tag：`thought1-baseline-v1`  
-实现分支：`feature/thought2-shadow-diagnostics`  
+审计日期：2026-07-23
+思考点一基线 commit：`0df5fe224e5c5dd767ed105802821b69c141e041`
+
+保护 tag：`thought1-baseline-v1`
+
+实现分支：`feature/thought2-shadow-diagnostics`
+
 Fast-WAM commit：`45d8e1458921d83f8ad6cf9ce993d371208dabd0`
 
 ## 1. 审计结论（实现门禁）
@@ -13,7 +16,7 @@ Fast-WAM commit：`45d8e1458921d83f8ad6cf9ce993d371208dabd0`
 3. 所以本仓库不能把当前 release 的视频称为“给定已执行动作的未来预测”，也不能用它运行正式的 `mode=action_conditioned_future`。真实 probe 必须检查 `model.video_expert.action_conditioned is True`；不满足时明确失败。不能通过把配置强改为 `true` 绕过，因为 release checkpoint 没有匹配训练过的 action-embedding 参数。
 4. 32 个 action 的直接 cross-attention 条件确实分为两个 16-action group，但 pinned `video_attention_mask_mode=first_frame_causal` 允许所有 future latent 彼此注意。后组读取的 action 16--31 可经后续层或 denoising step 间接影响前组；所以任意 future frame 的安全依赖闭包是完整 action 0--31，而不是只需首组 0--15。当前 `control_horizon=10` 因此远小于所需的 32。
 5. 上游 `load_checkpoint()` 对 `mot` 使用 `strict=False`，所以单看运行时 `action_conditioned=true` 也不足以证明条件参数来自匹配训练。真实 probe 还必须校验 checkpoint 内 action-embedding key/shape/value，并要求 checkpoint hash、Fast-WAM commit 和训练 recipe 位于源码审阅的 matched-checkpoint allowlist；当前 allowlist 为空。
-6. 这些门禁不会阻止实现和 CPU mock 验证独立 Shadow Diagnostics 基础设施，但会阻止当前 release 越过单卡模型 smoke 的科研语义门禁。若仅研究 unconditional future，应另立研究模式、问题和报告口径，不能静默降级。
+6. 因此实现显式拆成两个模式：`unconditional_future`（2A）有独立问题、schema 和报告口径，允许 release；`action_conditioned_future`（2B）保留全部严格门禁。2A 不是 2B 的静默降级，二者 protocol fingerprint 和输出目录不同。
 
 ## 2. 已审计材料
 
@@ -205,9 +208,9 @@ sha256: 1000437cfcf55c000094f79a2600634c502bcb5b492476b94bf8509883a49579
 class: FastWAM
 ```
 
-已有思考点一真实记录证明该 checkpoint 能加载并生成 `[32,7]` action chunk；本轮审计没有自动运行 GPU future smoke。源码和官方 evaluator 的 `visualize_future_video` 路径证明该结构具备 video generation 调用链，但“本机实际生成并保存视频”仍属于阶段 C，不能在未运行前写成实验事实。
+已有思考点一真实记录证明该 checkpoint 能加载并生成 `[32,7]` action chunk。2026-07-23 又完成了 `P2A-CLEAN-SMOKE-v1`：真实 GPU 上用 2 个视频去噪步生成 9 帧 unconditional future，并保存当前帧、预测视频、offset 0/4/8 的实际帧和并排视频；1 job / 1 probe / 0 error。该运行只证明本机视频链路，不能估计正式 future quality。
 
-结论应严格表述为：**release 支持 unconditional future generation；不支持已执行动作条件下的 future generation。**
+结论应严格表述为：**release 已实测支持 unconditional future generation；不支持已执行动作条件下的 future generation。**
 
 此外，Pinned loader 的 `mot.load_state_dict(..., strict=False)` 不报告 missing keys。Shadow probe 因此不能接受“只把 Hydra flag 改成 true”的模型：它会通过 `torch.load(..., map_location="cpu", mmap=True, weights_only=True)` 只核对 checkpoint 中的 `mixtures.video.action_embedding.*` key、shape 和加载后的精确值，并同时要求项目源码 allowlist 中已有匹配的 checkpoint SHA-256、Fast-WAM commit、model config 与 training recipe。当前仓库没有这样的可信 checkpoint，allowlist 有意保持为空。
 
@@ -228,5 +231,5 @@ class: FastWAM
 4. probe 在真实调用前同时检查 class/API、action shape/dtype、`T % 4 == 1`、`action_video_freq_ratio`、camera concat、output range，以及最关键的 `video_expert.action_conditioned is True`。
 5. 对 action-conditioned 模型，还必须从实际 VAE temporal factor、DiT temporal patch、video length、attention mask 和 action horizon 推导传递依赖闭包。Pinned `first_frame_causal` 下所有 future frame 都要求完整 32-action horizon，而基线只执行 10；temporal patch 不等于 1 或未知 mask 也必须拒绝。
 6. `action_conditioned=true` 不是充分证据；必须同时通过源码 allowlist 的训练 provenance 与 checkpoint action-embedding 实值加载验证。当前 allowlist 为空。
-7. 当前 release 触发 action-conditioning 能力门禁是预期结果，不得自动降级为 unconditional future；也不得通过修改思考点一执行 horizon 绕过条件覆盖门禁。
-8. `static_motion_threshold=1.0` 是首版写入 manifest 的初始 representation-space 阈值，尚未经过 no-op/静止轨迹校准；阶段 C/D 未通过前不能把 static flag 当作物理静止结论，latent direction 也不是光流方向。
+7. 当前 release 在 `action_conditioned_future` 触发能力门禁是预期结果；`unconditional_future` 必须由独立配置显式选择。不得通过修改思考点一执行 horizon 绕过 2B 条件覆盖门禁。
+8. `static_motion_threshold=1.0` 是首版 schema 初值，尚未经过 no-op/静止轨迹校准。真实 smoke 中 predicted/actual motion energy 约为 0.23/0.22，却都被标为 static，进一步证明该 flag 当前不可解释；latent direction 也不是光流方向。

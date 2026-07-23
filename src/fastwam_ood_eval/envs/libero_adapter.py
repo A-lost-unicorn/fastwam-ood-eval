@@ -13,6 +13,65 @@ from fastwam_ood_eval.envs.base import BaseBenchmarkEnv, StepResult
 from fastwam_ood_eval.evaluation.jobs import EvaluationJob
 
 
+def configure_libero_package(root: Path, config_dir: Path) -> dict[str, Path]:
+    """Select one LIBERO checkout without constructing a simulator.
+
+    Fast-WAM's official evaluator imports ``libero`` while the policy is being
+    created. Shadow diagnostics intentionally validate the video capability
+    before constructing an environment, so package selection must be a smaller
+    operation than ``LiberoAdapter.__init__``. Calling this function repeatedly
+    for the same checkout is safe; switching checkouts in one process is not.
+    """
+
+    package_root = Path(root).resolve()
+    resolved_config_dir = Path(config_dir).resolve()
+    benchmark_root = package_root / "libero" / "libero"
+    bddl_root = (benchmark_root / "bddl_files").resolve()
+    init_states_root = (benchmark_root / "init_files").resolve()
+    resolved_config_dir.mkdir(parents=True, exist_ok=True)
+    config_file = resolved_config_dir / "config.yaml"
+    path_config = {
+        "benchmark_root": str(benchmark_root),
+        "bddl_files": str(bddl_root),
+        "init_states": str(init_states_root),
+        "datasets": str(package_root / "libero" / "datasets"),
+        "assets": str(benchmark_root / "assets"),
+    }
+    temporary = config_file.with_name(f"{config_file.name}.{os.getpid()}.tmp")
+    temporary.write_text(yaml.safe_dump(path_config, sort_keys=True), encoding="utf-8")
+    temporary.replace(config_file)
+    os.environ["LIBERO_CONFIG_PATH"] = str(resolved_config_dir)
+    loaded = sys.modules.get("libero")
+    if loaded is not None:
+        locations: list[Path] = []
+        loaded_file = getattr(loaded, "__file__", None)
+        raw_locations = [loaded_file] if loaded_file not in (None, "") else []
+        raw_locations.extend(list(getattr(loaded, "__path__", ()) or ()))
+        for raw_location in raw_locations:
+            try:
+                locations.append(Path(str(raw_location)).resolve(strict=False))
+            except (OSError, RuntimeError):
+                continue
+        if not locations or any(
+            location != package_root and package_root not in location.parents
+            for location in locations
+        ):
+            raise RuntimeError(
+                "A different libero package is already loaded; run each backend in a fresh "
+                f"process (expected_root={package_root}, loaded_locations={locations})"
+            )
+    if str(package_root) not in sys.path:
+        sys.path.insert(0, str(package_root))
+    return {
+        "package_root": package_root,
+        "benchmark_root": benchmark_root,
+        "bddl_root": bddl_root,
+        "init_states_root": init_states_root,
+        "config_dir": resolved_config_dir,
+        "config_file": config_file,
+    }
+
+
 def _load_trusted_init_states(
     init_states_root: Path,
     problem_folder: str,
@@ -62,29 +121,11 @@ class LiberoAdapter(BaseBenchmarkEnv):
         self._load_package()
 
     def _load_package(self) -> None:
-        package_root = self.root
-        benchmark_root = package_root / "libero" / "libero"
-        self.bddl_root = (benchmark_root / "bddl_files").resolve()
-        self.init_states_root = (benchmark_root / "init_files").resolve()
-        self.config_dir.mkdir(parents=True, exist_ok=True)
-        self.config_file = self.config_dir / "config.yaml"
-        path_config = {
-            "benchmark_root": str(benchmark_root),
-            "bddl_files": str(self.bddl_root),
-            "init_states": str(self.init_states_root),
-            "datasets": str(package_root / "libero" / "datasets"),
-            "assets": str(benchmark_root / "assets"),
-        }
-        temporary = self.config_file.with_name(f"{self.config_file.name}.{os.getpid()}.tmp")
-        temporary.write_text(yaml.safe_dump(path_config, sort_keys=True), encoding="utf-8")
-        temporary.replace(self.config_file)
-        # This is the upstream-supported switch and prevents an interactive ~/.libero prompt.
-        os.environ["LIBERO_CONFIG_PATH"] = str(self.config_dir)
-        loaded = sys.modules.get("libero")
-        if loaded is not None and str(package_root) not in str(getattr(loaded, "__file__", "")):
-            raise RuntimeError("A different libero package is already loaded; run each backend in a fresh process")
-        if str(package_root) not in sys.path:
-            sys.path.insert(0, str(package_root))
+        configured = configure_libero_package(self.root, self.config_dir)
+        self.bddl_root = configured["bddl_root"]
+        self.init_states_root = configured["init_states_root"]
+        self.config_dir = configured["config_dir"]
+        self.config_file = configured["config_file"]
         try:
             from libero.libero import benchmark, get_libero_path
             from libero.libero.envs import OffScreenRenderEnv

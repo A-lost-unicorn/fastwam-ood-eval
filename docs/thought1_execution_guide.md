@@ -434,6 +434,53 @@ ps -fp "$(cat outputs/logs/thought1_single_gpu.pid)"
 
 SSH 中断后 nohup 进程会继续。若任务自身失败或机器重启，重新运行相同命令即可；脚本会读取所有现存 `rank_*` 结果并只补 incomplete job。不要使用 `--overwrite`，也不要常规重跑合法的 `max_steps` 失败。
 
+### 8.2 三卡 RTX 4090 全量脚本
+
+三卡一键入口为 `scripts/run_thought1_3gpu_full.sh`：
+
+```bash
+CONFIRM_FULL_EVAL=YES GPU_IDS=0,1,2 \
+  bash scripts/run_thought1_3gpu_full.sh all
+```
+
+它与单卡脚本使用相同的 `all/clean/ood` 阶段和正式输出目录，但每个实验通过 `torchrun --nproc_per_node=3` 按 job hash 分片。脚本要求当前位于干净的 `main`，检查三张物理 GPU 各自至少有 24,000 MiB 空闲显存，确保单卡/三卡 full 不能同时写同一目录，并在启动 worker 前移除全局 `MUJOCO_EGL_DEVICE_ID`，由每个 `LOCAL_RANK` 绑定各自的逻辑 EGL 设备。
+
+推荐使用 tmux 后台运行：
+
+```bash
+tmux new -s thought1-3gpu
+
+CONFIRM_FULL_EVAL=YES GPU_IDS=0,1,2 \
+  bash scripts/run_thought1_3gpu_full.sh all
+```
+
+按 `Ctrl+B`、再按 `D` 脱离；使用 `tmux attach -t thought1-3gpu` 返回。
+
+nohup 方式：
+
+```bash
+mkdir -p outputs/logs
+run_log="outputs/logs/thought1_3gpu_$(date +%Y%m%d_%H%M%S).log"
+
+nohup env CONFIRM_FULL_EVAL=YES GPU_IDS=0,1,2 \
+  bash scripts/run_thought1_3gpu_full.sh all \
+  >"${run_log}" 2>&1 &
+
+run_pid=$!
+printf '%s\n' "${run_pid}" > outputs/logs/thought1_3gpu.pid
+echo "PID=${run_pid} LOG=${run_log}"
+```
+
+监控：
+
+```bash
+tail -f "${run_log}"
+watch -n 2 nvidia-smi
+ps -fp "$(cat outputs/logs/thought1_3gpu.pid)"
+```
+
+按 pilot 估算应预留约 60–72 小时。若中断，保持同一 Git commit，重新运行相同命令；incomplete-only resume 会读取全部 `rank_*` 文件，只补未完成 job。
+
 ## 9. 立即停止条件
 
 出现下列任一情况时停止扩大规模并保留现场：

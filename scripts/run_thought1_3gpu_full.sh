@@ -4,8 +4,8 @@ set -Eeuo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  CONFIRM_FULL_EVAL=YES GPU_ID=0 \
-    bash scripts/run_thought1_single_gpu_full.sh [all|clean|ood]
+  CONFIRM_FULL_EVAL=YES GPU_IDS=0,1,2 \
+    bash scripts/run_thought1_3gpu_full.sh [all|clean|ood]
 
 Phases:
   all    Run 800 Clean and 6,771 OOD rollouts, then build a combined report.
@@ -14,13 +14,13 @@ Phases:
 
 Environment:
   CONFIRM_FULL_EVAL          Must be YES. Prevents accidental full evaluation.
-  GPU_ID                     Physical GPU index exposed to the process (default: 0).
-  EGL_DEVICE_ID              EGL device index (default: GPU_ID).
-  MIN_FREE_GPU_MEMORY_MB     Required free memory at startup (default: 24000).
+  GPU_IDS                    Three unique physical GPU indices (default: 0,1,2).
+  MIN_FREE_GPU_MEMORY_MB     Required free memory on every GPU (default: 24000).
+  REQUIRED_GIT_BRANCH        Required branch for provenance (default: main).
 
-The script activates the project-local environment itself. Evaluation uses the
-default incomplete-only resume mode: existing completed/max_steps/skipped jobs
-are not repeated, including records written previously by other ranks.
+The script activates the project-local environment itself. Evaluation uses
+three torchrun workers and incomplete-only resume. Existing completed,
+max_steps and skipped records in any rank directory are not repeated.
 EOF
 }
 
@@ -45,16 +45,12 @@ if [[ "${CONFIRM_FULL_EVAL:-}" != "YES" ]]; then
   exit 2
 fi
 
-gpu_id="${GPU_ID:-0}"
-egl_device_id="${EGL_DEVICE_ID:-${gpu_id}}"
+gpu_ids_csv="${GPU_IDS:-0,1,2}"
 min_free_gpu_memory_mb="${MIN_FREE_GPU_MEMORY_MB:-24000}"
+required_git_branch="${REQUIRED_GIT_BRANCH:-main}"
 
-if [[ ! "${gpu_id}" =~ ^[0-9]+$ ]]; then
-  echo "GPU_ID must be one non-negative physical GPU index, got: ${gpu_id}" >&2
-  exit 2
-fi
-if [[ ! "${egl_device_id}" =~ ^[0-9]+$ ]]; then
-  echo "EGL_DEVICE_ID must be a non-negative integer, got: ${egl_device_id}" >&2
+if [[ ! "${gpu_ids_csv}" =~ ^[0-9]+,[0-9]+,[0-9]+$ ]]; then
+  echo "GPU_IDS must contain exactly three physical indices, for example 0,1,2." >&2
   exit 2
 fi
 if [[ ! "${min_free_gpu_memory_mb}" =~ ^[0-9]+$ ]]; then
@@ -62,17 +58,40 @@ if [[ ! "${min_free_gpu_memory_mb}" =~ ^[0-9]+$ ]]; then
   exit 2
 fi
 
+IFS=',' read -r -a physical_gpu_ids <<<"${gpu_ids_csv}"
+declare -A seen_gpu_ids=()
+for gpu_id in "${physical_gpu_ids[@]}"; do
+  if [[ -n "${seen_gpu_ids[${gpu_id}]:-}" ]]; then
+    echo "GPU_IDS contains a duplicate physical index: ${gpu_id}" >&2
+    exit 2
+  fi
+  seen_gpu_ids["${gpu_id}"]=1
+done
+
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 project_root="$(cd -- "${script_dir}/.." && pwd)"
 cd "${project_root}"
+
+current_git_branch="$(git branch --show-current)"
+if [[ "${current_git_branch}" != "${required_git_branch}" ]]; then
+  echo "Formal evaluation requires branch ${required_git_branch}; current branch is ${current_git_branch}." >&2
+  exit 1
+fi
+if [[ -n "$(git status --porcelain)" ]]; then
+  echo "Formal evaluation requires a clean Git worktree:" >&2
+  git status --short >&2
+  exit 1
+fi
 
 # Make background logs visible immediately and keep all model downloads offline.
 export PYTHONUNBUFFERED=1
 export DIFFSYNTH_MODEL_BASE_PATH="${project_root}/checkpoints"
 export DIFFSYNTH_SKIP_DOWNLOAD=true
-export CUDA_VISIBLE_DEVICES="${gpu_id}"
+export CUDA_VISIBLE_DEVICES="${gpu_ids_csv}"
 export MUJOCO_GL="${MUJOCO_GL:-egl}"
-export MUJOCO_EGL_DEVICE_ID="${egl_device_id}"
+# distributed_evaluate sets one logical EGL device per LOCAL_RANK. A global
+# value would force all workers onto the same renderer.
+unset MUJOCO_EGL_DEVICE_ID
 
 # shellcheck source=scripts/activate_env.sh
 source "${project_root}/scripts/activate_env.sh"
@@ -81,7 +100,12 @@ log() {
   printf '%s | %s\n' "$(date '+%F %T')" "$*"
 }
 
-if command -v nvidia-smi >/dev/null 2>&1; then
+if ! command -v nvidia-smi >/dev/null 2>&1; then
+  echo "nvidia-smi is unavailable; refusing an unattended full run." >&2
+  exit 1
+fi
+
+for gpu_id in "${physical_gpu_ids[@]}"; do
   gpu_name="$(
     nvidia-smi --id="${gpu_id}" --query-gpu=name --format=csv,noheader \
       | head -n 1 \
@@ -93,20 +117,17 @@ if command -v nvidia-smi >/dev/null 2>&1; then
       | tr -d '[:space:]'
   )"
   if [[ ! "${free_gpu_memory_mb}" =~ ^[0-9]+$ ]]; then
-    echo "Could not parse free GPU memory from nvidia-smi." >&2
+    echo "Could not parse free memory for physical GPU ${gpu_id}." >&2
     exit 1
   fi
   log "physical_gpu=${gpu_id} name=${gpu_name} free_memory_mb=${free_gpu_memory_mb}"
   if (( free_gpu_memory_mb < min_free_gpu_memory_mb )); then
     echo "GPU ${gpu_id} has only ${free_gpu_memory_mb} MiB free." >&2
-    echo "Fast-WAM pilot peaked near 23.8 GiB; require at least ${min_free_gpu_memory_mb} MiB." >&2
+    echo "Fast-WAM pilot peaked near 23.8 GiB per worker; require at least ${min_free_gpu_memory_mb} MiB." >&2
     echo "Stop other GPU processes before retrying." >&2
     exit 1
   fi
-else
-  echo "nvidia-smi is unavailable; refusing an unattended full run." >&2
-  exit 1
-fi
+done
 
 lock_dir="${project_root}/outputs/thought1/fastwam"
 mkdir -p "${lock_dir}"
@@ -144,7 +165,7 @@ run_experiment() {
   local overrides=(
     --set "experiment.name=${experiment_name}"
     --set "experiment.output_dir=${output_dir}"
-    --set "hardware.devices=[0]"
+    --set "hardware.devices=[0,1,2]"
     --set "hardware.workers_per_gpu=1"
     --set "benchmark.suite=${suite}"
     --set "benchmark.suite_config=configs/suites/${suite}.yaml"
@@ -159,7 +180,8 @@ run_experiment() {
     --config "${config}" \
     "${overrides[@]}"
 
-  # Avoid loading the 12 GB checkpoint/model when a resumed stage has no work.
+  # A world-size-one dry run sees the entire manifest and all rank result files.
+  # This avoids loading three copies of the model when a resumed stage is done.
   local preview_json
   local pending
   preview_json="$(
@@ -180,10 +202,12 @@ run_experiment() {
   if [[ "${pending}" == "0" ]]; then
     log "SKIP condition=${condition} suite=${suite}; no incomplete jobs"
   else
-    log "RUN condition=${condition} suite=${suite} pending=${pending}"
-    python -m fastwam_ood_eval.cli evaluate \
+    log "RUN condition=${condition} suite=${suite} pending=${pending} world_size=3"
+    torchrun \
+      --standalone \
+      --nproc_per_node=3 \
+      -m fastwam_ood_eval.cli distributed-evaluate \
       --config "${config}" \
-      --device cuda:0 \
       --rerun incomplete \
       "${overrides[@]}"
   fi
@@ -192,6 +216,9 @@ run_experiment() {
     --experiment-dir "${output_dir}"
   log "DONE condition=${condition} suite=${suite}"
 }
+
+log "git_branch=${current_git_branch} git_commit=$(git rev-parse HEAD)"
+log "phase=${phase} physical_gpu_ids=${gpu_ids_csv}"
 
 if [[ "${phase}" == "all" || "${phase}" == "clean" ]]; then
   for suite in "${suites[@]}"; do
@@ -219,4 +246,4 @@ if [[ "${phase}" == "all" ]]; then
   log "Combined report: outputs/thought1/fastwam/combined/summary/report.md"
 fi
 
-log "Thought 1 single-GPU phase '${phase}' finished successfully."
+log "Thought 1 three-GPU phase '${phase}' finished successfully."

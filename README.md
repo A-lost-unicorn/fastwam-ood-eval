@@ -188,7 +188,14 @@ LIBERO-Plus 的扰动来自其 BDDL、场景 XML、robot class、init state 和 
 
 ## 10. 3 GPU 正式评测
 
-先确认 checkpoint/stats hash、suite、task 子集、最大步数、五类扰动、三个等级和输出目录。Clean 可使用多个 seed；LIBERO-Plus 正式计划必须保持每个官方 task variant 1 次，不能把 Clean 的 20 次口径复制到 OOD。还必须重新生成并审核 manifest，避免复用旧的重复采样计划。脚本要求显式确认：
+先确认 checkpoint/stats hash、suite、task 子集、最大步数、五类扰动、三个等级和输出目录。Clean 可使用多个 seed；LIBERO-Plus 正式计划必须保持每个官方 task variant 1 次，不能把 Clean 的 20 次口径复制到 OOD。三卡一键入口会顺序运行四个 suite 的 800 Clean 和 6,771 OOD，支持跨 rank 断点续跑，并最终生成 combined report：
+
+```bash
+CONFIRM_FULL_EVAL=YES GPU_IDS=0,1,2 \
+  bash scripts/run_thought1_3gpu_full.sh all
+```
+
+单个配置/单个 suite 的底层入口仍为：
 
 ```bash
 CUDA_VISIBLE_DEVICES=0,1,2 CONFIRM_FULL_EVAL=YES \

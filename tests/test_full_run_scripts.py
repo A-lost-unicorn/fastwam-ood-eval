@@ -5,12 +5,13 @@ import subprocess
 from pathlib import Path
 
 
-SCRIPT = Path("scripts/run_thought1_single_gpu_full.sh")
+SINGLE_GPU_SCRIPT = Path("scripts/run_thought1_single_gpu_full.sh")
+THREE_GPU_SCRIPT = Path("scripts/run_thought1_3gpu_full.sh")
 
 
 def test_single_gpu_full_script_exposes_safe_usage():
     result = subprocess.run(
-        ["bash", str(SCRIPT), "--help"],
+        ["bash", str(SINGLE_GPU_SCRIPT), "--help"],
         check=False,
         capture_output=True,
         text=True,
@@ -27,7 +28,37 @@ def test_single_gpu_full_script_requires_explicit_confirmation():
     environment.pop("CONFIRM_FULL_EVAL", None)
 
     result = subprocess.run(
-        ["bash", str(SCRIPT), "all"],
+        ["bash", str(SINGLE_GPU_SCRIPT), "all"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+    assert result.returncode == 2
+    assert "Formal evaluation was not started" in result.stderr
+
+
+def test_three_gpu_full_script_exposes_safe_usage():
+    result = subprocess.run(
+        ["bash", str(THREE_GPU_SCRIPT), "--help"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    assert "GPU_IDS=0,1,2" in result.stdout
+    assert "[all|clean|ood]" in result.stdout
+    assert "6,771 OOD" in result.stdout
+
+
+def test_three_gpu_full_script_requires_explicit_confirmation():
+    environment = dict(os.environ)
+    environment.pop("CONFIRM_FULL_EVAL", None)
+
+    result = subprocess.run(
+        ["bash", str(THREE_GPU_SCRIPT), "all"],
         check=False,
         capture_output=True,
         text=True,

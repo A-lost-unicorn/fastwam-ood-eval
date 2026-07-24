@@ -1,0 +1,77 @@
+experiment:
+  name: thought2_static_calibration_ood
+  # PILOT-v1 at this path is complete. Current protocol changes require
+  # overriding both name/output_dir to a fresh v2 or FORMAL namespace.
+  output_dir: outputs/thought2_static_calibration_ood
+  # Deliberately distinct from the success/failure diagnostic pilot seed.
+  seed: 20260723
+  overwrite: false
+  resume: true
+  save_video: false
+  save_failure_video_only: true
+  log_level: INFO
+hardware:
+  devices: [0]
+  workers_per_gpu: 1
+  precision: bf16
+  max_gpu_memory_gb: 23
+  enable_tf32: true
+checkpoint:
+  path: checkpoints/fastwam_release/libero_uncond_2cam224.pt
+  model_name: libero_uncond_2cam224_1e-4
+  config_path: third_party/FastWAM/configs/sim_libero.yaml
+  dataset_stats_path: checkpoints/fastwam_release/libero_uncond_2cam224_dataset_stats.json
+policy:
+  variant: fastwam
+  test_time_future_imagination: false
+  comparison_group: thought2_static_null
+  training_recipe_id: null
+benchmark:
+  backend: libero_plus
+  suite: libero_spatial
+  suite_config: configs/suites/libero_spatial.yaml
+  # Task 3 does not overlap the existing tasks 0/4/9 OOD future pilot.
+  tasks: [3]
+  episodes_per_task: 1
+  max_steps: 400
+  num_steps_wait: 30
+  control_horizon: 10
+  image_size: [256, 256]
+perturbation:
+  enabled: true
+  # One independently selected easy variant in every current OOD family.
+  category:
+    - camera_viewpoints
+    - light_conditions
+    - background_textures
+    - robot_initial_states
+    - objects_layout
+  level: [easy]
+  variant_selection: sample
+  parameters:
+    classification_path: third_party/LIBERO-plus/libero/libero/benchmark/task_classification.json
+recording:
+  fps: 24
+  save_observations: false
+  save_actions: false
+  save_robot_state: false
+  video_format: mp4
+static_calibration:
+  enabled: true
+  settle_steps: null
+  capture_offsets: [0, 4, 8]
+  repeated_same_frame_encodes: 3
+  threshold_quantile: 0.99
+  threshold_quantile_method: higher
+  save_frames: true
+  # Identical to the Clean config so the two cohorts are pool-compatible.
+  minimum_samples_for_freeze: 200
+  required_conditions: [clean, ood]
+  minimum_samples_per_condition_for_freeze: 100
+  required_ood_categories:
+    - camera_viewpoints
+    - light_conditions
+    - background_textures
+    - robot_initial_states
+    - objects_layout
+  minimum_samples_per_ood_category_for_freeze: 20

@@ -210,6 +210,11 @@ class: FastWAM
 
 已有思考点一真实记录证明该 checkpoint 能加载并生成 `[32,7]` action chunk。2026-07-23 又完成了 `P2A-CLEAN-SMOKE-v1`：真实 GPU 上用 2 个视频去噪步生成 9 帧 unconditional future，并保存当前帧、预测视频、offset 0/4/8 的实际帧和并排视频；1 job / 1 probe / 0 error。该运行只证明本机视频链路，不能估计正式 future quality。
 
+同日的 20-step PILOT 又覆盖 Clean/OOD 5 episodes、7 probes 和 14 个精确
+对齐 future frame，0 error；所有执行动作与阶段一 trace 逐元素一致。它提供
+真实 20-step 延迟/显存和小样本一致性趋势，但仍不能解除 2A 的非因果限制，
+也不能替代阈值校准、盲审和正式抽样。
+
 结论应严格表述为：**release 已实测支持 unconditional future generation；不支持已执行动作条件下的 future generation。**
 
 此外，Pinned loader 的 `mot.load_state_dict(..., strict=False)` 不报告 missing keys。Shadow probe 因此不能接受“只把 Hydra flag 改成 true”的模型：它会通过 `torch.load(..., map_location="cpu", mmap=True, weights_only=True)` 只核对 checkpoint 中的 `mixtures.video.action_embedding.*` key、shape 和加载后的精确值，并同时要求项目源码 allowlist 中已有匹配的 checkpoint SHA-256、Fast-WAM commit、model config 与 training recipe。当前仓库没有这样的可信 checkpoint，allowlist 有意保持为空。
@@ -232,4 +237,11 @@ class: FastWAM
 5. 对 action-conditioned 模型，还必须从实际 VAE temporal factor、DiT temporal patch、video length、attention mask 和 action horizon 推导传递依赖闭包。Pinned `first_frame_causal` 下所有 future frame 都要求完整 32-action horizon，而基线只执行 10；temporal patch 不等于 1 或未知 mask 也必须拒绝。
 6. `action_conditioned=true` 不是充分证据；必须同时通过源码 allowlist 的训练 provenance 与 checkpoint action-embedding 实值加载验证。当前 allowlist 为空。
 7. 当前 release 在 `action_conditioned_future` 触发能力门禁是预期结果；`unconditional_future` 必须由独立配置显式选择。不得通过修改思考点一执行 horizon 绕过 2B 条件覆盖门禁。
-8. `static_motion_threshold=1.0` 是首版 schema 初值，尚未经过 no-op/静止轨迹校准。真实 smoke 中 predicted/actual motion energy 约为 0.23/0.22，却都被标为 static，进一步证明该 flag 当前不可解释；latent direction 也不是光流方向。
+8. `static_motion_threshold=1.0` 是首版 schema 初值。独立 no-op PILOT 已完成
+   2 Clean + 五类 OOD 共 7 条，8-step null 最大值为 `0.013223`；候选敏感性
+   将 predicted/actual static 从 7/7、7/7 改为 0/7、0/7。该候选仍只有
+   7/200，且 v1 未预先记录 quantile 插值法，因此不能冻结；latent direction
+   也不是光流方向。
+9. Static calibration 使用第三个互斥 runner：不调用 `policy.act()`、不读取
+   pilot 标签，只执行标准 no-op；checkpoint/encoder/offset/实现 hash 不同的
+   cohort 不能合并，协议变化时旧目录拒绝 resume。

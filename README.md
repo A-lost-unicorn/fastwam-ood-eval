@@ -59,6 +59,9 @@ clean_success_rate - ood_success_rate
 - [思考点二上游审计](docs/thought2_upstream_audit.md)：`infer_joint()`、官方预处理、动作语义、VAE、时间对齐和 release 能力门禁。
 - [思考点二概念说明](docs/thought2_concepts.md)：Shadow Diagnostics 的研究问题、旁观语义和因果边界。
 - [思考点二执行手册](docs/thought2_execution_guide.md)：2A/2B、真实命令、指标、阈值校准与人工盲审。
+- [思考点二盲审与抽样](docs/thought2_blind_review_and_sampling.md)：public/private 盲审包、outcome-blind cohort、anchor 与 pre-outcome freeze。
+- [思考点二统计分析计划](docs/thought2_statistical_analysis_plan.md)：episode/task 层级、primary estimand、cluster bootstrap、缺失与停止规则。
+- [思考点二 static/no-op 校准](docs/thought2_static_calibration.md)：独立 null set、候选阈值、freeze gate、真实数据与恢复规则。
 - [思考点三 Adapter 方案](docs/thought3_adapter_plan.md)：cache、B0/A0/A1/A2/A4、公平训练与评测门禁。
 - [工程亮点、难点与阻碍台账](docs/engineering_highlights.md)：工程复盘、未解决风险和简历素材。
 - [环境配置](docs/environment_setup.md)、[实验协议](docs/experiment_protocol.md)、[上游勘察](docs/upstream_notes.md)。
@@ -255,6 +258,14 @@ CUDA_VISIBLE_DEVICES=0 MUJOCO_GL=egl MUJOCO_EGL_DEVICE_ID=0 \
 
 该真实 smoke 已于 2026-07-23 完成 1 job / 1 probe / 0 error，保存了当前帧、9 帧预测、3 帧实际对照、并排视频和完整动作；它只证明链路，不能当作成功率或未来质量结论。
 
+随后完成的 20-step PILOT 包含 Clean 2 episodes/2 probes 与 camera-easy OOD
+3 episodes/5 probes，共 14 个 aligned future frames、0 error。7/7 probe 的执行
+动作与阶段一 trace 逐元素一致，5/5 outcome 一致；所有媒体可解码。描述性
+Clean→OOD 数值为 L1 `0.1512→0.2002`、cosine distance
+`0.1168→0.1942`、motion-direction cosine `0.7697→0.5283`。由于只有
+5 个 episode、1 个严格 pair 且 static 阈值只有小样本 candidate、尚未冻结，
+这些只能作为预实验假设。
+
 三卡 20-step episode-level pilot 的精确命令是：
 
 ```bash
@@ -277,7 +288,50 @@ fastwam-ood report-diagnostics \
   --experiment-dir outputs/thought2_unconditional_smoke
 ```
 
-完整执行、自动指标、static 阈值校准和人工失败归因见 [阶段二手册](docs/thought2_execution_guide.md)。
+Clean/OOD 联合结果必须写到新的 comparison 目录；聚合器会生成独立 manifest，
+记录共同 mode/provenance 和两份 source hash，禁止覆盖任一输入实验。
+
+独立 static/no-op PILOT 也已完成：2 条 Clean + 五类 OOD 各 1 条，共
+7/7 eligible、0 error；同帧编码噪声全为 0，8-step no-op energy 最大为
+`0.013223`。这只产生 `candidate_only` 阈值；正式门槛是 200 条，不能把它
+写成 frozen paper 数字。聚合和只读重分类命令为：
+
+```bash
+fastwam-ood aggregate-static-calibration \
+  --experiment-dir outputs/thought2_static_calibration_pilot_comparison \
+  --input-dir outputs/thought2_static_calibration_clean \
+  --input-dir outputs/thought2_static_calibration_ood \
+  --diagnostic-dir outputs/thought2_unconditional_clean \
+  --diagnostic-dir outputs/thought2_unconditional_ood
+fastwam-ood report-static-calibration \
+  --experiment-dir outputs/thought2_static_calibration_pilot_comparison
+```
+
+旧阈值 1.0 下 predicted/actual static 均为 7/7；候选敏感性下均为 0/7，
+源 diagnostics JSONL 不改写。完整执行、自动指标和人工失败归因见
+[阶段二手册](docs/thought2_execution_guide.md)，校准细节见
+[static/no-op 手册](docs/thought2_static_calibration.md)。
+
+7 个真实 20-step probe 已另行生成 label-blind workflow packet：7 cases /
+28 media，公开 manifest/HTML/CSV 不含 condition、outcome、metric 或 source
+identifier，私有 key 独立保存映射；全部媒体完成解码与 hash 审计。当前 human
+annotation 为 0/7，所以这仍不是 future 质量结论。
+
+正式阶段二抽样也已实现，但尚未冻结。v2 草案按 suite/task 选 200 条 Clean，
+并强制每个 task 包含 episode index 0；按每个 supported
+suite/task/category/difficulty cell 选 532 条 OOD，另记录 68 个 unsupported
+cell。所有 manifest 仍是 `draft_not_frozen`。正式配置必须设置：
+
+```yaml
+diagnostics:
+  cohort_manifest_path: <frozen-manifest.json>
+  require_frozen_cohort: true
+```
+
+在阶段一正式 outcome 出现前，仍需先决定沿用五类 732 条，还是按原研究路线在
+layout/robot-init 中二选一形成 612/622 条，再在 clean commit 上生成 frozen
+manifest。完整命令和审计边界见
+[盲审与 outcome-blind 抽样手册](docs/thought2_blind_review_and_sampling.md)。
 
 ## 13. 查看失败视频
 
@@ -304,7 +358,11 @@ fastwam-ood review-failures --experiment-dir outputs/ood_full
 
 ## 16. 下一阶段路线
 
-四个 suite 的正式计划已经按当前协议生成并审计：800 Clean、6,771 OOD runnable 和 68 OOD skipped。下一阶段是在明确确认后执行 7,571 个真实 rollout；只运行 OOD 无法计算 Clean→OOD drop。
+四个 suite 的正式计划已经按当前协议生成并审计：800 Clean、6,771 OOD
+runnable 和 68 OOD skipped。启动 7,571 个真实 rollout 前，应先提交当前
+outcome-blind 实现并冻结阶段二 sampling manifest；一旦正式 outcome JSONL
+出现，就不能事后认证为 pre-outcome selection。之后仍需明确算力授权才能启动
+正式 rollout；只运行 OOD 无法计算 Clean→OOD drop。
 
 配置或 classification 改变时，先重新规划但不启动模型：
 

@@ -33,6 +33,8 @@ def _row(job_id: str, probe: int, *, success: bool, condition: str, value: float
         "approximate_alignment": False,
         "static_future_flag": value == 0,
         "metrics": {"future_latent_l1": value, "static_future_flag": value == 0},
+        "generation_latency_ms": 5.0,
+        "generation_peak_memory_mb": 100.0,
         "extra": {"protocol_fingerprint": "fp", "aligned_future_frame_count": 2},
     }
 
@@ -107,6 +109,10 @@ def test_aggregate_is_episode_weighted_and_filters_stale_protocol(tmp_path):
     assert metrics["denominators"]["planned_jobs"] == 2
     assert metrics["denominators"]["aligned_future_frames"] == 6
     assert metrics["causal_interpretation_allowed"] is False
+    generation_latency = next(
+        row for row in metrics["overall"] if row["metric"] == "generation_latency_ms"
+    )
+    assert generation_latency["episode_weighted_mean"] == 5.0
     perturbation_csv = (tmp_path / "summary" / "consistency_by_perturbation.csv").read_text()
     assert "camera/easy" in perturbation_csv
     manifest = json.loads(
@@ -135,7 +141,7 @@ def test_multi_input_rejects_incompatible_inference_protocols(tmp_path):
             encoding="utf-8",
         )
     with pytest.raises(ValueError, match="incompatible"):
-        aggregate_diagnostics(roots[0], [roots[1]])
+        aggregate_diagnostics(tmp_path / "comparison", roots)
 
 
 def test_aggregate_refuses_to_write_into_thought1_source(tmp_path):
@@ -253,6 +259,16 @@ def test_multi_input_denominators_and_visual_roots_are_preserved(tmp_path):
     metrics = aggregate_diagnostics(target, roots)
     assert metrics["denominators"]["planned_jobs"] == 5
     assert metrics["denominators"]["planned_clips_maximum"] == 5
+    manifest = json.loads(
+        (target / "diagnostic_manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["aggregation_kind"] == "multi_input_comparison"
+    assert manifest["planned_job_count"] == 0
+    assert manifest["config"]["diagnostics"]["mode"] == "action_conditioned_future"
+    assert len(manifest["comparison_inputs"]) == 2
+    assert manifest["aggregation_provenance"]["git_dirty"] in (True, False, None)
+    repeated = aggregate_diagnostics(target, roots)
+    assert repeated["denominators"]["planned_jobs"] == 5
     report = generate_diagnostic_report(target, metrics).read_text(encoding="utf-8")
     assert "case-0.mp4" in report and "case-1.mp4" in report
     assert str(roots[0].name) in report or "../clean/" in report

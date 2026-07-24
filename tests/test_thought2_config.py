@@ -13,6 +13,20 @@ def test_diagnostics_are_disabled_and_omitted_by_default(tmp_path):
     assert "diagnostics" not in cfg.to_dict()
 
 
+def test_frozen_cohort_gate_requires_manifest_path(tmp_path):
+    path = write_config(tmp_path)
+    with pytest.raises(
+        ConfigError,
+        match="require_frozen_cohort=true requires",
+    ):
+        load_config(
+            path,
+            [
+                "diagnostics.require_frozen_cohort=true",
+            ],
+        )
+
+
 def test_diagnostics_do_not_change_existing_job_ids(tmp_path):
     path = write_config(tmp_path, episodes=3)
     baseline = load_config(path)

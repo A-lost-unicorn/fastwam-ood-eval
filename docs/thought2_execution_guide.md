@@ -75,6 +75,10 @@ torchrun --standalone --nproc_per_node=3 \
 
 Clean 配置复用 `outputs/clean_smoke` 的 2 条 episode；OOD 配置复用 `outputs/ood_pilot` 中 task 0/4/9 的 camera/easy 各 1 条。二者仍是 pilot，不是论文样本。
 
+若只暴露物理 GPU 1，robosuite 的 EGL 检查要求
+`CUDA_VISIBLE_DEVICES=1 MUJOCO_EGL_DEVICE_ID=1`，但 torch 参数仍写
+`--device cuda:0`，因为 torch 会把唯一可见卡重映射为逻辑 0。
+
 ### 3.4 聚合
 
 ```bash
@@ -85,6 +89,20 @@ fastwam-ood report-diagnostics \
 ```
 
 正式 Clean/OOD 分目录时，另建 comparison output，并将二者作为 `--input-dir`；只有 protocol signature 相同才允许合并。
+
+当前 pilot 的独立 comparison 命令：
+
+```bash
+fastwam-ood aggregate-diagnostics \
+  --experiment-dir outputs/thought2_unconditional_pilot_comparison \
+  --input-dir outputs/thought2_unconditional_clean \
+  --input-dir outputs/thought2_unconditional_ood
+fastwam-ood report-diagnostics \
+  --experiment-dir outputs/thought2_unconditional_pilot_comparison
+```
+
+多输入聚合会生成独立 comparison manifest，记录 mode、共同 provenance、输入
+fingerprint 和 source manifest hash；禁止把 comparison summary 写回任一输入目录。
 
 ## 4. 每个 probe 必须保存什么
 
@@ -117,36 +135,62 @@ fastwam-ood report-diagnostics \
 
 ## 6. 静止阈值校准
 
-默认 `static_motion_threshold=1.0` 只是 schema 初值，当前 smoke 已证明它可能过高：有明显动作时预测/实际 energy 约 0.2，仍被标成 static。正式实验前必须：
+独立 `calibrate-static` 子系统已经实现并完成 7 条真实 PILOT：
 
-1. 建立独立 calibration set，不进入后续成功/OOD统计。
-2. 对相同帧重复编码，测编码数值噪声。
-3. 在 Clean 和代表性 OOD 条件下执行 no-op，采集 offset 0/4/8 的实际视觉变化。
-4. 以 no-op motion energy 的高分位数（预注册 95% 或 99%）设阈值，并做敏感性分析。
-5. 固定阈值和 calibration manifest 后再运行正式诊断。
+- 不调用 `policy.act()`，只执行标准
+  `[0,0,0,0,0,0,-1]`；
+- 复用标准 30-step settle，并保存 offset `0/4/8` 的官方双相机帧；
+- 同一帧重复编码 3 次测编码噪声；
+- Clean 2 条 + 五类 OOD 各 1 条，7/7 eligible、0 error；
+- 同帧噪声全部为 0，8-step no-op energy 中位数/最大值为
+  `0.00661479/0.01322303`。
 
-阈值改变必须使用新输出目录和 protocol fingerprint。
+当前只得到 `candidate_static_motion_threshold=0.01322303`。它仍是
+`candidate_only`：正式门槛为 200 条（Clean/OOD 各 100、五类 OOD 各
+20），而且 PILOT-v1 采样前没有把 `higher` quantile 插值法写进 source
+manifest。当前协议已补齐该字段，旧目录会因 fingerprint 改变而拒绝 resume；
+v2/FORMAL 必须使用新 output。
+
+只读敏感性分析把旧阈值下 predicted/actual static 的 `7/7` / `7/7` 重分类为
+候选阈值下 `0/7` / `0/7`，原 diagnostics JSONL 未改写。它证明旧阈值量纲
+明显不合理，但不能把候选二值标签写成模型能力结论。
+
+完整协议、命令、逐类别数值、freeze gate 与恢复规则见
+[静态/无动作校准手册](thought2_static_calibration.md)。
 
 ## 7. 人工盲审
 
-模板：[templates/future_case_annotations.csv](templates/future_case_annotations.csv)
+现已实现公开 packet 与私有 unblinding key 的物理分离。第一轮 packet 只暴露
+不透明 case ID、任务文本和 current/predicted/actual/comparison 媒体，不包含
+condition、outcome、metric、动作、seed 或 source identifier。命令：
 
-推荐两轮：
+```bash
+fastwam-ood prepare-blind-review \
+  --packet-dir <fresh-public-dir> \
+  --key-dir <fresh-private-dir> \
+  --input-dir <clean-diagnostic-dir> \
+  --input-dir <ood-diagnostic-dir> \
+  --seed <pre-registered-seed> \
+  --max-cases-per-job 1
+```
 
-1. 第一轮隐藏 Clean/OOD、success/failure 和自动指标，只看任务文本、当前帧、预测/实际并排视频。
-2. 第二轮解盲结果，填写失败假设和备注。
+第一轮模板是
+[templates/future_blind_annotations.csv](templates/future_blind_annotations.csv)，
+有意不含 `primary_failure_hypothesis`。第二轮解盲后才使用
+[templates/future_case_annotations.csv](templates/future_case_annotations.csv)
+填写失败假设。
 
-字段允许值：
+至少对主表预注册子集做双人独立标注，先报告一致率或 Cohen's kappa，再讨论产生
+adjudicated 标签；原始两份标签不可覆盖。这里是 label-blind 而非 perceptually
+blind：reviewer 仍可能从视频推断扰动或结果。
 
-- `video_validity`：`valid/corrupt/unaligned/uncertain`
-- `future_goal_progress`：`correct/partial/wrong_object/wrong_direction/static/uncertain`
-- `future_physical_plausibility`：`plausible/minor_artifact/unphysical/uncertain`
-- `future_actual_agreement`：`aligned/partial/conflict/static/uncertain`
-- `action_execution_quality`：`realized/stalled/collision/oscillation/uncertain`
-- `primary_failure_hypothesis`：`not_failure/future_hypothesis/action_selection/action_execution/perception/environment/compound/ambiguous`
-- `confidence`：`low/medium/high`
+解盲前用 `analyze-blind-review` 校验完整 case set、reviewer identity 与枚举，
+并分别报告 nonmissing 和排除 `uncertain` 后的 decisive 分母。边际分布退化时
+κ 保持 `undefined`；程序不会把表面 100% agreement 伪装成 κ=1。
 
-至少对主表样本的一个预注册子集做双人独立标注，报告一致率或 Cohen's kappa。分歧经讨论产生 adjudicated 标签，但原始两份标签必须保留。
+当前 7-probe PILOT packet 已生成并通过 28 个媒体的完整解码与 public/private
+hash 审计，但尚无人为标注。详细命令、字段、packet ID 和保管规则见
+[盲审与 outcome-blind 抽样手册](thought2_blind_review_and_sampling.md)。
 
 ## 8. “未来错误还是动作错误”的表述边界
 
@@ -163,25 +207,49 @@ fastwam-ood report-diagnostics \
 
 ## 9. 正式抽样设计
 
-阶段二不必对阶段一全部 7,571 条 episode 生成视频。建议预注册两个 cohort：
+阶段二不必对阶段一全部 7,571 条 episode 生成视频。使用两个资格完全不同的
+cohort：
 
 1. **Outcome-blind cohort**：在看 success 前，按 suite、扰动、difficulty 分层随机抽样，用于估计 ID/OOD 一致性差异。
 2. **Matched case-control cohort**：阶段一完成后，按 task/seed/扰动匹配成功与失败案例，用于失败机制分析；该 cohort 不能用于估计总体失败率。
 
 一对多 OOD variant 不应假装成独立 Clean 配对。主分析应在 task/seed 层聚类，或为每个 category/level 预先固定一个 OOD variant 做一对一配对。
 
+当前 outcome-blind v2 草案使用 seed `20260724`：每个 suite/task 抽 5 个
+Clean，并强制包含 episode index 0；每个可运行
+suite/task/category/difficulty cell 抽 1 个 OOD。共 200 Clean + 532 OOD =
+732，另有 68 个 skipped-only cell，supported shortfall 为 0。八份 manifest
+均是 `draft_not_frozen`，不能启动正式分析。
+
+草案覆盖阶段一现有五类扰动；若主文坚持原路线的四类，必须在看 outcome 前决定
+保留 object-layout 还是 robot-init，并重新生成 612 或 622 条的新 manifest。
+完整计数、cohort ID、freeze 命令和废弃 v1 记录见
+[盲审与 outcome-blind 抽样手册](thought2_blind_review_and_sampling.md)。
+Episode 内先聚合 probe、task 内再聚合 cell、suite-stratified task bootstrap
+及 outcome 最小分母见
+[统计分析计划](thought2_statistical_analysis_plan.md)；该计划仍是 DRAFT。
+
 ## 10. 正式完成门槛
 
-- 20-step Clean/OOD pilot 无 error，媒体和时间对齐抽检通过。
-- static threshold 使用独立 calibration set 固定。
-- outcome-blind 抽样 manifest 在查看结果前冻结。
-- 项目与三个上游 checkout 的 manifest dirty 状态全部为 `false`。
-- 每个条件报告 episode/probe/aligned-frame 分母。
-- 主统计先在 episode 内聚合 probe，再按 episode 等权；clip-weighted 仅作诊断。
-- 人工标注完成并保留原始/裁决版本。
-- 报告明确区分 2A 与 2B，`causal_interpretation_allowed=false`。
+- **已通过 PILOT**：20-step Clean/OOD 无 error，媒体、动作复现和时间对齐抽检通过。
+- **PILOT 已完成**：独立 static/no-op calibration 7/7 eligible，
+  候选阈值 `0.013223`。
+- **待完成**：扩展到预注册 200 条并人工冻结 static threshold；当前
+  candidate 不得进入正式表。
+- **已生成草案、待冻结**：outcome-blind v2 为 200 Clean + 532 OOD，
+  0 supported shortfall、68 unsupported cell；当前项目 tree dirty，因此八份
+  manifest 全部是 `draft_not_frozen`。
+- **已实现**：正式配置可设 `require_frozen_cohort=true`，草案会在模型加载和
+  environment reset 前被拒绝。
+- **future PILOT 已验证**：项目与三个上游 checkout 的输入 manifest dirty
+  状态全部为 `false`；static calibration PILOT 是新实现的
+  `git_dirty=true` 开发运行，只能保留 PILOT 资格。
+- **已实现**：每个条件报告 episode/probe/aligned-frame 分母。
+- **已实现**：主统计先在 episode 内聚合 probe，再按 episode 等权；clip-weighted 仅作诊断。
+- **待完成**：人工标注完成并保留原始/裁决版本。
+- **已实现**：报告明确区分 2A 与 2B，`causal_interpretation_allowed=false`。
 
-## 11. 当前 real smoke
+## 11. 当前 real smoke 与 20-step pilot
 
 `P2A-CLEAN-SMOKE-v1` 已于 2026-07-23 完成：
 
@@ -193,3 +261,22 @@ fastwam-ood report-diagnostics \
 - 峰值 `24,841.09 MB`。
 
 详细机器结果位于 `outputs/thought2_unconditional_smoke/summary/`，证据解释见 [experiment_ledger.md](experiment_ledger.md)。
+
+`P2A-CLEAN-PILOT-v1` 与 `P2A-OOD-CAMERA-PILOT-v1` 也已于
+2026-07-23 完成：
+
+- Clean 2 episodes / 2 probes / 4 aligned future frames / 0 error。
+- OOD camera/easy 3 episodes / 5 probes / 10 aligned future frames / 0 error。
+- 7/7 probe 的动作与阶段一 trace 逐元素一致，5/5 outcome 一致。
+- 全部 21 个 MP4 和 7 个 current PNG 可解码，抽检无损坏。
+- episode-weighted Clean/OOD generation latency 为
+  `4,108.12/4,563.88 ms`，完整 diagnostic 为 `7,214.25/8,200.65 ms`。
+- pilot 中 L1 为 `0.1512/0.2002`，cosine distance 为
+  `0.1168/0.1942`，motion-direction cosine 为 `0.7697/0.5283`。
+- 已将 7 个 probe 转为公开/私有分离的 blind-review packet：7 cases /
+  28 media，public sensitive key 为 0，全部媒体可解码；**human annotation
+  仍为 0/7**。
+
+最后一组数值只登记为 camera/easy 小样本趋势；严格 ID/OOD pair 只有 1，
+static 阈值只有 7 条 null candidate、尚未冻结，也未完成盲审，不能写成论文结论。联合报告位于
+`outputs/thought2_unconditional_pilot_comparison/summary/`。

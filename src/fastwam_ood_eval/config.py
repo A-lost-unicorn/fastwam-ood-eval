@@ -31,6 +31,7 @@ ALLOWED_DIAGNOSTIC_MODES = {
     "action_conditioned_future",
 }
 ALLOWED_PROBE_STRATEGIES = {"first", "evenly_spaced", "explicit_replan_indices"}
+ALLOWED_CALIBRATION_CONDITIONS = {"clean", "ood"}
 
 
 @dataclass(frozen=True)
@@ -152,9 +153,41 @@ class DiagnosticsConfig:
     save_latents: bool = False
     source_experiment_id: str | None = None
     source_output_dir: Path | None = None
+    cohort_manifest_path: Path | None = None
+    require_frozen_cohort: bool = False
     static_motion_threshold: float = 1.0
     motion_epsilon: float = 1e-8
     control_frequency_hz: float | None = None
+
+
+@dataclass(frozen=True)
+class StaticCalibrationConfig:
+    """Independent null-motion calibration for Thought 2 representation metrics.
+
+    The calibration is intentionally a third execution namespace: it neither
+    reads success labels from the future-diagnostic pilots nor writes into
+    Thought 1/Thought 2 result trees.  Defaults pre-register the full-horizon
+    0->8 control-step null used by the current Fast-WAM video timing.
+    """
+
+    enabled: bool = False
+    settle_steps: int | None = None
+    capture_offsets: tuple[int, ...] = (0, 4, 8)
+    repeated_same_frame_encodes: int = 3
+    threshold_quantile: float = 0.99
+    threshold_quantile_method: str = "higher"
+    save_frames: bool = True
+    minimum_samples_for_freeze: int = 200
+    required_conditions: tuple[str, ...] = ("clean", "ood")
+    minimum_samples_per_condition_for_freeze: int = 100
+    required_ood_categories: tuple[str, ...] = (
+        "camera_viewpoints",
+        "light_conditions",
+        "background_textures",
+        "robot_initial_states",
+        "objects_layout",
+    )
+    minimum_samples_per_ood_category_for_freeze: int = 20
 
 
 @dataclass(frozen=True)
@@ -168,6 +201,9 @@ class EvalConfig:
     source_path: Path
     policy: PolicyConfig = field(default_factory=PolicyConfig)
     diagnostics: DiagnosticsConfig = field(default_factory=DiagnosticsConfig)
+    static_calibration: StaticCalibrationConfig = field(
+        default_factory=StaticCalibrationConfig
+    )
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -205,13 +241,34 @@ class EvalConfig:
         # Do not perturb existing Thought 1 manifests merely because the code
         # knows about an opt-in subsystem.
         if self.diagnostics.enabled:
-            payload["diagnostics"] = {
+            diagnostic_payload = {
                 **self.diagnostics.__dict__,
                 "explicit_replan_indices": list(self.diagnostics.explicit_replan_indices),
                 "source_output_dir": (
                     str(self.diagnostics.source_output_dir)
                     if self.diagnostics.source_output_dir is not None
                     else None
+                ),
+                "cohort_manifest_path": (
+                    str(self.diagnostics.cohort_manifest_path)
+                    if self.diagnostics.cohort_manifest_path is not None
+                    else None
+                ),
+            }
+            if self.diagnostics.cohort_manifest_path is None:
+                diagnostic_payload.pop("cohort_manifest_path")
+            if not self.diagnostics.require_frozen_cohort:
+                diagnostic_payload.pop("require_frozen_cohort")
+            payload["diagnostics"] = diagnostic_payload
+        if self.static_calibration.enabled:
+            payload["static_calibration"] = {
+                **self.static_calibration.__dict__,
+                "capture_offsets": list(self.static_calibration.capture_offsets),
+                "required_conditions": list(
+                    self.static_calibration.required_conditions
+                ),
+                "required_ood_categories": list(
+                    self.static_calibration.required_ood_categories
                 ),
             }
         return payload
@@ -270,6 +327,9 @@ def _build(data: Mapping[str, Any], source_path: Path) -> EvalConfig:
     diagnostics = data.get("diagnostics", {})
     if not isinstance(diagnostics, Mapping):
         raise ConfigError("Invalid top-level section: diagnostics")
+    static_calibration = data.get("static_calibration", {})
+    if not isinstance(static_calibration, Mapping):
+        raise ConfigError("Invalid top-level section: static_calibration")
 
     tasks_raw = _required(bm, "tasks", "benchmark")
     if tasks_raw in (None, "all"):
@@ -393,12 +453,81 @@ def _build(data: Mapping[str, Any], source_path: Path) -> EvalConfig:
                 else None
             ),
             source_output_dir=_path_or_none(diagnostics.get("source_output_dir")),
+            cohort_manifest_path=_path_or_none(
+                diagnostics.get("cohort_manifest_path")
+            ),
+            require_frozen_cohort=bool(
+                diagnostics.get("require_frozen_cohort", False)
+            ),
             static_motion_threshold=float(diagnostics.get("static_motion_threshold", 1.0)),
             motion_epsilon=float(diagnostics.get("motion_epsilon", 1e-8)),
             control_frequency_hz=(
                 None
                 if diagnostics.get("control_frequency_hz") in (None, "")
                 else float(diagnostics["control_frequency_hz"])
+            ),
+        ),
+        static_calibration=StaticCalibrationConfig(
+            enabled=bool(static_calibration.get("enabled", False)),
+            settle_steps=(
+                None
+                if static_calibration.get("settle_steps") in (None, "")
+                else int(static_calibration["settle_steps"])
+            ),
+            capture_offsets=tuple(
+                int(value)
+                for value in _as_list(
+                    static_calibration.get("capture_offsets", [0, 4, 8]),
+                    name="static_calibration.capture_offsets",
+                )
+            ),
+            repeated_same_frame_encodes=int(
+                static_calibration.get("repeated_same_frame_encodes", 3)
+            ),
+            threshold_quantile=float(
+                static_calibration.get("threshold_quantile", 0.99)
+            ),
+            threshold_quantile_method=str(
+                static_calibration.get("threshold_quantile_method", "higher")
+            ).lower(),
+            save_frames=bool(static_calibration.get("save_frames", True)),
+            minimum_samples_for_freeze=int(
+                static_calibration.get("minimum_samples_for_freeze", 200)
+            ),
+            required_conditions=tuple(
+                str(value).lower()
+                for value in _as_list(
+                    static_calibration.get(
+                        "required_conditions", ["clean", "ood"]
+                    ),
+                    name="static_calibration.required_conditions",
+                )
+            ),
+            minimum_samples_per_condition_for_freeze=int(
+                static_calibration.get(
+                    "minimum_samples_per_condition_for_freeze", 100
+                )
+            ),
+            required_ood_categories=tuple(
+                str(value)
+                for value in _as_list(
+                    static_calibration.get(
+                        "required_ood_categories",
+                        [
+                            "camera_viewpoints",
+                            "light_conditions",
+                            "background_textures",
+                            "robot_initial_states",
+                            "objects_layout",
+                        ],
+                    ),
+                    name="static_calibration.required_ood_categories",
+                )
+            ),
+            minimum_samples_per_ood_category_for_freeze=int(
+                static_calibration.get(
+                    "minimum_samples_per_ood_category_for_freeze", 20
+                )
             ),
         ),
     )
@@ -538,6 +667,14 @@ def validate_config(cfg: EvalConfig) -> None:
         errors.append("diagnostics.motion_epsilon must be positive")
     if diagnostics.control_frequency_hz is not None and diagnostics.control_frequency_hz <= 0:
         errors.append("diagnostics.control_frequency_hz must be positive when provided")
+    if (
+        diagnostics.require_frozen_cohort
+        and diagnostics.cohort_manifest_path is None
+    ):
+        errors.append(
+            "diagnostics.require_frozen_cohort=true requires "
+            "diagnostics.cohort_manifest_path"
+        )
     if diagnostics.enabled:
         if diagnostics.source_experiment_id is None:
             errors.append("enabled diagnostics require diagnostics.source_experiment_id")
@@ -548,6 +685,87 @@ def validate_config(cfg: EvalConfig) -> None:
             errors.append(
                 "diagnostics.source_output_dir must differ from experiment.output_dir"
             )
+    calibration = cfg.static_calibration
+    if calibration.settle_steps is not None and calibration.settle_steps < 0:
+        errors.append("static_calibration.settle_steps must be non-negative")
+    if len(calibration.capture_offsets) < 2:
+        errors.append(
+            "static_calibration.capture_offsets must contain zero and at least one future offset"
+        )
+    if (
+        not calibration.capture_offsets
+        or calibration.capture_offsets[0] != 0
+        or tuple(sorted(set(calibration.capture_offsets)))
+        != calibration.capture_offsets
+    ):
+        errors.append(
+            "static_calibration.capture_offsets must be unique, increasing, and start at zero"
+        )
+    if (
+        calibration.enabled
+        and calibration.capture_offsets
+        and calibration.capture_offsets[-1] > cfg.benchmark.max_steps
+    ):
+        errors.append(
+            "static_calibration.capture_offsets cannot exceed benchmark.max_steps"
+        )
+    if calibration.repeated_same_frame_encodes < 2:
+        errors.append(
+            "static_calibration.repeated_same_frame_encodes must be at least 2"
+        )
+    if not 0.0 < calibration.threshold_quantile < 1.0:
+        errors.append("static_calibration.threshold_quantile must be between 0 and 1")
+    if calibration.threshold_quantile_method != "higher":
+        errors.append(
+            "static_calibration.threshold_quantile_method must be higher; "
+            "the conservative null-threshold rule is protocol-pinned"
+        )
+    if calibration.minimum_samples_for_freeze <= 0:
+        errors.append(
+            "static_calibration.minimum_samples_for_freeze must be positive"
+        )
+    if calibration.minimum_samples_per_condition_for_freeze <= 0:
+        errors.append(
+            "static_calibration.minimum_samples_per_condition_for_freeze must be positive"
+        )
+    if calibration.minimum_samples_per_ood_category_for_freeze <= 0:
+        errors.append(
+            "static_calibration.minimum_samples_per_ood_category_for_freeze must be positive"
+        )
+    if len(set(calibration.required_conditions)) != len(
+        calibration.required_conditions
+    ):
+        errors.append("static_calibration.required_conditions must not contain duplicates")
+    unknown_conditions = (
+        set(calibration.required_conditions) - ALLOWED_CALIBRATION_CONDITIONS
+    )
+    if unknown_conditions:
+        errors.append(
+            "illegal static calibration conditions: "
+            f"{sorted(unknown_conditions)}"
+        )
+    if len(set(calibration.required_ood_categories)) != len(
+        calibration.required_ood_categories
+    ):
+        errors.append(
+            "static_calibration.required_ood_categories must not contain duplicates"
+        )
+    unknown_calibration_categories = (
+        set(calibration.required_ood_categories) - ALLOWED_CATEGORIES
+    )
+    if unknown_calibration_categories:
+        errors.append(
+            "illegal static calibration OOD categories: "
+            f"{sorted(unknown_calibration_categories)}"
+        )
+    if calibration.required_ood_categories and "ood" not in calibration.required_conditions:
+        errors.append(
+            "static_calibration.required_ood_categories requires ood in required_conditions"
+        )
+    if calibration.enabled and diagnostics.enabled:
+        errors.append(
+            "static_calibration and diagnostics are mutually exclusive execution protocols"
+        )
     if errors:
         raise ConfigError("Invalid configuration:\n- " + "\n- ".join(errors))
 

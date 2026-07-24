@@ -28,6 +28,9 @@ from fastwam_ood_eval.diagnostics.artifact_writer import (
     diagnostic_id,
     load_all_completed_jobs,
 )
+from fastwam_ood_eval.diagnostics.diagnostic_cohort import (
+    validate_diagnostic_cohort,
+)
 from fastwam_ood_eval.diagnostics.future_probe import frame_to_rgb_uint8
 from fastwam_ood_eval.diagnostics.metrics import build_metric_metadata, compute_future_metrics
 from fastwam_ood_eval.diagnostics.protocol import FutureProbeOutput, SupportsFutureProbe
@@ -74,12 +77,31 @@ def diagnostic_protocol_fingerprint(
     """Fingerprint every setting that changes diagnostic identity or semantics."""
 
     diagnostic_config = _as_jsonable(cfg.diagnostics)
+    if (
+        isinstance(diagnostic_config, dict)
+        and diagnostic_config.get("cohort_manifest_path") is None
+    ):
+        # Preserve existing protocol fingerprints for configurations that do
+        # not opt into a frozen cohort manifest.
+        diagnostic_config.pop("cohort_manifest_path")
+    if (
+        isinstance(diagnostic_config, dict)
+        and diagnostic_config.get("require_frozen_cohort") is False
+    ):
+        # Preserve existing fingerprints unless the safety gate is explicitly
+        # part of the protocol.
+        diagnostic_config.pop("require_frozen_cohort")
     source_files: dict[str, str] = {}
     if cfg.diagnostics.source_output_dir is not None:
         for name in ("experiment_manifest.json", "job_manifest.jsonl"):
             path = Path(cfg.diagnostics.source_output_dir) / name
             if path.is_file():
                 source_files[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+    cohort_path = cfg.diagnostics.cohort_manifest_path
+    if cohort_path is not None and cohort_path.is_file():
+        source_files["diagnostic_cohort_manifest.json"] = hashlib.sha256(
+            cohort_path.read_bytes()
+        ).hexdigest()
     payload = {
         "schema": "thought2-shadow-diagnostic-v1",
         "diagnostics": diagnostic_config,
@@ -134,6 +156,7 @@ def load_source_jobs(cfg: EvalConfig) -> list[EvaluationJob]:
         and (tasks is None or job.task_id in tasks)
         and 0 <= job.episode_index < cfg.benchmark.episodes_per_task
         and job.condition == expected_condition
+        and not job.skip_reason
         and (
             not cfg.perturbation.enabled
             or (
@@ -146,6 +169,30 @@ def load_source_jobs(cfg: EvalConfig) -> list[EvaluationJob]:
         raise RuntimeError(
             "No source jobs match the diagnostic suite/task/episode/condition/perturbation filters"
         )
+    cohort_path = cfg.diagnostics.cohort_manifest_path
+    if cohort_path is not None:
+        cohort = validate_diagnostic_cohort(cohort_path, Path(source))
+        if (
+            cfg.diagnostics.require_frozen_cohort
+            and cohort.get("frozen") is not True
+        ):
+            raise RuntimeError(
+                "Formal diagnostics require a cohort frozen before source "
+                f"outcomes, but this manifest is {cohort.get('status')!r}: "
+                f"{cohort_path}"
+            )
+        by_id = {job.job_id: job for job in selected}
+        selected_ids = cohort["selected_job_ids"]
+        missing = [
+            job_id for job_id in selected_ids if job_id not in by_id
+        ]
+        if missing:
+            raise RuntimeError(
+                "Diagnostic cohort contains jobs outside the current "
+                "config/source filters: "
+                + ", ".join(missing[:5])
+            )
+        selected = [by_id[job_id] for job_id in selected_ids]
     return selected
 
 

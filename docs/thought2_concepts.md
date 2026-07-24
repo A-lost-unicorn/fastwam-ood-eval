@@ -68,7 +68,18 @@ video_dit_config.action_conditioned = false
 - `mode: unconditional_future`：2A，允许当前 release，结果明确写 `action_conditioned_verified=false` 和 `causal_interpretation_allowed=false`。
 - `mode: action_conditioned_future`：2B，真实 release 必须明确报错，不能把 unconditional video 换个名字。
 
-2026-07-23 的 2A 真实 smoke 已完成 1 job / 1 probe / 0 error，证明官方 release 能在本机生成并保存未来。它只有 2 个去噪步和 1 个样本，只是链路证据。完整命令见 [执行手册](thought2_execution_guide.md)，上游语义证据见 [上游审计](thought2_upstream_audit.md)。
+2026-07-23 的 2A 真实 smoke 已完成 1 job / 1 probe / 0 error，证明官方
+release 能在本机生成并保存未来；随后 20-step Clean/OOD PILOT 完成
+5 episodes / 7 probes / 14 aligned future frames / 0 error。7/7 probe 的执行
+动作与阶段一 trace 完全相同，但一致性数值仍只是小样本假设。完整命令与边界见
+[执行手册](thought2_execution_guide.md)，上游语义证据见
+[上游审计](thought2_upstream_audit.md)。
+
+Static flag 另由 outcome-independent no-op 协议校准。2026-07-23 的 7 条
+Clean/五类 OOD PILOT 得到候选 `0.013223`，但只有 7/200 且采样前未固定
+quantile 插值法，因此状态为 `candidate_only`。它只能说明首版阈值 1.0
+明显失配，不能把重分类后的 0/7 static 写成模型能力结论。详见
+[静态/无动作校准手册](thought2_static_calibration.md)。
 
 ## 5. 时间对齐为什么不能按“一帧一步”处理
 

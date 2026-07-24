@@ -90,6 +90,23 @@ def generate_diagnostic_report(
         else {}
     )
     mode = str(diagnostics.get("mode", "unknown"))
+    source_ids = manifest.get("source_experiment_ids")
+    source_label = (
+        ", ".join(str(value) for value in source_ids)
+        if isinstance(source_ids, list) and source_ids
+        else str(
+            manifest.get(
+                "source_experiment_id",
+                source.get("source_experiment_id", "unknown"),
+            )
+        )
+    )
+    source_hashes = manifest.get("source_manifest_hashes")
+    source_hash_label = (
+        json.dumps(source_hashes, ensure_ascii=False, sort_keys=True)
+        if isinstance(source_hashes, Mapping) and source_hashes
+        else str(source.get("source_manifest_sha256", "unknown"))
+    )
     if mode == "unconditional_future":
         research_question = (
             "Does the released Fast-WAM video branch's unconditional future agree with the "
@@ -121,7 +138,7 @@ def generate_diagnostic_report(
             "- Whether OOD conditions or perturbation groups are associated with higher "
             "future-prediction error."
         )
-    else:
+    elif mode == "action_conditioned_future":
         research_question = (
             "Does an action-conditioned shadow future agree with what the unchanged Fast-WAM "
             "action actually produces, and do those associations differ between success/failure "
@@ -148,6 +165,24 @@ def generate_diagnostic_report(
             "- Whether OOD conditions or perturbation groups are associated with higher "
             "future-prediction error."
         )
+    else:
+        research_question = (
+            "The diagnostic mode is unavailable, so this report cannot assign unconditional "
+            "or action-conditioned semantics to the aggregated rows."
+        )
+        causal_limitation = (
+            "`causal_interpretation_allowed=false`. Missing mode provenance is a reporting "
+            "error; inspect or regenerate the diagnostic manifest before interpreting results."
+        )
+        conditioning_limitations = (
+            "- Conditioning semantics are unknown because the diagnostic manifest does not "
+            "identify a supported mode.\n"
+            "- Do not use this report as scientific evidence until provenance is restored."
+        )
+        temporal_architecture_limitation = (
+            "- Temporal alignment semantics cannot be certified without a known mode."
+        )
+        answer_scope = "- Coverage and artifact indexing only; no model-semantic claim."
     report = f"""# Fast-WAM Future Consistency Diagnostic
 
 ## 1. Research question
@@ -161,11 +196,12 @@ def generate_diagnostic_report(
 ## 3. Checkpoint and upstream provenance
 
 - Diagnostic experiment: `{manifest.get('experiment_id', experiment_dir.name)}`
-- Source experiment: `{manifest.get('source_experiment_id', source.get('source_experiment_id', 'unknown'))}`
+- Source experiment: `{source_label}`
 - Future mode: `{mode}`
 - Protocol fingerprint: `{manifest.get('protocol_fingerprint', 'unknown')}`
-- Provenance: `{json.dumps(manifest.get('provenance', {}), ensure_ascii=False, sort_keys=True)}`
-- Source manifest SHA-256: `{source.get('source_manifest_sha256', 'unknown')}`
+- Input generation provenance: `{json.dumps(manifest.get('provenance', {}), ensure_ascii=False, sort_keys=True)}`
+- Aggregation provenance: `{json.dumps(manifest.get('aggregation_provenance', {}), ensure_ascii=False, sort_keys=True)}`
+- Source manifest SHA-256: `{source_hash_label}`
 
 ## 4. Diagnostic protocol
 

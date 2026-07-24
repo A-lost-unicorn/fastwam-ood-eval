@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import random
 import statistics
@@ -11,6 +12,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from fastwam_ood_eval.diagnostics.artifact_writer import _atomic_json_write, _record_order
+from fastwam_ood_eval.evaluation.evaluator import git_commit, git_dirty
 
 
 KNOWN_METRICS = (
@@ -20,6 +22,8 @@ KNOWN_METRICS = (
     "actual_motion_energy",
     "motion_energy_ratio",
     "motion_direction_cosine",
+    "generation_latency_ms",
+    "generation_peak_memory_mb",
     "diagnostic_latency_ms",
     "diagnostic_peak_memory_mb",
 )
@@ -102,7 +106,18 @@ def _comparison_signature(manifest: Mapping[str, Any]) -> str:
             "path": checkpoint.get("path"), "model_name": checkpoint.get("model_name"),
             "hash": provenance.get("checkpoint_hash"),
         },
-        "fastwam_commit": provenance.get("fastwam_commit"),
+        "project": {
+            "commit": provenance.get("git_commit"),
+            "dirty": provenance.get("git_dirty"),
+        },
+        "upstreams": {
+            "fastwam_commit": provenance.get("fastwam_commit"),
+            "fastwam_dirty": provenance.get("fastwam_dirty"),
+            "libero_commit": provenance.get("libero_commit"),
+            "libero_dirty": provenance.get("libero_dirty"),
+            "libero_plus_commit": provenance.get("libero_plus_commit"),
+            "libero_plus_dirty": provenance.get("libero_plus_dirty"),
+        },
         "mode": diagnostics.get("mode"),
         "num_video_frames": diagnostics.get("num_video_frames"),
         "num_inference_steps": diagnostics.get("num_inference_steps"),
@@ -117,6 +132,98 @@ def _comparison_signature(manifest: Mapping[str, Any]) -> str:
         },
     }
     return json.dumps(signature, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _comparison_manifest(
+    experiment_dir: Path,
+    input_paths: Sequence[Path],
+    *,
+    episodes: int,
+    clips: int,
+    error_clips: int,
+    summary_dir: Path,
+) -> dict[str, Any]:
+    manifests = [
+        _read_diagnostic_manifest(Path(root).resolve(), required=True)
+        for root in input_paths
+    ]
+    assert all(manifest is not None for manifest in manifests)
+    concrete = [manifest for manifest in manifests if manifest is not None]
+    base = concrete[0]
+    config = json.loads(json.dumps(base["config"]))
+    if isinstance(config.get("experiment"), dict):
+        config["experiment"]["name"] = experiment_dir.name
+        config["experiment"]["output_dir"] = str(experiment_dir)
+
+    inputs: list[dict[str, Any]] = []
+    source_ids: list[str] = []
+    source_hashes: dict[str, str] = {}
+    for root, manifest in zip(input_paths, concrete):
+        source_snapshot_path = Path(root) / "source_manifest.json"
+        source_snapshot: Mapping[str, Any] = {}
+        if source_snapshot_path.is_file():
+            try:
+                payload = json.loads(source_snapshot_path.read_text(encoding="utf-8"))
+                if isinstance(payload, Mapping):
+                    source_snapshot = payload
+            except (OSError, json.JSONDecodeError):
+                source_snapshot = {}
+        source_id = str(
+            manifest.get("source_experiment_id")
+            or source_snapshot.get("source_experiment_id")
+            or "unknown"
+        )
+        source_hash = source_snapshot.get("source_manifest_sha256")
+        if source_id not in source_ids:
+            source_ids.append(source_id)
+        if isinstance(source_hash, str) and source_hash:
+            source_hashes[source_id] = source_hash
+        inputs.append(
+            {
+                "diagnostic_root": str(Path(root)),
+                "diagnostic_experiment_id": manifest.get("experiment_id"),
+                "diagnostic_protocol_fingerprint": manifest.get("protocol_fingerprint"),
+                "source_experiment_id": source_id,
+                "source_manifest_sha256": source_hash,
+            }
+        )
+
+    fingerprint_payload = {
+        "comparison_signature": json.loads(_comparison_signature(base)),
+        "inputs": inputs,
+    }
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            fingerprint_payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    return {
+        "schema_version": 1,
+        "kind": "future_shadow_diagnostics",
+        "aggregation_kind": "multi_input_comparison",
+        "experiment_id": experiment_dir.name,
+        "status": "aggregated",
+        "planned_job_count": 0,
+        "protocol_fingerprint": fingerprint,
+        "config": config,
+        "provenance": json.loads(json.dumps(base["provenance"])),
+        "aggregation_provenance": {
+            "git_commit": git_commit(Path.cwd()),
+            "git_dirty": git_dirty(Path.cwd()),
+        },
+        "source_experiment_ids": source_ids,
+        "source_manifest_hashes": source_hashes,
+        "comparison_inputs": inputs,
+        "aggregation": {
+            "episodes": episodes,
+            "clips": clips,
+            "error_clips": error_clips,
+            "summary_dir": str(summary_dir),
+        },
+    }
 
 
 def discover_diagnostic_files(
@@ -219,7 +326,7 @@ def _flatten(row: Mapping[str, Any]) -> dict[str, Any]:
     flat["aligned_future_frame_count"] = extra.get("aligned_future_frame_count", 0)
     flat["protocol_fingerprint"] = extra.get("protocol_fingerprint")
     for name in KNOWN_METRICS:
-        flat[name] = metrics.get(name)
+        flat[name] = metrics.get(name, row.get(name))
     return flat
 
 
@@ -247,7 +354,7 @@ def _eligible_metric_value(clip: Mapping[str, Any], metric: str) -> float | None
     if clip.get("status") in {"error", "exception", "skipped"}:
         return None
     metrics = clip.get("metrics") if isinstance(clip.get("metrics"), Mapping) else {}
-    return _finite_number(metrics.get(metric))
+    return _finite_number(metrics.get(metric, clip.get(metric)))
 
 
 def _episode_rows(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -451,6 +558,11 @@ def aggregate_diagnostics(
             + ", ".join(str(path) for path in markers)
         )
     input_paths = [Path(value) for value in input_dirs]
+    if input_paths and list((experiment_dir / "workers").glob("rank_*/diagnostics.jsonl")):
+        raise ValueError(
+            "Multi-input diagnostics require a separate comparison output directory; "
+            "refusing to overwrite a source diagnostic manifest"
+        )
     rows = load_diagnostics(experiment_dir, input_paths)
     flat = [_flatten(row) for row in rows]
     episodes = _episode_rows(rows)
@@ -536,7 +648,17 @@ def aggregate_diagnostics(
         encoding="utf-8",
     )
     manifest_path = experiment_dir / "diagnostic_manifest.json"
-    if manifest_path.is_file():
+    if input_paths:
+        manifest = _comparison_manifest(
+            experiment_dir,
+            input_paths,
+            episodes=len(episodes),
+            clips=len(rows),
+            error_clips=status_counts["error"],
+            summary_dir=summary_dir,
+        )
+        _atomic_json_write(manifest_path, manifest)
+    elif manifest_path.is_file():
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if isinstance(manifest, dict):
             manifest["status"] = "aggregated"

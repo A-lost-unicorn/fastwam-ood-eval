@@ -81,30 +81,41 @@ log() {
   printf '%s | %s\n' "$(date '+%F %T')" "$*"
 }
 
-if command -v nvidia-smi >/dev/null 2>&1; then
-  gpu_name="$(
-    nvidia-smi --id="${gpu_id}" --query-gpu=name --format=csv,noheader \
-      | head -n 1 \
-      | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
-  )"
-  free_gpu_memory_mb="$(
-    nvidia-smi --id="${gpu_id}" --query-gpu=memory.free --format=csv,noheader,nounits \
-      | head -n 1 \
-      | tr -d '[:space:]'
-  )"
-  if [[ ! "${free_gpu_memory_mb}" =~ ^[0-9]+$ ]]; then
-    echo "Could not parse free GPU memory from nvidia-smi." >&2
-    exit 1
-  fi
-  log "physical_gpu=${gpu_id} name=${gpu_name} free_memory_mb=${free_gpu_memory_mb}"
-  if (( free_gpu_memory_mb < min_free_gpu_memory_mb )); then
-    echo "GPU ${gpu_id} has only ${free_gpu_memory_mb} MiB free." >&2
-    echo "Fast-WAM pilot peaked near 23.8 GiB; require at least ${min_free_gpu_memory_mb} MiB." >&2
-    echo "Stop other GPU processes before retrying." >&2
-    exit 1
-  fi
-else
+if ! command -v nvidia-smi >/dev/null 2>&1; then
   echo "nvidia-smi is unavailable; refusing an unattended full run." >&2
+  exit 1
+fi
+
+if ! gpu_name="$(
+  nvidia-smi -i "${gpu_id}" --query-gpu=name --format=csv,noheader 2>&1
+)"; then
+  echo "Failed to query physical GPU ${gpu_id} with nvidia-smi:" >&2
+  printf '%s\n' "${gpu_name}" >&2
+  exit 1
+fi
+gpu_name="${gpu_name//$'\r'/}"
+if [[ -z "${gpu_name}" || "${gpu_name}" == *$'\n'* ]]; then
+  echo "Unexpected GPU name returned for physical GPU ${gpu_id}: ${gpu_name@Q}" >&2
+  exit 1
+fi
+
+if ! free_gpu_memory_mb="$(
+  nvidia-smi -i "${gpu_id}" --query-gpu=memory.free --format=csv,noheader,nounits 2>&1
+)"; then
+  echo "Failed to query free memory for physical GPU ${gpu_id} with nvidia-smi:" >&2
+  printf '%s\n' "${free_gpu_memory_mb}" >&2
+  exit 1
+fi
+free_gpu_memory_mb="${free_gpu_memory_mb//[[:space:]]/}"
+if [[ ! "${free_gpu_memory_mb}" =~ ^[0-9]+$ ]]; then
+  echo "Could not parse free GPU memory from nvidia-smi: ${free_gpu_memory_mb@Q}" >&2
+  exit 1
+fi
+log "physical_gpu=${gpu_id} name=${gpu_name} free_memory_mb=${free_gpu_memory_mb}"
+if (( free_gpu_memory_mb < min_free_gpu_memory_mb )); then
+  echo "GPU ${gpu_id} has only ${free_gpu_memory_mb} MiB free." >&2
+  echo "Fast-WAM pilot peaked near 23.8 GiB; require at least ${min_free_gpu_memory_mb} MiB." >&2
+  echo "Stop other GPU processes before retrying." >&2
   exit 1
 fi
 

@@ -106,18 +106,29 @@ if ! command -v nvidia-smi >/dev/null 2>&1; then
 fi
 
 for gpu_id in "${physical_gpu_ids[@]}"; do
-  gpu_name="$(
-    nvidia-smi --id="${gpu_id}" --query-gpu=name --format=csv,noheader \
-      | head -n 1 \
-      | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
-  )"
-  free_gpu_memory_mb="$(
-    nvidia-smi --id="${gpu_id}" --query-gpu=memory.free --format=csv,noheader,nounits \
-      | head -n 1 \
-      | tr -d '[:space:]'
-  )"
+  if ! gpu_name="$(
+    nvidia-smi -i "${gpu_id}" --query-gpu=name --format=csv,noheader 2>&1
+  )"; then
+    echo "Failed to query physical GPU ${gpu_id} with nvidia-smi:" >&2
+    printf '%s\n' "${gpu_name}" >&2
+    exit 1
+  fi
+  gpu_name="${gpu_name//$'\r'/}"
+  if [[ -z "${gpu_name}" || "${gpu_name}" == *$'\n'* ]]; then
+    echo "Unexpected GPU name returned for physical GPU ${gpu_id}: ${gpu_name@Q}" >&2
+    exit 1
+  fi
+
+  if ! free_gpu_memory_mb="$(
+    nvidia-smi -i "${gpu_id}" --query-gpu=memory.free --format=csv,noheader,nounits 2>&1
+  )"; then
+    echo "Failed to query free memory for physical GPU ${gpu_id} with nvidia-smi:" >&2
+    printf '%s\n' "${free_gpu_memory_mb}" >&2
+    exit 1
+  fi
+  free_gpu_memory_mb="${free_gpu_memory_mb//[[:space:]]/}"
   if [[ ! "${free_gpu_memory_mb}" =~ ^[0-9]+$ ]]; then
-    echo "Could not parse free memory for physical GPU ${gpu_id}." >&2
+    echo "Could not parse free memory for physical GPU ${gpu_id}: ${free_gpu_memory_mb@Q}" >&2
     exit 1
   fi
   log "physical_gpu=${gpu_id} name=${gpu_name} free_memory_mb=${free_gpu_memory_mb}"

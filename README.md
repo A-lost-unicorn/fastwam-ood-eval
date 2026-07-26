@@ -334,10 +334,11 @@ fastwam-ood report-static-calibration \
 identifier，私有 key 独立保存映射；全部媒体完成解码与 hash 审计。当前 human
 annotation 为 0/7，所以这仍不是 future 质量结论。
 
-正式阶段二抽样也已实现，但尚未冻结。v2 草案按 suite/task 选 200 条 Clean，
+正式阶段二抽样也已实现。v2 草案按 suite/task 选 200 条 Clean，
 并强制每个 task 包含 episode index 0；按每个 supported
 suite/task/category/difficulty cell 选 532 条 OOD，另记录 68 个 unsupported
-cell。所有 manifest 仍是 `draft_not_frozen`。正式配置必须设置：
+cell。源 manifest 保持 `draft_not_frozen`，五类 runner 会把 exact job ID
+复制到新的 `ratified_before_diagnostic_outcomes` manifest。正式配置必须设置：
 
 ```yaml
 diagnostics:
@@ -346,9 +347,18 @@ diagnostics:
 ```
 
 阶段一正式 outcome 现已出现，而 v2 草案此前没有通过 clean-tree freeze。
-因此不能在事后把它改名为 FORMAL 预注册 cohort；它最多降级作为 PILOT，或由
-未接触当前 outcome 的独立保管人针对新 holdout/run 冻结新 manifest。完整命令
-和审计边界见
+因此不能在事后把它改名为“阶段一 outcome 前的预注册 cohort”。新的 ratification
+只证明 Phase 2 future 指标产生前 exact selection 未改变，并显式保留这个协议
+偏差。五类后台入口为：
+
+```bash
+CONFIRM_PHASE2_FIVE_CATEGORY=YES \
+ACCEPT_STATIC_THRESHOLD=YES \
+GPU_IDS=0,1,2 \
+bash scripts/run_thought2_five_category_full.sh --background all
+```
+
+完整命令和审计边界见
 [盲审与 outcome-blind 抽样手册](docs/thought2_blind_review_and_sampling.md)。
 
 ## 13. 查看失败视频

@@ -110,13 +110,23 @@ unsupported_strata[]
 selected_jobs[]:
   selection_order/job_id/selection_key/stratum
 planner_provenance
+ratification:                         # 只在 exact post-source-outcome lock
+  draft_manifest_path/draft_manifest_sha256
+  exact_selected_job_ids_preserved=true
+  source_outcomes_absent_at_original_selection=true
+  source_outcomes_available_at_ratification
+  source_outcome_contents_read_for_ratification=false
+ratification_provenance
 ```
 
 validator 会重新读取 source job manifest，复算 source hash、每个 selection key、
 精确顺序、stratum audit 和 cohort identity。`--freeze` 额外要求 source 中还没有
 非空 outcome JSONL、项目 tree clean、supported stratum 没有 shortfall。正式
 diagnostic config 必须设 `require_frozen_cohort=true`；否则
-`draft_not_frozen` 只允许做流程测试。
+`draft_not_frozen` 只允许做流程测试。另一种可接受状态是
+`ratified_before_diagnostic_outcomes`：它要求原 pre-outcome draft hash、
+exact selected IDs、当前 clean commit 和已经存在的 source outcome 文件同时
+留痕；只认证 Phase 2 future 指标前锁定，不等同于 source outcome 前预注册。
 
 ### Label-blind review packet
 

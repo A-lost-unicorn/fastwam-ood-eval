@@ -83,3 +83,15 @@ def test_explicit_probe_strategy_requires_bounded_indices(tmp_path):
                 "diagnostics.max_probes_per_episode=1",
             ],
         )
+
+
+def test_five_category_formal_template_requires_runner_overrides():
+    cfg = load_config(
+        "configs/studies/thought2_unconditional_formal_five_category.yaml"
+    )
+    assert cfg.diagnostics.enabled is True
+    assert cfg.diagnostics.mode == "unconditional_future"
+    assert cfg.diagnostics.require_frozen_cohort is True
+    assert cfg.diagnostics.num_inference_steps == 20
+    assert cfg.diagnostics.max_probes_per_episode == 2
+    assert cfg.policy.test_time_future_imagination is False

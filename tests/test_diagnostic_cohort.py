@@ -12,6 +12,7 @@ from fastwam_ood_eval.config import load_config
 from fastwam_ood_eval.diagnostics import diagnostic_cohort
 from fastwam_ood_eval.diagnostics.diagnostic_cohort import (
     plan_diagnostic_cohort,
+    ratify_diagnostic_cohort,
     validate_diagnostic_cohort,
 )
 from fastwam_ood_eval.diagnostics.diagnostic_runner import load_source_jobs
@@ -135,7 +136,7 @@ def test_formal_runner_rejects_draft_cohort(tmp_path):
     assert diagnostic_cfg.to_dict()["diagnostics"][
         "require_frozen_cohort"
     ] is True
-    with pytest.raises(RuntimeError, match="require a cohort frozen"):
+    with pytest.raises(RuntimeError, match="require a certified frozen cohort"):
         load_source_jobs(diagnostic_cfg)
 
 
@@ -210,6 +211,118 @@ def test_cohort_validation_detects_source_job_manifest_change(tmp_path):
         validate_diagnostic_cohort(cohort_path, source)
 
 
+def test_pre_outcome_draft_can_be_ratified_before_diagnostic_metrics(
+    tmp_path,
+    monkeypatch,
+):
+    cfg, source = _source(tmp_path)
+    monkeypatch.setattr(diagnostic_cohort, "git_dirty", lambda path: True)
+    monkeypatch.setattr(
+        diagnostic_cohort, "git_commit", lambda path: "draft-commit"
+    )
+    draft_path = tmp_path / "draft.json"
+    draft = plan_diagnostic_cohort(
+        source_dir=source,
+        output_path=draft_path,
+        seed=13,
+        per_stratum=1,
+        stratum_fields=["task_id"],
+    )
+    assert draft["frozen"] is False
+    outcome = source / "workers/rank_0/episode_results.jsonl"
+    outcome.parent.mkdir(parents=True)
+    outcome.write_text('{"success": true}\n', encoding="utf-8")
+
+    monkeypatch.setattr(diagnostic_cohort, "git_dirty", lambda path: False)
+    monkeypatch.setattr(
+        diagnostic_cohort, "git_commit", lambda path: "ratify-commit"
+    )
+    ratified_path = tmp_path / "ratified.json"
+    ratified = ratify_diagnostic_cohort(
+        draft_manifest_path=draft_path,
+        source_dir=source,
+        output_path=ratified_path,
+    )
+    assert ratified["frozen"] is True
+    assert ratified["status"] == "ratified_before_diagnostic_outcomes"
+    assert ratified["selected_job_ids"] == draft["selected_job_ids"]
+
+    payload = json.loads(ratified_path.read_text(encoding="utf-8"))
+    assert payload["freeze_scope"] == "phase2_future_consistency_diagnostics"
+    assert payload["ratification"]["exact_selected_job_ids_preserved"] is True
+    assert (
+        payload["ratification"][
+            "source_outcome_contents_read_for_ratification"
+        ]
+        is False
+    )
+    assert payload["ratification_provenance"]["git_dirty"] is False
+
+    formal_cfg = replace(
+        cfg,
+        experiment=replace(
+            cfg.experiment,
+            name="ratified_diagnostic",
+            output_dir=tmp_path / "ratified_diagnostic",
+        ),
+        diagnostics=replace(
+            cfg.diagnostics,
+            enabled=True,
+            mode="unconditional_future",
+            source_experiment_id="source",
+            source_output_dir=source,
+            cohort_manifest_path=ratified_path,
+            require_frozen_cohort=True,
+        ),
+    )
+    assert [job.job_id for job in load_source_jobs(formal_cfg)] == ratified[
+        "selected_job_ids"
+    ]
+
+
+def test_ratification_refuses_dirty_tree_and_post_outcome_draft(
+    tmp_path,
+    monkeypatch,
+):
+    _, source = _source(tmp_path)
+    draft_path = tmp_path / "draft.json"
+    plan_diagnostic_cohort(
+        source_dir=source,
+        output_path=draft_path,
+        seed=5,
+        per_stratum=1,
+        stratum_fields=["task_id"],
+    )
+    outcome = source / "workers/rank_0/episode_results.jsonl"
+    outcome.parent.mkdir(parents=True)
+    outcome.write_text('{"success": true}\n', encoding="utf-8")
+
+    monkeypatch.setattr(diagnostic_cohort, "git_dirty", lambda path: True)
+    with pytest.raises(RuntimeError, match="clean project tree"):
+        ratify_diagnostic_cohort(
+            draft_manifest_path=draft_path,
+            source_dir=source,
+            output_path=tmp_path / "dirty.json",
+        )
+
+    monkeypatch.setattr(diagnostic_cohort, "git_dirty", lambda path: False)
+    post_outcome_draft = json.loads(draft_path.read_text(encoding="utf-8"))
+    post_outcome_draft["source"]["outcome_files_present_at_selection"] = [
+        str(outcome)
+    ]
+    bad_draft = tmp_path / "bad_draft.json"
+    bad_draft.write_text(
+        json.dumps(post_outcome_draft),
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="before source outcomes"):
+        ratify_diagnostic_cohort(
+            draft_manifest_path=bad_draft,
+            source_dir=source,
+            output_path=tmp_path / "bad_ratified.json",
+        )
+
+
 def test_cohort_cli_plans_and_validates(tmp_path, capsys):
     _, source = _source(tmp_path)
     cohort_path = tmp_path / "cli_cohort.json"
@@ -244,3 +357,38 @@ def test_cohort_cli_plans_and_validates(tmp_path, capsys):
     ) == 0
     validated = json.loads(capsys.readouterr().out)
     assert validated["cohort_id"] == planned["cohort_id"]
+
+
+def test_cohort_cli_ratifies_exact_draft(tmp_path, capsys, monkeypatch):
+    _, source = _source(tmp_path)
+    draft_path = tmp_path / "cli_draft.json"
+    plan_diagnostic_cohort(
+        source_dir=source,
+        output_path=draft_path,
+        seed=19,
+        per_stratum=1,
+        stratum_fields=["task_id"],
+    )
+    outcome = source / "workers/rank_0/episode_results.jsonl"
+    outcome.parent.mkdir(parents=True)
+    outcome.write_text('{"success": false}\n', encoding="utf-8")
+    monkeypatch.setattr(diagnostic_cohort, "git_dirty", lambda path: False)
+    monkeypatch.setattr(
+        diagnostic_cohort, "git_commit", lambda path: "ratify-commit"
+    )
+
+    ratified_path = tmp_path / "cli_ratified.json"
+    assert cli.main(
+        [
+            "ratify-diagnostic-cohort",
+            "--draft-manifest",
+            str(draft_path),
+            "--source-dir",
+            str(source),
+            "--output",
+            str(ratified_path),
+        ]
+    ) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["frozen"] is True
+    assert result["status"] == "ratified_before_diagnostic_outcomes"

@@ -127,7 +127,7 @@ def _comparison_signature(manifest: Mapping[str, Any]) -> str:
         "max_probes_per_episode": diagnostics.get("max_probes_per_episode"),
         "explicit_replan_indices": diagnostics.get("explicit_replan_indices"),
         "benchmark": {
-            "suite": benchmark.get("suite"), "control_horizon": benchmark.get("control_horizon"),
+            "control_horizon": benchmark.get("control_horizon"),
             "image_size": benchmark.get("image_size"),
         },
     }
@@ -154,6 +154,21 @@ def _comparison_manifest(
     if isinstance(config.get("experiment"), dict):
         config["experiment"]["name"] = experiment_dir.name
         config["experiment"]["output_dir"] = str(experiment_dir)
+    suites = sorted(
+        {
+            str(
+                ((manifest.get("config") or {}).get("benchmark") or {}).get(
+                    "suite"
+                )
+            )
+            for manifest in concrete
+        }
+    )
+    if isinstance(config.get("benchmark"), dict):
+        config["benchmark"]["suite"] = (
+            suites[0] if len(suites) == 1 else "multiple"
+        )
+        config["benchmark"]["suites"] = suites
 
     inputs: list[dict[str, Any]] = []
     source_ids: list[str] = []
@@ -222,6 +237,7 @@ def _comparison_manifest(
             "clips": clips,
             "error_clips": error_clips,
             "summary_dir": str(summary_dir),
+            "suites": suites,
         },
     }
 

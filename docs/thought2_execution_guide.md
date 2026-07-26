@@ -219,7 +219,12 @@ cohort：
 Clean，并强制包含 episode index 0；每个可运行
 suite/task/category/difficulty cell 抽 1 个 OOD。共 200 Clean + 532 OOD =
 732，另有 68 个 skipped-only cell，supported shortfall 为 0。八份 manifest
-均是 `draft_not_frozen`，不能启动正式分析。
+均是 `draft_not_frozen`，不能直接通过正式 runner 的安全门。
+
+由于这些草案在阶段一 outcome JSONL 产生前已经固定 exact job ID，现在采用
+`ratified_before_diagnostic_outcomes`：不重新抽样，只在 clean commit 上把原
+job ID 锁定到新的 manifest，同时明确披露阶段一 outcome 已经存在。这不是阶段一
+outcome 前的 preregistration，但可以防止根据尚未观察的阶段二 future 指标改样本。
 
 草案覆盖阶段一现有五类扰动；若主文坚持原路线的四类，必须在看 outcome 前决定
 保留 object-layout 还是 robot-init，并重新生成 612 或 622 条的新 manifest。
@@ -229,6 +234,31 @@ Episode 内先聚合 probe、task 内再聚合 cell、suite-stratified task boot
 及 outcome 最小分母见
 [统计分析计划](thought2_statistical_analysis_plan.md)；该计划仍是 DRAFT。
 
+### 9.1 五类后台 runner
+
+已提供完整、可续跑的入口：
+
+```bash
+CONFIRM_PHASE2_FIVE_CATEGORY=YES \
+ACCEPT_STATIC_THRESHOLD=YES \
+GPU_IDS=0,1,2 \
+bash scripts/run_thought2_five_category_full.sh --background all
+```
+
+它依次执行：
+
+1. 精确 ratify 八份 cohort，验证总计 732；
+2. 100 Clean + 100 OOD static/no-op calibration；
+3. 自动聚合，且仅在全部 freeze-eligibility gate 通过时读取阈值；
+4. 依次运行四个 suite 的 Clean 与 OOD shadow diagnostics；
+5. 生成八份分组报告和一份四 suite combined 报告。
+
+默认输出是 `outputs/thought2/five_category_formal_v1/`。脚本要求项目和三个
+上游 clean、GPU 空闲显存至少 24,000 MiB，并使用 incomplete-only resume。
+纯 workload 约 17.7 GPU-hours；3 卡理想 5.9 h，包含 10 个进程组冷启动、I/O
+和尾部不均衡后建议预留 8–12 h。4 卡可通过 `GPU_IDS=0,1,2,3` 启动，但应先
+确认第四张卡和 EGL 均正常。
+
 ## 10. 正式完成门槛
 
 - **已通过 PILOT**：20-step Clean/OOD 无 error，媒体、动作复现和时间对齐抽检通过。
@@ -236,9 +266,9 @@ Episode 内先聚合 probe、task 内再聚合 cell、suite-stratified task boot
   候选阈值 `0.013223`。
 - **待完成**：扩展到预注册 200 条并人工冻结 static threshold；当前
   candidate 不得进入正式表。
-- **已生成草案、待冻结**：outcome-blind v2 为 200 Clean + 532 OOD，
-  0 supported shortfall、68 unsupported cell；当前项目 tree dirty，因此八份
-  manifest 全部是 `draft_not_frozen`。
+- **已生成草案、待 ratify**：outcome-blind v2 为 200 Clean + 532 OOD，
+  0 supported shortfall、68 unsupported cell；runner 会保留全部 exact job ID，
+  生成范围为 Phase 2 diagnostic 的 ratified manifest。
 - **已实现**：正式配置可设 `require_frozen_cohort=true`，草案会在模型加载和
   environment reset 前被拒绝。
 - **future PILOT 已验证**：项目与三个上游 checkout 的输入 manifest dirty

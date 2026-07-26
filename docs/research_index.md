@@ -22,7 +22,7 @@
 | 阶段二 A：unconditional future consistency | 已实现；读取阶段一 source manifest，只写独立输出 | 2-step smoke 1 episode；20-step Clean/OOD pilot 5 episodes / 7 probes / 14 aligned future frames / 0 error | **PILOT 完成，正式分析未完成**。当前趋势只用于形成假设 |
 | 阶段二校准：static/no-op null | 独立命令、输出、resume、聚合和 freeze gate 已实现 | 2 Clean + 五类 OOD 共 7/7 eligible；候选阈值 `0.013223` | **PILOT 完成，阈值未冻结**。仅 7/200，且 v1 未预先固定 quantile 插值法 |
 | 阶段二盲审 | public packet/private key 分离与泄漏校验已实现 | 真实 pilot 7 cases / 28 media 全量解码；0 sensitive public key | **流程 PILOT 完成，人工标注未开始**。不得写成人工质量结果 |
-| 阶段二正式抽样 | outcome-blind planner、anchor 与 formal frozen gate 已实现 | v2 草案在阶段一 outcome 前生成，但 `frozen=false`；200 Clean + 532 OOD | **不能追溯升级为 FORMAL**。阶段一 outcome 已存在，需要独立新 split/盲化保管人或降级为 PILOT |
+| 阶段二正式抽样 | outcome-blind planner、anchor、exact-ratification 与 formal gate 已实现 | v2 草案在阶段一 outcome 前生成但未冻结；200 Clean + 532 OOD | **待运行时 ratify**。只认证 Phase 2 future 指标前 exact job ID 不变；不冒充阶段一 outcome 前 preregistration |
 | 阶段二统计协议 | episode→task 分层 estimand、task-cluster bootstrap、missing/uncertain/outcome gate 已写成 DRAFT | 合成双 reviewer 标签验证 agreement 工具；无正式效应估计 | **尚未冻结**。primary metric、bootstrap、human budget 和 outcome gate 待确认 |
 | 阶段二 B：action-conditioned future consistency | 严格门禁、schema、runner、测试已实现 | CPU/mock 与门禁测试通过 | **阻塞**。官方 release 为 `action_conditioned=false`，且没有可信匹配 checkpoint |
 | 阶段三：Future-to-Action Adapter | 研究与隔离方案已设计 | 无训练或真实评测结果 | **未开始** |
@@ -76,12 +76,12 @@ source manifest hash。Static calibration 另行规划独立 task/seed，只运�
 no-op，不读取 pilot success/OOD 标签。这些输出目录必须互不包含；程序会在模型
 加载前拒绝混写。
 
-正式 outcome-blind manifest 还要求 source outcome JSONL 尚未出现，并以
-`require_frozen_cohort=true` 阻止 draft 被误运行。`P1-FORMAL-v1` 的 outcome
-已经出现，因此此前 `frozen=false` 的 v2 草案不能在事后改名为预注册 FORMAL；
-它最多作为固定规则的 PILOT，或由没有接触当前 outcome 的独立保管人基于新
-holdout/run 生成新的正式 cohort。Blind packet 与 private unblinding key 仍须
-使用彼此分离、且不位于任一 diagnostic source 内的目录。
+`require_frozen_cohort=true` 会阻止 draft 被误运行。新 holdout 仍应在 source
+outcome JSONL 前使用 `frozen_before_source_outcomes`；现有 v2 则走更窄的
+`ratified_before_diagnostic_outcomes`：保留全部原 job ID 和 draft hash，明确
+记录阶段一 outcome 在 ratification 时已经存在。它防止根据阶段二 future metric
+改样本，但不能声称对阶段一结果盲化。Blind packet 与 private unblinding key
+仍须使用彼此分离、且不位于任一 diagnostic source 内的目录。
 
 ### 4.3 重新运行阶段一
 
@@ -145,13 +145,13 @@ OOD 一致性下降假设”，不能进入论文结论表。
    JSONL 上通过重跑合法 `max_steps` 美化结果。
 2. 对 3,563 个失败视频制定 suite/category/level/task 分层、reviewer 和
    agreement 规则，再做描述性 failure taxonomy；报告 reviewed 分母。
-3. 阶段二当前 v2 cohort 未在 outcome 前通过 freeze gate，不能追溯升级为
-   FORMAL。选择“明确降级为 PILOT”或“由未接触 outcome 的独立保管人对新
-   holdout/run 冻结 cohort”，并记录这一协议偏差。
-4. 将已完成的 7 条 no-op calibration pilot 扩展到预注册的 200 条
+3. 五类 732 条方案已经锁定为执行计划；提交当前 runner/ratification/聚合代码，
+   然后在 clean tree 上后台启动，保留“阶段一 outcome 已存在”的 protocol
+   deviation。
+4. runner 首先把已完成的 7 条 no-op calibration pilot 扩展到预注册的 200 条
    （Clean/OOD 各 100、五类 OOD 各 20）；两份 formal 配置已通过
    `assigned=100, pending=100, skipped=0` 的只读计划审计，待在 clean commit
-   上真实运行并人工冻结阈值。
+   上真实运行，并只在所有自动 gate 通过后接受阈值。
 5. 由两名 reviewer 对已生成的 7-case pilot packet 做第一轮流程演练；它不替代
    正式 packet。
 6. 只有阶段一主表和阶段二正式一致性结果稳定后，冻结 Adapter 输入和缓存

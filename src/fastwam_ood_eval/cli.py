@@ -42,6 +42,7 @@ from fastwam_ood_eval.diagnostics.diagnostic_runner import (
 )
 from fastwam_ood_eval.diagnostics.diagnostic_cohort import (
     plan_diagnostic_cohort,
+    ratify_diagnostic_cohort,
     validate_diagnostic_cohort,
 )
 from fastwam_ood_eval.diagnostics.report import generate_diagnostic_report
@@ -330,6 +331,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     validate_cohort.add_argument("--manifest", required=True, type=Path)
     validate_cohort.add_argument("--source-dir", required=True, type=Path)
+    ratify_cohort = subparsers.add_parser(
+        "ratify-diagnostic-cohort",
+        help=(
+            "Lock an exact pre-outcome draft before formal Phase 2 "
+            "diagnostic metrics"
+        ),
+    )
+    ratify_cohort.add_argument(
+        "--draft-manifest", required=True, type=Path
+    )
+    ratify_cohort.add_argument("--source-dir", required=True, type=Path)
+    ratify_cohort.add_argument("--output", required=True, type=Path)
     return parser
 
 
@@ -1051,6 +1064,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = validate_diagnostic_cohort(
                 args.manifest,
                 args.source_dir,
+            )
+            print(
+                json.dumps(
+                    {
+                        key: value
+                        for key, value in result.items()
+                        if key != "selected_job_ids"
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+            )
+            return 0
+        if args.command == "ratify-diagnostic-cohort":
+            result = ratify_diagnostic_cohort(
+                draft_manifest_path=args.draft_manifest,
+                source_dir=args.source_dir,
+                output_path=args.output,
             )
             print(
                 json.dumps(

@@ -3,9 +3,10 @@
 更新日期：2026-07-26
 
 > 状态更新：`P1-FORMAL-v1` outcome 已于 2026-07-26 完成，而 v2 cohort
-> 在此前保持 `frozen=false`。因此当前 v2 不能追溯升级为 FORMAL
-> preregistration；本手册的 freeze 命令只适用于新的、尚无 outcome 的
-> holdout/run。
+> 在此前保持 `frozen=false`。因此当前 v2 不能追溯升级成“阶段一 outcome
+> 之前的 preregistration”。项目现增加一个范围更窄的 exact-ratification：
+> 保留原草案全部 job ID，在正式 future diagnostic 指标产生前锁定，并明确记录
+> 阶段一 outcome 在 ratification 时已经存在。两种证据资格不得混称。
 
 ## 1. 本手册解决什么问题
 
@@ -257,8 +258,13 @@ frozen = false
 ```
 
 生成当时的原因是 planner 所在项目 tree 有尚未提交的实现和文档修改。
-现在 `P1-FORMAL-v1` outcome 已存在，v2 即使规则可重放也不能事后改写为
-`frozen=true`；它最多作为 PILOT。旧目录
+现在 `P1-FORMAL-v1` outcome 已存在，v2 不能原地改写为
+`frozen_before_source_outcomes`。但因为八份草案记录了生成时
+`outcome_files_present_at_selection=[]`，且当前 source job-manifest hash 与
+selected job ID 仍可逐项重放，所以可以生成一份**新的**、范围明确的
+`ratified_before_diagnostic_outcomes` manifest。该 manifest 只证明阶段二
+future-consistency 指标产生前没有重新抽样；不能声称研究者此时不知道阶段一
+总体结果。旧目录
 `thought2_outcome_blind_cohort_draft/` 是已废弃 v1：它没有强制 Clean
 `episode_index=0` anchor，不能用于正式配对；保留该目录只为记录失败尝试。
 
@@ -273,7 +279,9 @@ v2 的 cohort ID：
 
 缩写只用于阅读；机器分析必须使用 manifest 内的完整 ID 和 hash。
 
-## 8. 新 holdout/run 如何真正冻结
+## 8. 两种 cohort 锁定资格
+
+### 8.1 新 holdout/run：阶段一 outcome 前冻结
 
 冻结必须发生在**项目代码提交且 tree clean之后、目标 source 的任何 outcome
 JSONL 出现之前**。当前 `P1-FORMAL-v1` 已越过这个时间点，下面命令不能用于
@@ -328,6 +336,32 @@ fastwam-ood validate-diagnostic-cohort \
   --source-dir <matching-thought1-source-dir>
 ```
 
+### 8.2 现有 v2：阶段二 diagnostic 指标前精确 ratify
+
+这个路径不重新随机抽样，只复制并锁定原 v2 的精确 job ID。它要求：
+
+- 原 draft 可根据未改变的 source job-manifest hash 精确重放；
+- draft 明确记录生成时没有 source outcome JSONL；
+- 当前项目 tree clean；
+- source outcome 现在确实存在；
+- 输出使用新路径，原 draft 永远不改写。
+
+单个 manifest 的命令为：
+
+```bash
+fastwam-ood ratify-diagnostic-cohort \
+  --draft-manifest \
+    outputs/thought2_outcome_blind_cohort_draft_v2/libero_spatial/clean.json \
+  --source-dir outputs/thought1/fastwam/libero_spatial/clean \
+  --output \
+    outputs/thought2/five_category_formal_v1/cohorts/libero_spatial/clean.json
+```
+
+正式五类 runner 会对八份 manifest 自动执行或验证这个动作，并检查合计恰为
+`200 + 532 = 732`。论文方法部分必须使用
+“locked before Phase 2 future-diagnostic outcomes”，不能写成
+“pre-registered before Phase 1 outcomes”。
+
 正式 diagnostic 配置必须同时写：
 
 ```yaml
@@ -374,10 +408,11 @@ episode 长度都不同。理想均衡时约为 3 GPU 上 5.9 小时或 4 GPU �
 
 ## 11. 当前下一步
 
-1. 决定正式主分析采用五类 732 条，还是四类 612/622 条。
-2. 将当前实现提交，在 clean tree 上按最终类别方案重新生成 `--freeze` manifests。
-3. 再启动阶段一正式 rollout；若 outcome JSONL 已经出现，planner 会拒绝补做
-   “pre-outcome freeze”认证。
-4. 完成并人工冻结 200 条 static/no-op threshold。
-5. 使用 `require_frozen_cohort=true` 的 suite-specific 配置运行阶段二正式
-   shadow diagnostics，然后生成正式盲审 packet。
+1. 当前执行方案已选择五类 732 条；四类 612/622 保留为未采用备选。
+2. 提交 runner、ratification 与聚合实现，使项目 tree clean。
+3. 后台 runner 先完成 200 条 static/no-op threshold，只有全部自动 gate 通过
+   才接受候选阈值。
+4. 对八份 v2 exact-ratify，并使用 `require_frozen_cohort=true` 运行八个
+   suite×condition shadow diagnostic 组。
+5. 完成后冻结统计分析计划、生成正式盲审 packet；当前自动总报告仍是
+   episode-weighted 描述结果，不能替代 task-cluster inferential analysis。

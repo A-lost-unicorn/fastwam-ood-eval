@@ -6,7 +6,9 @@ import hashlib
 import json
 import os
 import tempfile
+import time
 from collections import defaultdict
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -464,6 +466,119 @@ def plan_diagnostic_cohort(
     return validate_diagnostic_cohort(output_path, source_dir)
 
 
+def ratify_diagnostic_cohort(
+    *,
+    draft_manifest_path: Path,
+    source_dir: Path,
+    output_path: Path,
+) -> dict[str, Any]:
+    """Lock an exact pre-existing draft before any formal diagnostic metrics.
+
+    This is deliberately weaker than ``frozen_before_source_outcomes``.  It is
+    intended for a draft that was generated while source outcomes were absent,
+    but was not formally frozen because the planner tree was dirty.  Ratifying
+    preserves every selected job exactly and records that source outcomes are
+    now available.  It must never be described as retrospective
+    pre-registration before the source outcomes.
+    """
+
+    draft_manifest_path = Path(draft_manifest_path)
+    source_dir = Path(source_dir)
+    output_path = Path(output_path)
+    if output_path.exists():
+        raise FileExistsError(
+            f"Ratified diagnostic cohort already exists; use a fresh path: {output_path}"
+        )
+    if draft_manifest_path.resolve() == output_path.resolve():
+        raise ValueError("Ratification must write a new manifest")
+    if source_dir.resolve() in output_path.resolve().parents:
+        raise ValueError(
+            "Ratified cohort output must be outside the source experiment"
+        )
+
+    validated = validate_diagnostic_cohort(
+        draft_manifest_path,
+        source_dir,
+    )
+    if (
+        validated.get("frozen") is not False
+        or validated.get("status") != "draft_not_frozen"
+    ):
+        raise RuntimeError("Only an unfrozen diagnostic cohort draft may be ratified")
+    try:
+        draft = json.loads(draft_manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"Invalid diagnostic cohort draft: {draft_manifest_path}"
+        ) from exc
+    if not isinstance(draft, dict):
+        raise RuntimeError(
+            f"Invalid diagnostic cohort draft object: {draft_manifest_path}"
+        )
+    source = draft.get("source")
+    selection = draft.get("selection")
+    if not isinstance(source, Mapping) or not isinstance(selection, Mapping):
+        raise RuntimeError("Diagnostic cohort draft lacks source/selection metadata")
+    if source.get("outcome_files_present_at_selection") != []:
+        raise RuntimeError(
+            "Draft was not generated before source outcomes; it cannot be ratified"
+        )
+    if (
+        selection.get("outcome_fields_read") is not False
+        or selection.get("episode_result_files_read") is not False
+    ):
+        raise RuntimeError(
+            "Draft does not certify an outcome-independent selection rule"
+        )
+
+    outcome_files = _outcome_files(source_dir)
+    if not outcome_files:
+        raise RuntimeError(
+            "Source outcomes are still absent; use plan-diagnostic-cohort --freeze "
+            "instead of the weaker post-source-outcome ratification"
+        )
+    project_dirty = git_dirty(Path.cwd())
+    if project_dirty is not False:
+        raise RuntimeError(
+            "Ratification requires an explicitly clean project tree"
+        )
+
+    payload = deepcopy(draft)
+    payload["status"] = "ratified_before_diagnostic_outcomes"
+    payload["frozen"] = True
+    payload["freeze_scope"] = "phase2_future_consistency_diagnostics"
+    payload["ratification"] = {
+        "draft_manifest_path": str(draft_manifest_path),
+        "draft_manifest_sha256": _sha256(draft_manifest_path),
+        "original_cohort_id": draft.get("cohort_id"),
+        "exact_selected_job_ids_preserved": True,
+        "source_outcomes_absent_at_original_selection": True,
+        "source_outcomes_available_at_ratification": outcome_files,
+        "source_outcome_contents_read_for_ratification": False,
+        "ratified_at_ns": time.time_ns(),
+    }
+    payload["ratification_provenance"] = {
+        "git_commit": git_commit(Path.cwd()),
+        "git_dirty": project_dirty,
+        "implementation_sha256": _sha256(Path(__file__)),
+    }
+    payload["interpretation"] = (
+        "The exact manifest-only selection was generated before source outcome "
+        "files existed and is now locked before formal future-diagnostic metrics. "
+        "Source outcomes existed at ratification, so this artifact is not a "
+        "pre-registration before source outcomes and must not be described as one."
+    )
+    payload["limitations"] = [
+        "The original planner tree was not required to be clean; exact job IDs "
+        "are protected by deterministic replay and the original draft hash.",
+        "Phase 1 source outcomes existed at ratification.",
+        "The ratification certifies selection stability for Phase 2 consistency "
+        "analysis, not blindness to already reported Phase 1 aggregate results.",
+    ]
+    _atomic_json(output_path, payload)
+    return validate_diagnostic_cohort(output_path, source_dir)
+
+
 def validate_diagnostic_cohort(
     manifest_path: Path,
     source_dir: Path,
@@ -611,13 +726,83 @@ def validate_diagnostic_cohort(
                 f"Diagnostic cohort selection summary is invalid: {key}"
             )
     if payload.get("frozen") is True:
-        if (
-            payload.get("status") != "frozen_before_source_outcomes"
-            or source.get("outcome_files_present_at_selection") != []
-            or payload.get("planner_provenance", {}).get("git_dirty")
-            is not False
-        ):
-            raise RuntimeError("Frozen diagnostic cohort lacks freeze evidence")
+        status = payload.get("status")
+        if status == "frozen_before_source_outcomes":
+            if (
+                source.get("outcome_files_present_at_selection") != []
+                or payload.get("planner_provenance", {}).get("git_dirty")
+                is not False
+            ):
+                raise RuntimeError(
+                    "Frozen diagnostic cohort lacks pre-source-outcome evidence"
+                )
+        elif status == "ratified_before_diagnostic_outcomes":
+            ratification = payload.get("ratification")
+            ratification_provenance = payload.get(
+                "ratification_provenance"
+            )
+            if not isinstance(ratification, Mapping) or not isinstance(
+                ratification_provenance, Mapping
+            ):
+                raise RuntimeError(
+                    "Ratified diagnostic cohort lacks ratification evidence"
+                )
+            draft_path = Path(
+                str(ratification.get("draft_manifest_path", ""))
+            )
+            try:
+                draft_payload = json.loads(
+                    draft_path.read_text(encoding="utf-8")
+                )
+            except (OSError, json.JSONDecodeError):
+                draft_payload = None
+            if (
+                source.get("outcome_files_present_at_selection") != []
+                or ratification.get(
+                    "source_outcomes_absent_at_original_selection"
+                )
+                is not True
+                or not ratification.get(
+                    "source_outcomes_available_at_ratification"
+                )
+                or ratification.get(
+                    "source_outcome_contents_read_for_ratification"
+                )
+                is not False
+                or ratification.get(
+                    "exact_selected_job_ids_preserved"
+                )
+                is not True
+                or ratification.get("original_cohort_id")
+                != payload.get("cohort_id")
+                or ratification_provenance.get("git_dirty") is not False
+                or not draft_path.is_file()
+                or draft_path.resolve() == manifest_path.resolve()
+                or not isinstance(draft_payload, Mapping)
+                or draft_payload.get("frozen") is not False
+                or draft_payload.get("status") != "draft_not_frozen"
+                or ratification.get("draft_manifest_sha256")
+                != _sha256(draft_path)
+            ):
+                raise RuntimeError(
+                    "Ratified diagnostic cohort evidence is incomplete or changed"
+                )
+            original = validate_diagnostic_cohort(
+                draft_path,
+                source_dir,
+            )
+            if (
+                original.get("frozen") is not False
+                or original.get("cohort_id") != payload.get("cohort_id")
+                or original.get("selected_job_ids") != recorded_ids
+            ):
+                raise RuntimeError(
+                    "Ratified diagnostic cohort no longer matches its draft"
+                )
+        else:
+            raise RuntimeError(
+                "Frozen diagnostic cohort has an unsupported certification status"
+            )
     elif (
         payload.get("frozen") is not False
         or payload.get("status") != "draft_not_frozen"
@@ -659,5 +844,6 @@ __all__ = [
     "ALLOWED_STRATUM_FIELDS",
     "COHORT_SCHEMA",
     "plan_diagnostic_cohort",
+    "ratify_diagnostic_cohort",
     "validate_diagnostic_cohort",
 ]

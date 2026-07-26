@@ -39,7 +39,13 @@ def _row(job_id: str, probe: int, *, success: bool, condition: str, value: float
     }
 
 
-def _manifest(*, fingerprint: str, inference_steps: int = 20, planned_jobs: int = 2) -> dict:
+def _manifest(
+    *,
+    fingerprint: str,
+    inference_steps: int = 20,
+    planned_jobs: int = 2,
+    suite: str = "suite",
+) -> dict:
     return {
         "kind": "future_shadow_diagnostics",
         "protocol_fingerprint": fingerprint,
@@ -48,7 +54,7 @@ def _manifest(*, fingerprint: str, inference_steps: int = 20, planned_jobs: int 
             "checkpoint": {"path": "same.pt", "model_name": "same"},
             "benchmark": {
                 "backend": "mock",
-                "suite": "suite",
+                "suite": suite,
                 "control_horizon": 16,
                 "image_size": [224, 448],
             },
@@ -142,6 +148,54 @@ def test_multi_input_rejects_incompatible_inference_protocols(tmp_path):
         )
     with pytest.raises(ValueError, match="incompatible"):
         aggregate_diagnostics(tmp_path / "comparison", roots)
+
+
+def test_multi_input_accepts_multiple_suites_and_records_them(tmp_path):
+    target = tmp_path / "comparison"
+    roots = [tmp_path / "spatial", tmp_path / "goal"]
+    for index, root in enumerate(roots):
+        worker = root / "workers" / "rank_0"
+        worker.mkdir(parents=True)
+        fingerprint = f"fp-{index}"
+        suite = ("libero_spatial", "libero_goal")[index]
+        (root / "diagnostic_manifest.json").write_text(
+            json.dumps(
+                _manifest(
+                    fingerprint=fingerprint,
+                    planned_jobs=1,
+                    suite=suite,
+                )
+            ),
+            encoding="utf-8",
+        )
+        row = _row(
+            f"job-{index}",
+            0,
+            success=True,
+            condition="clean",
+            value=float(index + 1),
+        )
+        row["suite"] = suite
+        row["extra"]["protocol_fingerprint"] = fingerprint
+        (worker / "diagnostics.jsonl").write_text(
+            json.dumps(row) + "\n",
+            encoding="utf-8",
+        )
+
+    metrics = aggregate_diagnostics(target, roots)
+    assert metrics["episodes"] == 2
+    manifest = json.loads(
+        (target / "diagnostic_manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["config"]["benchmark"]["suite"] == "multiple"
+    assert manifest["config"]["benchmark"]["suites"] == [
+        "libero_goal",
+        "libero_spatial",
+    ]
+    assert manifest["aggregation"]["suites"] == [
+        "libero_goal",
+        "libero_spatial",
+    ]
 
 
 def test_aggregate_refuses_to_write_into_thought1_source(tmp_path):

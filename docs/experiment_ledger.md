@@ -24,6 +24,7 @@
 | `P2-BLIND-PACKET-PILOT-v1` | 2026-07-23 | 2 / WORKFLOW PILOT | 20-step Clean/OOD diagnostic 输入；public packet/private key 分离 | 7 cases / 28 media；0 sensitive public key；全媒体可解码；human labels 0/7 | 只证明盲审链路，不是人工 future 质量结果 |
 | `P2-COHORT-FORMAL-DRAFT-v2` | 2026-07-23 | 2 / PLAN | 八份 outcome-blind manifests；seed `20260724` | Clean 200 + OOD 532；68 unsupported；0 supported shortfall；Clean 含 episode-0 anchor | `draft_not_frozen`；类别方案和 clean commit 待定 |
 | `P2-SAP-DRAFT-v1` | 2026-07-23 | 2 / ANALYSIS PLAN | `thought2_statistical_analysis_plan.md` | 先 episode 后 task 聚合；suite-stratified task bootstrap；human/outcome/missing gate | 未冻结；不得据此声称已预注册或已有正式效应 |
+| `P2A-FIVE-CATEGORY-FULL-PLAN-v1` | 2026-07-26 | 2A / FORMAL DATA-COLLECTION PLAN | `run_thought2_five_category_full.sh` + formal five-category template | static 100+100；diagnostic 200 Clean + 532 OOD；8 suite×condition 组；20 video steps、≤2 probes/episode | 实现与 732-job dry-run 已审计，真实 GPU run 尚未启动；ratification 只覆盖 Phase 2 指标前锁定 |
 
 ### `P1-FORMAL-v1` 机器证据
 
@@ -187,7 +188,10 @@
   robot-init 120。
 - 八份 v2 manifest 均可根据 source hash 和 seed 精确重放，但当时项目 tree
   dirty，故 `frozen=false/status=draft_not_frozen`。现在 outcome 已存在，
-  不能把它们追溯改成 FORMAL；`require_frozen_cohort=true` 应继续拒绝运行。
+  不能把它们追溯称为阶段一 outcome 前预注册。新增
+  `ratified_before_diagnostic_outcomes` 只复制并锁定原 exact job ID，记录 draft
+  hash 和 source outcome 已存在；未 ratify 的 draft 仍由
+  `require_frozen_cohort=true` 拒绝。
 - 原始路线说第四类采用“layout 或 robot-init”，而现有阶段一计划覆盖五类。
   因此 732 仍是覆盖草案：排除 robot-init 后为 612，排除 layout 后为 622；
   必须在查看正式 outcome 前选择并生成新 ID。

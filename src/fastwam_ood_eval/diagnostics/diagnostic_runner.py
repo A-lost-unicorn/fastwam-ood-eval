@@ -177,8 +177,8 @@ def load_source_jobs(cfg: EvalConfig) -> list[EvaluationJob]:
             and cohort.get("frozen") is not True
         ):
             raise RuntimeError(
-                "Formal diagnostics require a cohort frozen before source "
-                f"outcomes, but this manifest is {cohort.get('status')!r}: "
+                "Formal diagnostics require a certified frozen cohort, but "
+                f"this manifest is {cohort.get('status')!r}: "
                 f"{cohort_path}"
             )
         by_id = {job.job_id: job for job in selected}

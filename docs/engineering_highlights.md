@@ -9,7 +9,7 @@
 | 项目 | 状态 | 可用证据 |
 | --- | --- | --- |
 | 配置、planner、adapter、分片、resume、聚合 | 已实现 | `src/`、`configs/`、`tests/` |
-| 自动化测试 | 已通过 | `pytest -q`：166 passed；覆盖阶段一评测、PyTorch 2.6+ 安全边界、LIBERO-Plus 10,030 行路径审计、阶段二诊断、static calibration、label-blind packet 与 outcome-blind freeze 门禁 |
+| 自动化测试 | 已通过 | `pytest -q`：173 passed；覆盖阶段一评测、PyTorch 2.6+ 安全边界、LIBERO-Plus 10,030 行路径审计、阶段二诊断、static calibration、label-blind packet、cohort ratification 与 freeze 门禁 |
 | Conda 环境与激活入口 | 已配置 | `scripts/create_env.sh`、`scripts/activate_env.sh` |
 | checkpoint/stats | 已下载并人工校验 | checkpoint SHA-256 `1000437c...a49579`；stats SHA-256 `30f81ad7...68638` |
 | FastWAM 公共运行时模型 | 已下载并逐文件校验 | `scripts/download_fastwam_runtime_models.sh`；T5、VAE、tokenizer 共约 11.9 GiB |
@@ -21,7 +21,7 @@
 | 阶段一鲁棒性结论 | 可正式报告 | Clean 97.25%→OOD 47.70%，drop 49.55 pp；camera 15.13% 最敏感，light 81.88% 最稳健 |
 | 阶段二 2A unconditional future | 20-step PILOT 已通过 | smoke 后完成 Clean/OOD 5 episodes、7 probes、14 aligned future frames、0 error；全部媒体可解码 |
 | 阶段二标签盲审 | WORKFLOW PILOT 已通过 | 7 cases / 28 media；public/private hash 校验和全量解码通过；human labels 仍为 0/7 |
-| 阶段二 outcome-blind 抽样 | DRAFT 已生成但错过正式冻结窗口 | 200 Clean + 532 OOD；阶段一 outcome 出现前 `frozen=false`，现在不能追溯升级为 FORMAL |
+| 阶段二 outcome-blind 抽样 | DRAFT 已生成；exact-ratification 已实现 | 200 Clean + 532 OOD；不能追溯称为阶段一 outcome 前预注册，但可在 Phase 2 future 指标前锁定原 job ID |
 | 阶段二 2B action-conditioned future | 严格阻塞 | release 配置为 `action_conditioned=false`，且不存在通过 provenance 门禁的匹配 checkpoint |
 
 ## 2. 可以对外说明的工程亮点
@@ -210,7 +210,9 @@
   reset 前失败。
 - 当前证据：真实 7-case packet 的 28 个媒体完成 hash/解码审计；v2 抽样草案为
   200 Clean + 532 OOD，但它在阶段一 outcome 前没有通过 clean-tree freeze。
-  现在正式 outcome 已存在，草案不能追溯升级为 FORMAL；门禁应继续拒绝它。
+  现在正式 outcome 已存在，草案不能追溯称为阶段一 outcome 前预注册；新增
+  exact-ratification 保留原 draft hash/job ID，并把认证范围限制为 Phase 2
+  future metric 前锁定。未 ratify 的 draft 仍会被正式门禁拒绝。
 
 ### 3.19 NVIDIA 驱动热更新会让 full runner 在模型加载前失败
 

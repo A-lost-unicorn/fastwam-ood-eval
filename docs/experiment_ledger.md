@@ -1,6 +1,6 @@
 # 实验、卡点与结论台账
 
-更新日期：2026-07-23
+更新日期：2026-07-26
 
 本台账只记录可追溯事实。机器工件是权威来源，本文是便于论文、周报、简历和面试使用的索引。
 
@@ -12,6 +12,7 @@
 | `P1-OOD-SMOKE-v1` | 2026-07-22 | 1 / SMOKE | `configs/eval_ood_smoke.yaml` | 4 completed，4 success，0 exception | 只证明 camera/light 链路 |
 | `P1-OOD-PILOT-v1` | 2026-07-22 | 1 / PILOT | `configs/eval_ood_pilot.yaml` | 9 planned，8 attempted，2 success，1 skipped，0 exception | 不得作为正式 OOD 成功率 |
 | `P1-FORMAL-PLAN-v1` | 2026-07-22 | 1 / PLAN | `outputs/thought1/.../job_manifest.jsonl` | 800 Clean；6,771 OOD runnable；68 skipped | 分母已审计，rollout 未运行 |
+| `P1-FORMAL-v1` | 2026-07-24–26 | 1 / FORMAL | 8 个 `outputs/thought1/fastwam/<suite>/<condition>` source | Clean 778/800=97.25%；OOD 3,230/6,771=47.70%；drop 49.55 pp；68 skipped；0 exception | 支持当前五类 LIBERO-Plus 环境 shift 的正式鲁棒性结论 |
 | `P2A-CLEAN-SMOKE-v1` | 2026-07-23 | 2A / SMOKE | `configs/studies/thought2_unconditional_smoke.yaml`；只读 `outputs/clean_smoke` | 1 job，1 probe，2 aligned future frames，0 error | 只证明真实 future 工件与指标链路 |
 | `P2A-CLEAN-PILOT-v1` | 2026-07-23 | 2A / PILOT | `configs/studies/thought2_unconditional_clean.yaml`；只读 `outputs/clean_smoke` | 2 episodes，2 probes，4 aligned frames，2 success，0 error | 20-step ID 小样本 |
 | `P2A-OOD-CAMERA-PILOT-v1` | 2026-07-23 | 2A / PILOT | `configs/studies/thought2_unconditional_ood.yaml`；只读 `outputs/ood_pilot` | 3 episodes，5 probes，10 aligned frames，1 success/2 max_steps，0 error | 只覆盖 camera/easy |
@@ -23,6 +24,34 @@
 | `P2-BLIND-PACKET-PILOT-v1` | 2026-07-23 | 2 / WORKFLOW PILOT | 20-step Clean/OOD diagnostic 输入；public packet/private key 分离 | 7 cases / 28 media；0 sensitive public key；全媒体可解码；human labels 0/7 | 只证明盲审链路，不是人工 future 质量结果 |
 | `P2-COHORT-FORMAL-DRAFT-v2` | 2026-07-23 | 2 / PLAN | 八份 outcome-blind manifests；seed `20260724` | Clean 200 + OOD 532；68 unsupported；0 supported shortfall；Clean 含 episode-0 anchor | `draft_not_frozen`；类别方案和 clean commit 待定 |
 | `P2-SAP-DRAFT-v1` | 2026-07-23 | 2 / ANALYSIS PLAN | `thought2_statistical_analysis_plan.md` | 先 episode 后 task 聚合；suite-stratified task bootstrap；human/outcome/missing gate | 未冻结；不得据此声称已预注册或已有正式效应 |
+
+### `P1-FORMAL-v1` 机器证据
+
+- 项目 commit `575ba8fcd89f6baf801190fcb8127142ba0406c5`；项目和三个
+  上游 checkout 在运行时均为 clean。
+- checkpoint SHA-256：
+  `1000437cfcf55c000094f79a2600634c502bcb5b492476b94bf8509883a49579`；
+  7,639 条结果中无第二种 checkpoint、策略或 commit。
+- 7,639 planned/result rows = 800 Clean + 6,771 runnable OOD + 68 expected
+  skipped；7,639 个 job ID 唯一，manifest/raw result 无缺失、多余或重复。
+- Clean `778/800=97.25%`，row-bootstrap CI `[96.00%, 98.38%]`；
+  OOD `3,230/6,771=47.70%`，CI `[46.55%, 48.90%]`；
+  绝对/相对下降 `49.55 pp / 50.95%`。
+- 扰动 SR：camera `15.13%`、robot-init `42.84%`、background `51.49%`、
+  layout `61.25%`、light `81.88%`。Camera 在四个 suite 内均为最低类别。
+- easy/medium/hard SR 为 `59.82% / 49.51% / 35.07%`；五类扰动内部均保持
+  粗粒度 `easy ≥ medium ≥ hard`。
+- 40-task 等权敏感性：Clean `97.25%`、OOD `48.03%`、drop `49.22 pp`，
+  task-bootstrap CI `[42.14, 56.39] pp`，与 variant-weighted 主结论一致。
+- 7,571 条 trace、2,399,314 个 action step：0 非有限/空/全零运动 episode；
+  末端首末位移最小 `0.0385 m`。3,563 个失败均为 `max_steps`，对应
+  3,563 个非空失败视频；0 exception。
+- 首条到末条结果跨度 `44.26 h`，合计 `123.20 episode GPU-hours`；
+  action-chunk latency p50/p95 `969.51/978.18 ms`，峰值显存
+  `23,814.42 MB/worker`。
+- 权威工件：
+  `outputs/thought1/fastwam/combined/{experiment_manifest.json,summary/}`；
+  详细解释见 [thought1_report.md](thought1_report.md)。
 
 ### `P2A-CLEAN-SMOKE-v1` 机器证据
 
@@ -142,12 +171,12 @@
   pairwise Cohen's κ 和退化状态；只用合成标签通过回归测试，尚无真实 agreement
   数字。
 
-### Outcome-blind cohort FORMAL-DRAFT-v2
+### Outcome-blind cohort DRAFT-v2
 
-- planner 只读取 source `job_manifest.jsonl` 和 planning-time `skip_reason`；
-  manifest 明确记录 `outcome_fields_read=false`、
-  `episode_result_files_read=false`；八个 formal source 当前均没有非空
-  episode-result JSONL。
+- planner 在 2026-07-23 只读取 source `job_manifest.jsonl` 和 planning-time
+  `skip_reason`；manifest 明确记录 `outcome_fields_read=false`、
+  `episode_result_files_read=false`。这是生成当时的历史事实；2026-07-26
+  `P1-FORMAL-v1` 已产生 outcome JSONL。
 - Clean：4 suite × 10 task × 5 jobs = 200，并在每个 task 强制包含
   `episode_index=0`；OOD：每个 supported
   suite/task/category/difficulty cell 取 1，共 532。
@@ -156,9 +185,9 @@
   shortfall 为 0。
 - OOD 类别分母：background 103、camera 104、light 95、layout 110、
   robot-init 120。
-- 八份 v2 manifest 均可根据 source hash 和 seed 精确重放，但当前项目 tree
-  dirty，故 `frozen=false/status=draft_not_frozen`。正式 runner 新增
-  `require_frozen_cohort=true` fail-closed 门禁。
+- 八份 v2 manifest 均可根据 source hash 和 seed 精确重放，但当时项目 tree
+  dirty，故 `frozen=false/status=draft_not_frozen`。现在 outcome 已存在，
+  不能把它们追溯改成 FORMAL；`require_frozen_cohort=true` 应继续拒绝运行。
 - 原始路线说第四类采用“layout 或 robot-init”，而现有阶段一计划覆盖五类。
   因此 732 仍是覆盖草案：排除 robot-init 后为 612，排除 layout 后为 622；
   必须在查看正式 outcome 前选择并生成新 ID。
@@ -174,6 +203,7 @@
 | 2026-07-23 / Clean pilot attempt 1 | robosuite 在 import 时触发 EGL assertion | `CUDA_VISIBLE_DEVICES=1` 时，robosuite 要求 `MUJOCO_EGL_DEVICE_ID` 使用物理可见 ID `1`，而不是 torch 重映射后的 `0` | 保持 `--device cuda:0`，将 EGL ID 改为 `1` 后完成 2/2 episode | 否；模型未加载、环境未 reset、无 diagnostic row |
 | 2026-07-23 / static calibration v1 协议复核 | 99% 分位数已固定，但 source manifest 未写插值方法；线性小样本分位数会低于观测最大 null | 把正式方法锁为保守 `higher`，增加自动 freeze check；协议 hash 变化时 dry-run/real 均拒绝复用旧目录 | v1 raw energy 不变，聚合只给 candidate；v2/FORMAL 必须新目录 | 否；没有改写 raw calibration 或 diagnostic JSONL |
 | 2026-07-23 / outcome-blind cohort draft v1 | 随机 Clean 子集没有保证包含 OOD 共用的 episode index 0，削弱预先配对 | v1 只按 selection hash 抽样，没有 anchor 约束 | 新增 `anchor_episode_indices`，v2 每个 Clean task 固定 index 0；v1 目录只保留审计并标为 superseded | 否；只有 manifest 草案，未执行 episode、未读取 outcome |
+| 2026-07-24 / 三卡 full 启动前预检 | runner 立即返回，`nvidia-smi` 报 NVML driver/library mismatch | 内核仍加载 580.159.03，用户态 NVML/DKMS 已升级到 580.173.02；原脚本在 command substitution 中被 `set -e` 静默截断 | 显式捕获并打印 `nvidia-smi -i` 错误，重启加载 580.173.02；commit `575ba8f` 后正式运行完成 | 否；模型未加载、无 rollout/result |
 
 冷启动观测：2-step smoke 中 Wan 组件装载约 `336–433 s`；20-step OOD
 三进程观测到约 `604.37 s`，Clean 单进程为 `521.74 s`。这不是单次 future
@@ -188,29 +218,30 @@ Provenance 补充核对：Fast-WAM 和 LIBERO checkout clean；LIBERO-Plus
 
 ### 已支持
 
-1. 阶段一评测工程链路和正式 manifest 已准备好。
-2. 官方 `libero_uncond` release 在本机能够真实生成 unconditional future。
-3. 阶段二 A 能在不改变动作哈希的前提下保存当前帧、预测未来、实际未来、动作、结果和资源指标。
-4. 预测与实际帧可按官方 4 action/frame 比例精确对齐到控制步。
-5. 在当前 5-episode pilot 上，shadow rerun 的执行动作和 outcome 与阶段一完全复现。
-6. 20-step future 在当前硬件上约需 4.1–4.6 s，probe 峰值约 24.84 GB；这是一项明确的部署成本信号。
-7. 独立 no-op calibration 的工程链路已真实覆盖 Clean 与五类 OOD；旧 static
+1. 阶段一正式 7,571 个 runnable rollout 已完成：Clean 97.25%、OOD 47.70%，
+   绝对下降 49.55 pp，0 exception。
+2. Camera viewpoints 是当前五类中最敏感且跨四个 suite 稳定最低的扰动；
+   coarse difficulty 在五类内均呈 easy→medium→hard 下降。
+3. 官方 `libero_uncond` release 在本机能够真实生成 unconditional future。
+4. 阶段二 A 能在不改变动作哈希的前提下保存当前帧、预测未来、实际未来、动作、结果和资源指标。
+5. 预测与实际帧可按官方 4 action/frame 比例精确对齐到控制步。
+6. 在当前 5-episode pilot 上，shadow rerun 的执行动作和 outcome 与阶段一完全复现。
+7. 20-step future 在当前硬件上约需 4.1–4.6 s，probe 峰值约 24.84 GB；这是一项明确的部署成本信号。
+8. 独立 no-op calibration 的工程链路已真实覆盖 Clean 与五类 OOD；旧 static
    阈值 1.0 明显不在当前 embedding energy 的合理数量级。
-8. 标签盲化 packet 能把 7 个真实 probe 的 condition/outcome/metric/source
+9. 标签盲化 packet 能把 7 个真实 probe 的 condition/outcome/metric/source
    identity 留在私有 key 中，并对 28 个公开媒体做 hash/解码审计。
-9. Outcome-blind planner 能在不读取 episode result 的条件下固定精确 job ID、
+10. Outcome-blind planner 能在不读取 episode result 的条件下固定精确 job ID、
    unsupported cell 和 Clean index-0 anchor，并拒绝正式 runner 使用未冻结草案。
 
 ### 尚未支持
 
-1. Fast-WAM 正式 Clean→OOD 成功率下降。
-2. 哪类扰动最敏感。
-3. unconditional future consistency 与成功/OOD 的稳定相关性；当前只有方向一致的 PILOT 趋势。
-4. “失败来自未来错误还是动作错误”的自动因果分类。
-5. 显式未来能改善 OOD，或 K=1/2/4 中哪个最好。
-6. 正式 static threshold；当前 `0.013223` 只有 candidate 资格。
-7. 人工盲审结论；当前只有空模板，human labels 为 0/7。
-8. 732 是否是最终正式 cohort；五类/四类取舍、power justification 和 clean-tree
+1. unconditional future consistency 与成功/OOD 的稳定相关性；当前只有方向一致的 PILOT 趋势。
+2. “失败来自未来错误还是动作错误”的自动因果分类。
+3. 显式未来能改善 OOD，或 K=1/2/4 中哪个最好。
+4. 正式 static threshold；当前 `0.013223` 只有 candidate 资格。
+5. 人工盲审结论；当前只有空模板，human labels 为 0/7。
+6. 732 是否是最终正式 cohort；五类/四类取舍、power justification 和 clean-tree
    freeze 均未完成。
 
 ## 4. 待填论文主表
@@ -222,7 +253,12 @@ Provenance 补充核对：Fast-WAM 和 LIBERO checkout clean；LIBERO-Plus
 
 | Suite | Perturbation | Level | ID n / SR / 95% CI | OOD n / SR / 95% CI | Absolute drop (pp) | Relative drop | Action latency p50 / p95 | Failure videos reviewed | FORMAL Run ID |
 | --- | --- | --- | --- | --- | ---: | ---: | --- | ---: | --- |
-| 待正式运行 | — | — | — | — | — | — | — | — | — |
+| Overall | all five | all | 800 / 97.25% / [96.00%, 98.38%] | 6,771 / 47.70% / [46.55%, 48.90%] | 49.55 | 50.95% | 969.51 / 978.18 ms | 0（3,563 saved） | `P1-FORMAL-v1` |
+| Overall | camera | all | 800 / 97.25% / [96.00%, 98.38%] | 1,599 / 15.13% / [13.38%, 16.95%] | 82.12 | 84.44% | — | 0 | `P1-FORMAL-v1` |
+| Overall | robot init | all | 800 / 97.25% / [96.00%, 98.38%] | 1,550 / 42.84% / [40.39%, 45.23%] | 54.41 | 55.95% | — | 0 | `P1-FORMAL-v1` |
+| Overall | background | all | 800 / 97.25% / [96.00%, 98.38%] | 1,076 / 51.49% / [48.51%, 54.46%] | 45.76 | 47.06% | — | 0 | `P1-FORMAL-v1` |
+| Overall | layout | all | 800 / 97.25% / [96.00%, 98.38%] | 1,525 / 61.25% / [58.75%, 63.67%] | 36.00 | 37.02% | — | 0 | `P1-FORMAL-v1` |
+| Overall | light | all | 800 / 97.25% / [96.00%, 98.38%] | 1,021 / 81.88% / [79.43%, 84.04%] | 15.37 | 15.80% | — | 0 | `P1-FORMAL-v1` |
 
 主文至少给总体和四类目标扰动；附录再展开 suite、difficulty 和变体。必须同时
 报告 exception/skipped，并区分 episode-weighted 与 variant-weighted 口径。
@@ -254,7 +290,7 @@ future 信息效应。
 
 | Claim ID | 拟写结论 | 所属阶段 | 必须满足的证据 | 当前状态 | Artifact/Run ID |
 | --- | --- | --- | --- | --- | --- |
-| `C1` | Fast-WAM 对特定环境 shift 敏感 | 1 | 完整 ID/OOD 分母、配对 drop、CI、0 未解释 exception | 未支持 | — |
+| `C1` | Fast-WAM 对特定环境 shift 敏感 | 1 | 完整 ID/OOD 分母、配对 drop、CI、0 未解释 exception | **支持** | `P1-FORMAL-v1`；`outputs/thought1/fastwam/combined/summary/` |
 | `C2` | future consistency 在 OOD 或失败样本下降 | 2A | 冻结 cohort、校准阈值、episode-level 统计与盲审 | 未支持 | — |
 | `C3` | 显式部分未来提高 OOD 成功率 | 3 | B0/A0/A1/A2/A4 配方匹配、跨 seed 配对 CI | 未支持 | — |
 | `C4` | 某个 K 位于效果—延迟 Pareto 前沿 | 3 | 在线 latency/memory 与同 manifest ID/OOD 结果 | 未支持 | — |

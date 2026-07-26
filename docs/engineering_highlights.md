@@ -4,12 +4,12 @@
 
 ## 1. 当前事实快照
 
-截至 2026-07-23：
+截至 2026-07-26：
 
 | 项目 | 状态 | 可用证据 |
 | --- | --- | --- |
 | 配置、planner、adapter、分片、resume、聚合 | 已实现 | `src/`、`configs/`、`tests/` |
-| 自动化测试 | 已通过 | `pytest -q`：160 passed；覆盖阶段一评测、PyTorch 2.6+ 安全边界、LIBERO-Plus 10,030 行路径审计、阶段二诊断、static calibration、label-blind packet 与 outcome-blind freeze 门禁 |
+| 自动化测试 | 已通过 | `pytest -q`：166 passed；覆盖阶段一评测、PyTorch 2.6+ 安全边界、LIBERO-Plus 10,030 行路径审计、阶段二诊断、static calibration、label-blind packet 与 outcome-blind freeze 门禁 |
 | Conda 环境与激活入口 | 已配置 | `scripts/create_env.sh`、`scripts/activate_env.sh` |
 | checkpoint/stats | 已下载并人工校验 | checkpoint SHA-256 `1000437c...a49579`；stats SHA-256 `30f81ad7...68638` |
 | FastWAM 公共运行时模型 | 已下载并逐文件校验 | `scripts/download_fastwam_runtime_models.sh`；T5、VAE、tokenizer 共约 11.9 GiB |
@@ -17,11 +17,11 @@
 | 单卡 Clean smoke | 已通过 | 2026-07-22：2 episodes、2 success、0 exception；仅证明链路可用，不作为成功率估计 |
 | 单卡 OOD smoke | 已通过 | 2026-07-22：camera/light 共 4 episodes、4 success、0 exception；仅证明链路可用，不作为成功率估计 |
 | 三卡真实 pilot | 已通过 | 2026-07-22：9 planned、8 completed、1 expected skipped、0 exception；三个 rank 均有真实结果 |
-| 正式 manifests | 已重建并审计 | 800 Clean；6,839 OOD planned=6,771 runnable+68 skipped；无正式 worker result |
-| full OOD 结果和鲁棒性结论 | 未执行 | 不得把 pilot 的 2/8 写成正式成功率或性能下降 |
+| 阶段一正式 full | FORMAL 已完成 | 800 Clean + 6,771 OOD runnable 全部完成；68 expected skipped；0 exception、0 job 重复/遗漏 |
+| 阶段一鲁棒性结论 | 可正式报告 | Clean 97.25%→OOD 47.70%，drop 49.55 pp；camera 15.13% 最敏感，light 81.88% 最稳健 |
 | 阶段二 2A unconditional future | 20-step PILOT 已通过 | smoke 后完成 Clean/OOD 5 episodes、7 probes、14 aligned future frames、0 error；全部媒体可解码 |
 | 阶段二标签盲审 | WORKFLOW PILOT 已通过 | 7 cases / 28 media；public/private hash 校验和全量解码通过；human labels 仍为 0/7 |
-| 阶段二 outcome-blind 抽样 | FORMAL-DRAFT 已生成 | 200 Clean + 532 OOD，68 unsupported、0 supported shortfall；当前未冻结 |
+| 阶段二 outcome-blind 抽样 | DRAFT 已生成但错过正式冻结窗口 | 200 Clean + 532 OOD；阶段一 outcome 出现前 `frozen=false`，现在不能追溯升级为 FORMAL |
 | 阶段二 2B action-conditioned future | 严格阻塞 | release 配置为 `action_conditioned=false`，且不存在通过 provenance 门禁的匹配 checkpoint |
 
 ## 2. 可以对外说明的工程亮点
@@ -31,20 +31,20 @@
 | 不侵入上游的适配层 | 不修改 Fast-WAM、LIBERO、LIBERO-Plus；复用官方 checkpoint loader、观测/动作处理和 success 判定 | `policy/fastwam_adapter.py`、`envs/libero_adapter.py` | Clean 2-episode 与 Plus 4-episode smoke 均已验证 |
 | 同名 backend 隔离 | 原版与 Plus 都导出 `libero`；为每个进程生成隔离的 `LIBERO_CONFIG_PATH` 并只加载一个 checkout，避免 import/path 污染 | `envs/libero_adapter.py`、`evaluator.py` | Clean 与 Plus 已分别在真实独立进程验证 |
 | 可复现任务规划 | 每个 job 固化 suite、base/upstream task、seed、init index、扰动身份和策略身份；job ID 由规范化内容哈希生成 | `evaluation/jobs.py`、`job_manifest.jsonl` | 已单测 |
-| episode-level 多 GPU | 每 GPU 一个独立 evaluator，按 job hash 稳定分片；避免把独立 rollout 错做模型 DDP | `distributed_launcher.py`、`shard_jobs()` | 三卡真实 pilot 已验证 3/4/2 分片，无重复遗漏 |
+| episode-level 多 GPU | 每 GPU 一个独立 evaluator，按 job hash 稳定分片；避免把独立 rollout 错做模型 DDP | `distributed_launcher.py`、`shard_jobs()` | 三卡 full 完成 7,571 rollout；八个 source 均为 3 rank，0 重复遗漏 |
 | 可恢复执行 | worker 逐 episode 追加并 `fsync` JSONL；默认跳过完成 job，支持 failed/all 重跑策略 | `evaluation/resume.py`、`schemas/episode_result.py` | 已单测；Clean smoke 用 `--rerun failed` 从两条真实 exception 恢复成功 |
 | 科学比较门禁 | Clean/OOD 共用 seed 公式和 checkpoint；聚合时同一策略 checkpoint hash 不一致则拒绝比较 | `reproducibility.py`、`analysis/aggregate.py` | 已单测；Clean/OOD smoke 的 checkpoint SHA-256 已实测一致 |
 | 上游协议显式化 | 区分 Clean 多 seed 与 Plus 每官方变体 1 次；`all_once` 强制 `episodes_per_task=1`，防止 10,030×20 的重复计算 | `config.py`、`jobs.py`、`eval_ood_full.yaml` | 已单测；正式 manifest 已重建并审计 |
 | 可审计 OOD 元数据 | 记录官方 category、difficulty、classification ID、variant name、candidate/selection 信息和上游 commit | `jobs.py`、`episode_result.py` | 真实 Plus result 已验证，运行时底层数值参数采集仍有限 |
 | 研究结论防越界 | 明确 release Fast-WAM、Joint WAM、IDM 是不同架构/权重；训练配方不匹配时禁止把比较写成未来想象的因果增益 | `config.py`、`thought1_generalization.md` | 配置门禁已单测，匹配权重缺失 |
-| 失败分析闭环 | 记录 action/robot state trace、异常、失败视频和聚合统计，提供静态 failure review 页面 | `recording/`、`analysis/review.py` | Clean/OOD smoke 已产出真实 trace/video；失败分类样本仍待积累 |
+| 失败分析闭环 | 记录 action/robot state trace、异常、失败视频和聚合统计，提供静态 failure review 页面 | `recording/`、`analysis/review.py` | full 已保存 7,571 traces 与 3,563 failure videos；0 缺失，人工 taxonomy 待标注 |
 | 阶段二只读 shadow probe | 先冻结并哈希基线动作，再从同一 checkpoint 单独生成 future；current/predicted/actual/side-by-side 工件写入独立目录 | `policy/fastwam_future_probe.py`、`diagnostics/` | smoke 与 5-episode 20-step pilot 已验证；不会改写阶段一 source manifest/result |
 | 诊断语义双门禁 | 将 release 可支持的 unconditional consistency（2A）与需要匹配 action-conditioned checkpoint 的动力学一致性（2B）分开，禁止静默降级 | `config.py`、`fastwam_future_probe.py`、`thought2_upstream_audit.md` | 2A 实测通过；2B 对 release 预期拒绝 |
 | Source rerun 精确复现 | 将阶段二每个 probe 的 executed action 与阶段一 trace 按环境 step 对齐核对 | `diagnostics.jsonl`、阶段一 `traces/*.jsonl` | 7/7 probe 逐元素相同（最大绝对差 0），5/5 outcome 相同 |
 | 多输入语义安全聚合 | Clean/OOD comparison 单独生成 manifest，锁定 mode、共同 provenance、输入 fingerprint 与 source hash；unknown mode 不再猜测 | `diagnostics/aggregate.py`、`diagnostics/report.py` | 5-episode comparison 实测并可重复聚合 |
 | 独立 null-motion 校准 | 不读取 pilot 标签、不调用 policy action；以同帧编码噪声和 0/4/8 no-op residual 建候选阈值，自动检查 200 条 freeze gate | `diagnostics/static_calibration*.py`、独立 YAML/manifest/JSONL | 7/7 真实 Clean/五类 OOD 样本有效；旧阈值 1.0 与候选 `0.013223` 相差约 75.6× |
 | 标签盲化媒体审阅 | 将 condition/outcome/metric/source mapping 放入独立 `0600` private key；公开 packet 使用 opaque alias 和逐媒体 SHA-256；盲态导入区分 missing/uncertain/decisive 并计算 pairwise κ | `diagnostics/blind_review*.py`、静态 HTML/CSV/JSON | 7 个真实 probe 的 28 个媒体全部解码，public sensitive key/token 泄漏为 0；agreement 工具由合成双 reviewer 标签验证，真人标签仍为 0 |
-| Outcome-blind 正式抽样 | 只从阶段一 job manifest 分层哈希选样，记录 skipped-only cell，并强制 Clean episode-0 anchor；formal runner 拒绝未冻结草案 | `diagnostics/diagnostic_cohort.py`、`require_frozen_cohort` | v2 草案 732 jobs、0 supported shortfall；freeze 因 dirty tree 有意未通过 |
+| Outcome-blind 正式抽样 | 只从阶段一 job manifest 分层哈希选样，记录 skipped-only cell，并强制 Clean episode-0 anchor；formal runner 拒绝未冻结草案 | `diagnostics/diagnostic_cohort.py`、`require_frozen_cohort` | v2 草案 732 jobs、0 supported shortfall；门禁正确阻止未冻结草案，阶段一 outcome 已出现后不允许追溯升级 |
 
 ## 3. 难点、阻碍、方案与剩余风险
 
@@ -209,16 +209,50 @@
   shortfall；正式配置设 `require_frozen_cohort=true` 后，draft 会在模型加载和
   reset 前失败。
 - 当前证据：真实 7-case packet 的 28 个媒体完成 hash/解码审计；v2 抽样草案为
-  200 Clean + 532 OOD，但五类/四类取舍和 clean-tree freeze 尚未完成。
+  200 Clean + 532 OOD，但它在阶段一 outcome 前没有通过 clean-tree freeze。
+  现在正式 outcome 已存在，草案不能追溯升级为 FORMAL；门禁应继续拒绝它。
+
+### 3.19 NVIDIA 驱动热更新会让 full runner 在模型加载前失败
+
+- 现象：`nvidia-smi` 报
+  `Failed to initialize NVML: Driver/library version mismatch`；最初的 full
+  runner 又因 `set -euo pipefail` 在 command substitution 中提前退出，终端没有
+  显示根因。
+- 根因：内核仍加载 `580.159.03`，但磁盘上的 DKMS module、driver package 和
+  NVML 已升级为 `580.173.02`。Conda 和项目代码均未参与这个冲突。
+- 方案：把 GPU 查询改为显式捕获 `nvidia-smi -i` 的 stderr，失败时打印物理
+  GPU ID 和原始错误；新 DKMS 已为当前 kernel 安装后，保存工作并重启加载
+  `580.173.02`。
+- 证据：修复 commit `575ba8f`；正式 combined manifest 的三卡 inventory 均为
+  driver `580.173.02`，随后 full 全程 0 CUDA/NVML exception。
+
+### 3.20 “7,639 条记录”不能误写成 7,639 个真实 rollout
+
+- 问题：combined report 的 `episodes=7639` 包含 68 条零步 skipped 审计行；
+  pairing 表的 6,771 个比较又只使用 40 个唯一 Clean episode-0 anchor。如果只
+  抄顶层数字，会同时夸大真实计算量和配对独立样本数。
+- 审计：逐 source 比较 job manifest、三个 rank raw JSONL 和 combined JSONL；
+  7,639 个 ID 完全相等且唯一。真实 rollout 是 7,571，skipped 是 68。
+- 深度校验：流式解析约 0.96 GiB traces，共 2,399,314 个 action step；
+  验证 finite、shape、step count、非全零运动和末端位移，并核对 3,563 个
+  `max_steps` 与 3,563 个非空失败视频一一对应。
+- 统计处理：主表保留预定义的 variant/episode-weighted bootstrap；另做
+  40-task 等权/cluster bootstrap。两者的 drop 分别为 49.55 pp 与 49.22 pp，
+  方向一致，但 task-cluster CI 更宽 `[42.14, 56.39] pp`。
 
 ## 4. 简历表达素材
 
-### 当前即可使用的版本（不包含虚构实验结果）
+### 当前即可使用的版本
 
 - 搭建 Fast-WAM 在 LIBERO/LIBERO-Plus 上的配置驱动 OOD 评测框架，以 adapter 隔离同名仿真 backend，并支持单卡调试与 episode-level 多 GPU 推理。
 - 设计确定性 job manifest、哈希分片、逐 episode JSONL 落盘与断点续跑机制，保证大规模机器人 rollout 可复现、可审计、可恢复。
 - 将 Clean 多 seed 与 LIBERO-Plus 预生成 task-instance 协议显式分离，通过配置门禁阻止每变体重复采样造成的数量级计算浪费。
 - 建立相同 checkpoint/配对 seed 的鲁棒性评测与统计链路，覆盖成功率下降、bootstrap CI、失败分类和跨策略配方一致性约束。
+- 在 3 张 GPU 上完成 7,571 个真实 rollout 和 2,399,314 个 action step，
+  实现 0 exception、0 job 重复/遗漏；Fast-WAM 从 Clean 97.25% 降至
+  LIBERO-Plus OOD 47.70%，定位 camera viewpoint 为最敏感 shift（15.13%）。
+- 对 7,571 条 trace 与 3,563 个失败视频做完整性审计，排除 NaN、空动作、
+  静止机器人和落盘故障；任务级 OOD 成功率跨度 4.57%–92.63%。
 - 为表征运动指标建立 outcome-independent no-op calibration、自动 freeze gate
   与只读历史敏感性分析，在真实 Clean/五类 OOD pilot 中识别并量化旧阈值的
   数量级错误。
@@ -226,11 +260,16 @@
   pre-outcome freeze、opaque alias 和公开/私有泄漏校验阻止结果后选样；已完成
   7-case/28-media 真实工作流演练。
 
-### 真实实验完成后再填写的量化模板
+### 可直接使用的量化表述
 
-不要在结果出来前填数字：
+> 在 3 张 GPU 上完成 Fast-WAM 的 7,571 个 Clean/OOD 机器人 rollout，设计
+> episode-level 哈希分片、逐条持久化与 incomplete-only resume，实现
+> 0 exception、0 重复/遗漏；测得标准 LIBERO 97.25% 到 LIBERO-Plus OOD
+> 47.70% 的 49.55 个百分点下降，并定位 camera viewpoint 为最敏感扰动
+> （15.13% success rate）。
 
-> 在 3 张 GPU 上评测 Fast-WAM 的 `[N]` 个 Clean/OOD task instances，借助断点续跑和任务分片将 `[指标]` 从 `[基线]` 改善至 `[结果]`；识别 `[最敏感扰动]` 导致绝对成功率下降 `[X]` 个百分点，并基于 `[M]` 个失败视频归纳 `[K]` 类主要失败模式。
+在人工标注完成前，不要追加“归纳出 K 类失败模式”。可以写“保存并审计
+3,563 个失败视频”，但“reviewed/labelled”分母目前仍为 0。
 
 推荐补齐的量化证据：
 
@@ -252,10 +291,12 @@
 2. 核心约束：两个同名 `libero` backend、24 GB 级显存预算、海量独立 rollout、可中断服务器任务和严格配对要求。
 3. 关键决策：adapter 隔离、episode-level data parallel、确定性 manifest/resume、checkpoint+seed 科学门禁。
 4. 发现并纠正的协议问题：Plus 的评测单位是预生成 task instance，每个变体 1 次；不能机械执行 10,030×20。
-5. 防选择偏差：正式 cohort 在 outcome 前冻结，人工第一轮隐藏标签，failure
-   hypothesis 留到解盲后。
+5. 防选择偏差：实现了 pre-outcome freeze 和标签盲化门禁；本次 v2 cohort 因
+   clean-tree freeze 未通过而不能事后升级为 FORMAL，这个负面过程本身说明门禁
+   确实阻止了追溯性“预注册”。
 6. 尚未解决但已诚实限定的问题：底层扰动参数、双相机证据、null difficulty、许可证和 future checkpoint 可识别性。
-7. 最后用真实 pilot/full 数字回答效果、成本和失败模式；数字未产生前明确说“待实测”。
+7. 用正式数字回答效果与成本；失败机制仍明确写“待分层人工复核”，不把
+   `max_steps` 自动等同为某种感知或规划错误。
 
 ## 6. 更新规则
 

@@ -1,249 +1,327 @@
-# 思考点一阶段报告：Fast-WAM 的 LIBERO-Plus 环境 OOD 鲁棒性
+# 思考点一正式报告：Fast-WAM 的 LIBERO-Plus 环境 OOD 鲁棒性
 
-报告日期：2026-07-22  
-当前阶段：工程链路与三卡 pilot 已通过；正式 Clean/OOD rollout 尚未执行  
-被评测策略：Fast-WAM `libero_uncond_2cam224`
+- 报告日期：2026-07-26
+- 正式 Run ID：`P1-FORMAL-v1`
+- 实验状态：**800 Clean + 6,771 OOD runnable rollout 已全部完成并通过完整性审计**
 
 ## 摘要
 
-思考点一要回答的可识别问题是：**冻结同一份 Fast-WAM checkpoint 后，从标准 LIBERO 切换到 LIBERO-Plus 官方环境扰动变体，任务成功率下降多少，且哪类扰动、哪个难度最敏感？**
+本实验冻结同一份官方 Fast-WAM `libero_uncond_2cam224` checkpoint，在标准
+LIBERO 与 LIBERO-Plus 官方环境扰动变体上评测 4 个 suite、40 个基础任务。
 
-截至本报告日期，环境、模型、checkpoint、LIBERO/LIBERO-Plus adapter、单卡 smoke、三卡分片、EGL、断点续跑、轨迹/视频记录和聚合链路均已通过真实运行验证。三卡 pilot 计划 9 条，其中 8 条真实执行、1 条因官方分层无候选而按协议跳过；8 条均正常结束，0 exception。pilot 的 2/8 成功只用于验证链路和估算成本，样本太小且没有对应的正式 Clean baseline，不能作为最终鲁棒性结论。
+主结果是：
 
-正式 manifest 已重新生成并审计：
+- Clean：`778/800 = 97.25%`，95% row-bootstrap CI
+  `[96.00%, 98.38%]`。
+- OOD：`3,230/6,771 = 47.70%`，95% row-bootstrap CI
+  `[46.55%, 48.90%]`。
+- Clean→OOD 绝对下降：**49.55 个百分点**。
+- 相对下降：**50.95%**，即 OOD 条件下只保留约 49.05% 的 Clean 成功率。
+- 7,571 个真实 rollout 均正常结束，`0 exception`；另有 68 条官方空分层
+  `skipped` 审计记录，不进入成功率分母。
 
-- Clean：800 个 runnable rollout。
-- OOD：6,839 条计划，其中 6,771 个 runnable rollout、68 条 skipped 审计记录。
-- 正式剩余真实计算量：**7,571 个 rollout**，不是只有 6,771 个；若不执行 800 个 Clean baseline，就只能报告 OOD 绝对表现，不能回答 Clean→OOD 的下降。
-- 另有 121 条没有官方 difficulty 的 `libero_goal / Light Conditions` 记录，按预注册协议排除在 easy/medium/hard 主分析之外，不擅自分级。
+最稳定的科学结论是：**该 release checkpoint 在标准 LIBERO 上接近饱和，但对
+LIBERO-Plus 环境 shift 明显不鲁棒；相机视角是最强且跨 suite 稳定的脆弱因素，
+光照变化整体影响最小。**
 
-因此，当前最准确的阶段结论是：**评测系统已经具备正式运行条件，研究结果尚待 800 Clean + 6,771 OOD rollout 完成后才能形成。**
+这个结果不能证明未来想象能够修复失败，也不能称为 unseen-object、unseen-task、
+跨平台或真机泛化结论。
 
-## 1. 研究问题与结论边界
+## 1. 研究问题与正式协议
 
-### 1.1 当前可以回答的问题
+思考点一回答的是：
 
-在以下条件保持不变时，测量标准环境与官方扰动环境之间的差异：
+> 在 checkpoint、dataset stats、动作接口和基础任务保持固定时，从标准 LIBERO
+> 切换到 LIBERO-Plus 官方环境扰动变体，Fast-WAM 成功率下降多少，且哪些扰动、
+> 难度和任务最敏感？
 
-- checkpoint 与 dataset stats；
-- Fast-WAM 模型配置及动作预/后处理；
-- 基础任务、成功判定和配对 seed；
-- 推理精度、control horizon、相机输入尺寸和最大步数。
+协议如下：
 
-变化因素仅为 LIBERO-Plus 预生成的五类环境扰动：
+- Clean：4 suite × 10 task × 20 个初始化 index/seed，共 800 次。
+- OOD：五类官方预生成 variant 使用 `all_once`，每个 runnable variant 运行
+  1 次，共 6,771 次；不执行 `variant × 20` 的重复采样。
+- 五类扰动：
+  `camera_viewpoints`、`light_conditions`、`background_textures`、
+  `robot_initial_states`、`objects_layout`。
+- 难度映射：官方 1–2 为 easy、3 为 medium、4–5 为 hard。
+- `libero_spatial/object/goal` 最多 400 个 policy step，
+  `libero_10` 最多 700 个 policy step；每个 episode 前有 30 个 settle step。
+- success 使用环境官方成功判定；`max_steps` 是策略失败，exception 也计失败，
+  skipped 不进入分母。
 
-1. `camera_viewpoints`
-2. `light_conditions`
-3. `background_textures`
-4. `robot_initial_states`
-5. `objects_layout`
+主成功率是 **variant/episode-weighted** 描述统计。由于每个官方 OOD variant
+只运行一次，CI 描述的是已评测行的重采样不确定性，不等同于跨任务、跨世界分布
+或真机泛化的不确定性。第 7 节另给任务聚类敏感性分析。
 
-主结果将报告 Clean/OOD 成功率、绝对与相对下降、95% bootstrap CI，以及按 suite、task、扰动类别和 difficulty 的分层统计。
+## 2. 可复现性与完整性审计
 
-### 1.2 当前不能回答的问题
+### 2.1 固定环境
 
-- 不能把四个 LIBERO suite 称为 unseen-object 或 unseen-task：release 训练配置已经包含这些 suite。
-- 不能声称 cross-platform transfer：LIBERO 与 RoboTwin 的接口和 release checkpoint 不同。
-- 不能声称“未来想象改善泛化”：当前 release 是 uncond Fast-WAM，动作不读取预测未来；缺少训练配方匹配的 Joint WAM/IDM checkpoint。
-- 不能把仿真 OOD 结果直接外推为真机鲁棒性。
-
-详细可识别性说明见 [thought1_generalization.md](thought1_generalization.md)。
-
-## 2. 可复现环境与工件
-
-| 项目 | 固定值 |
+| 项目 | 正式记录 |
 | --- | --- |
-| Python | 3.10.20 |
-| PyTorch / CUDA | 2.7.1+cu128 |
-| GPU | 3 张可见 `NVIDIA GeForce RTX 4090`，运行记录约 47.37 GiB/卡 |
-| 精度 | bf16，TF32 enabled，每 GPU 1 worker |
-| Fast-WAM commit | `45d8e1458921d83f8ad6cf9ce993d371208dabd0` |
-| LIBERO commit | `8f1084e3132a39270c3a13ebe37270a43ece2a01` |
-| LIBERO-Plus commit | `4976dc30028e805ff8094b55501d532c48fec182` |
-| pilot 项目 commit | `2e1736aab70edcab680fc7e0b13354c7afb2fcdf` |
+| 项目 commit | `575ba8fcd89f6baf801190fcb8127142ba0406c5`，clean |
+| Fast-WAM commit | `45d8e1458921d83f8ad6cf9ce993d371208dabd0`，clean |
+| LIBERO commit | `8f1084e3132a39270c3a13ebe37270a43ece2a01`，clean |
+| LIBERO-Plus commit | `4976dc30028e805ff8094b55501d532c48fec182`，clean |
 | checkpoint SHA-256 | `1000437cfcf55c000094f79a2600634c502bcb5b492476b94bf8509883a49579` |
 | dataset stats SHA-256 | `30f81ad7d5076e97323e3328bce003e01a04cb21327b5bacd21bb72846768638` |
-| classification SHA-256 | `faa87cce3e3ba434da01df7c77523a391b5f2912e4774330b0aa1be5f6a999e6` |
+| Python / PyTorch / CUDA | 3.10.20 / 2.7.1+cu128 / CUDA 12.8 |
+| GPU / driver | 3 × NVIDIA GeForce RTX 4090 / 580.173.02 |
+| 推理 | bf16、TF32 enabled、每 GPU 1 worker |
+| future imagination | `false`；策略为官方 uncond Fast-WAM |
 
-所有正式 Clean/OOD 结果必须继续使用上述 checkpoint/stats 组合。配置或 classification 变化后必须重新生成 manifest。
+八个 source manifest 和 7,639 条结果全部记录同一 checkpoint、项目 commit 与
+三个上游 commit，没有混合策略或 dirty source。
 
-## 3. 实验协议
+### 2.2 作业、轨迹和媒体
 
-### 3.1 Clean
-
-- 四个 suite，每个 suite 10 个标准任务。
-- 每个任务 20 个初始化 index/seed。
-- 共 `4 × 10 × 20 = 800` 个 runnable rollout。
-- backend 使用原版 LIBERO。
-
-### 3.2 OOD
-
-- backend 使用 pinned LIBERO-Plus。
-- 五类扰动，官方 difficulty 映射为 easy=1–2、medium=3、hard=4–5。
-- `variant_selection=all_once`，每个官方预生成 variant 只执行一次。
-- 每个 runnable job 的 `episode_index=0`、`initial_state_index=0`；不执行 `10,030 × 20` 的重复采样。
-- 没有候选的 task/category/level 组合保留为 skipped 审计记录，不进入成功率分母。
-
-### 3.3 配对与统计
-
-- seed 由 `(base seed, suite, base task, episode index)` 确定，condition 不进入 seed 公式。
-- 同一策略的 Clean/OOD checkpoint hash 必须一致，否则聚合拒绝比较。
-- success 只使用官方环境成功判定；`max_steps` 计任务失败，exception 也计失败，skipped 排除。
-- 成功率 CI 使用固定随机种子的 2,000 次 bootstrap。
-- 优先报告配对四格：Clean 成功/OOD 失败、Clean 失败/OOD 成功、双成功、双失败。
-
-完整统计口径见 [experiment_protocol.md](experiment_protocol.md)。
-
-## 4. 已完成的工程与实验阶段
-
-| 阶段 | 真实执行结果 | 能证明什么 |
-| --- | --- | --- |
-| 环境与 doctor | checkpoint、stats、assets、运行时模型和 3 GPU 均可用 | 依赖与路径完整 |
-| Clean smoke | 2/2 completed，2 success，0 exception | 原版 LIBERO、checkpoint、动作、视频链路可用 |
-| OOD smoke | 4/4 completed，4 success，0 exception | Plus camera/light reset、扰动和 init-state 路由可用 |
-| 三卡 OOD pilot | 9 planned，8 completed，1 skipped，0 exception | 三卡分片、EGL、并发模型加载、结果落盘与聚合可用 |
-| 正式 plan | 800 Clean；6,771 OOD runnable；68 OOD skipped | 正式任务单位与数量已锁定 |
-| 正式 evaluation | 尚未执行 | 尚不能给出正式鲁棒性结论 |
-
-已解决的关键阻碍包括：
-
-- 原版 LIBERO 与 LIBERO-Plus 同名 Python 包的进程级隔离；
-- PyTorch 2.6+ 默认 `weights_only=True` 与旧 NumPy init-state pickle 的兼容；
-- LIBERO-Plus camera/light 等变体复用基础 init state 的路径解析；
-- assets 压缩包嵌套路径与国内下载断流；
-- ModelScope commit SHA 不能直接作为 `snapshot_download` revision；
-- 三卡 torchrun 下 CUDA/EGL 设备映射与 episode-level 稳定分片。
-
-工程复盘见 [engineering_highlights.md](engineering_highlights.md)。
-
-## 5. 三卡 pilot 结果
-
-### 5.1 完整性与运行健康度
-
-| 指标 | 实测值 |
+| 审计项 | 结果 |
 | --- | ---: |
-| planned / runnable / skipped | 9 / 8 / 1 |
-| completed / exception | 8 / 0 |
-| success / max_steps | 2 / 6 |
-| action finite 且非全零 | 8 / 8 |
-| 可解码 MP4 | 8 / 8 |
-| 末端执行器首末位移 | 0.316–0.407 m |
-| checkpoint hash 种类 | 1 |
-| 三个 rank 分配 | 3 / 4 / 2 jobs |
-| job 重复或遗漏 | 0 / 0 |
+| 磁盘结果行 | 7,639 |
+| 真实 attempted / completed | 7,571 / 7,571 |
+| Clean / OOD attempted | 800 / 6,771 |
+| 预期 skipped | 68 |
+| success / max_steps / exception | 4,008 / 3,563 / 0 |
+| 唯一 job ID / 重复 ID | 7,639 / 0 |
+| manifest 缺失结果 / 多余结果 | 0 / 0 |
+| action trace | 7,571，和 attempted job 一一对应 |
+| action step | 2,399,314 |
+| failure video | 3,563，和失败 job 一一对应 |
+| 空视频 / 缺失视频 | 0 / 0 |
 
-唯一 skipped 是 `libero_spatial` task 4 的 `objects_layout/easy` 没有官方候选；它是预期协议结果，不是运行异常。
+三张卡在八个阶段都产生结果；每个 source 的 manifest、raw worker JSONL 和聚合
+结果 job ID 集合完全相等，没有分片遗漏或 resume 重复。
 
-### 5.2 诊断性成功率
+全量 trace 流式审计还确认：
 
-| 扰动 | Attempted | Success | Pilot success rate |
+- 0 个 JSON 解析错误、空 trace、错误动作维度或非有限动作；
+- 0 个 episode 的前 6 个运动动作全为零；
+- trace 行数全部等于 `steps - 30`；
+- 末端执行器首末位移范围 `0.0385–1.0377 m`，中位数 `0.3130 m`；
+- 12 个平移动作分量轻微超出名义 `[-1, 1]`，最大绝对值 `1.0181`，
+  占 2,399,314 个 action step 的约 0.0005%；robosuite controller 在执行前
+  会裁剪到输入范围。它们没有造成 exception，也不是 OOD 特有现象。
+
+因此，3,563 个失败都是环境在最大步数内未判定成功，而不是 CUDA、EGL、NaN、
+空动作、静止机器人或结果落盘故障。
+
+## 3. 总体结果
+
+| Condition | 磁盘行 | Attempted | Success | Failure | Success rate | 95% row-bootstrap CI |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Clean | 800 | 800 | 778 | 22 | **97.25%** | [96.00%, 98.38%] |
+| OOD | 6,839 | 6,771 | 3,230 | 3,541 | **47.70%** | [46.55%, 48.90%] |
+
+主估计的绝对下降为 `97.25% - 47.70% = 49.55 pp`，相对下降为
+`49.55 / 97.25 = 50.95%`。独立 row bootstrap 对绝对下降给出的补充区间为
+`[47.87, 51.22] pp`。
+
+这说明模型并非“任务本身不会做”：Clean 已达到 97.25%，但同一 checkpoint
+面对官方环境变化后失败率从 2.75% 增至 52.30%。
+
+## 4. 按 suite 分层
+
+| Suite | Clean success / N | Clean SR (95% CI) | OOD success / N | OOD SR (95% CI) | Absolute drop |
+| --- | ---: | --- | ---: | --- | ---: |
+| `libero_spatial` | 197 / 200 | 98.50% [96.50%, 100.00%] | 926 / 1,661 | 55.75% [53.22%, 58.16%] | 42.75 pp |
+| `libero_object` | 197 / 200 | 98.50% [96.50%, 100.00%] | 1,132 / 1,742 | 64.98% [62.86%, 67.16%] | 33.52 pp |
+| `libero_goal` | 193 / 200 | 96.50% [94.00%, 99.00%] | 531 / 1,681 | 31.59% [29.27%, 33.85%] | 64.91 pp |
+| `libero_10` | 191 / 200 | 95.50% [92.50%, 98.00%] | 641 / 1,687 | 38.00% [35.80%, 40.37%] | 57.50 pp |
+
+`libero_object` 的 OOD 保持率最高，`libero_goal` 的绝对下降最大，
+`libero_10` 次之。suite 差异不能简单解释成对象、目标或长时序的单一因果效应：
+任务语义、variant 组成和最大步数同时不同。它更适合说明**基础任务与环境 shift
+存在很强交互**。
+
+## 5. 按扰动类别分层
+
+### 5.1 主统计与 task-macro 敏感性分析
+
+| Perturbation | Success / N | Variant-weighted SR (95% CI) | Task-macro SR (task bootstrap CI) | Task-mix adjusted Clean→OOD drop |
+| --- | ---: | --- | --- | ---: |
+| Camera viewpoints | 242 / 1,599 | **15.13%** [13.38%, 16.95%] | 18.79% [12.16%, 27.04%] | **81.97 pp** |
+| Robot initial states | 664 / 1,550 | 42.84% [40.39%, 45.23%] | 44.33% [35.15%, 52.72%] | 54.31 pp |
+| Background textures | 554 / 1,076 | 51.49% [48.51%, 54.46%] | 53.61% [42.36%, 64.66%] | 45.00 pp |
+| Objects layout | 934 / 1,525 | 61.25% [58.75%, 63.67%] | 61.72% [53.23%, 70.05%] | 36.02 pp |
+| Light conditions | 836 / 1,021 | **81.88%** [79.43%, 84.04%] | 84.19% [75.47%, 91.95%] | **15.20 pp** |
+
+`Task-mix adjusted` 先按每个 OOD 类别在 40 个基础任务上的 variant 数量，对相应
+Clean task success rate 加权，再计算下降，避免类别的任务组成不同直接造成偏差。
+它与直接使用总体 Clean 97.25% 得到的排序一致。
+
+最可靠的类别结论是：
+
+1. **Camera viewpoints 是首要脆弱点。** 它在四个 suite 内都是最低成功率类别。
+   任务配对的 camera−robot-init 差为 `-25.53 pp`，task-bootstrap CI
+   `[-34.16, -16.92] pp`。
+2. **Light conditions 整体最容易。** 任务配对的 light−layout 差为
+   `+22.47 pp`，CI `[14.35, 30.60] pp`。
+3. 中间三类的精确名次应谨慎：layout−background 的 task-bootstrap CI
+   `[-0.61, 17.49] pp` 跨 0；不能仅凭 micro point estimate 声称 layout
+   在所有任务上必然优于 background。
+
+### 5.2 类别与 suite 的交互
+
+| Suite | Background | Camera | Light | Layout | Robot init |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `libero_spatial` | 75.58% | **14.63%** | 93.15% | 66.75% | 42.00% |
+| `libero_object` | 76.61% | **23.48%** | 97.64% | 75.68% | 63.82% |
+| `libero_goal` | 34.52% | **7.35%** | 82.28% | 41.65% | 23.72% |
+| `libero_10` | 24.91% | **15.27%** | 52.55% | 62.50% | 42.24% |
+
+相机脆弱性跨 suite 稳定；其他类别明显依赖任务。例如背景纹理在
+`libero_object` 为 76.61%，在 `libero_10` 只有 24.91%；光照在前三个 suite
+相对稳健，但在 `libero_10` 降至 52.55%。因此不能把“光照鲁棒”外推为所有任务
+都不受光照影响。
+
+## 6. 难度效应
+
+### 6.1 预注册 easy/medium/hard
+
+| Difficulty | Success / N | Success rate | 95% row-bootstrap CI |
+| --- | ---: | ---: | --- |
+| Easy | 1,532 / 2,561 | 59.82% | [57.83%, 61.73%] |
+| Medium | 760 / 1,535 | 49.51% | [47.04%, 52.05%] |
+| Hard | 938 / 2,675 | 35.07% | [33.23%, 36.90%] |
+
+从 easy 到 hard 下降 `24.75 pp`。在同时拥有三个等级的 146 个
+`task × category` cell 上做等权配对敏感性分析后，macro SR 为
+easy `57.45%`、medium `50.41%`、hard `37.03%`；easy−hard 差
+`20.42 pp`，task×category bootstrap CI `[14.92, 25.59] pp`。
+
+### 6.2 每类扰动内的难度趋势
+
+| Perturbation | Easy | Medium | Hard |
 | --- | ---: | ---: | ---: |
-| Camera viewpoints | 3 | 1 | 33.33% |
-| Robot initial states | 3 | 1 | 33.33% |
-| Objects layout | 2 | 0 | 0.00% |
-| 合计 | 8 | 2 | 25.00% |
+| Background textures | 69.64% | 51.33% | 22.01% |
+| Camera viewpoints | 26.83% | 11.38% | 7.69% |
+| Light conditions | 85.71% | 85.25% | 77.61% |
+| Objects layout | 68.92% | 61.40% | 52.01% |
+| Robot initial states | 59.07% | 47.59% | 26.26% |
 
-总体 95% bootstrap CI 为 `[0.00%, 62.50%]`。区间极宽，且 pilot 只覆盖 `libero_spatial` 的 3 个 task、3 类 easy 扰动，没有配对 Clean 结果。因此这些数字只能说明正式实验可能观察到明显失败，不能用于类别排序或泛化结论。
+五类扰动在粗粒度上均满足 `easy ≥ medium ≥ hard`，所以总体难度趋势不是只由
+类别比例造成。但官方 1–5 级并非每一类都严格单调：camera 的 level 5 略高于
+level 4，light/layout 的 level 4 也略高于 level 3。difficulty 更适合作为
+**粗分层标签**，不应解释成精确等距的连续强度。
 
-### 5.3 运行成本
+## 7. 任务异质性
+
+40 个基础任务的 OOD task-macro SR 为 48.03%，中位数 51.71%，范围从
+4.57% 到 92.63%。其中 5 个任务低于 10%，8 个低于 25%，6 个达到或超过 75%。
+
+最低的五个任务如下：
+
+| Suite / task | Clean SR | OOD success / N | OOD SR | Drop |
+| --- | ---: | ---: | ---: | ---: |
+| `libero_10/4` 两个杯子分别放到左右盘子 | 85.00% | 9 / 197 | 4.57% | 80.43 pp |
+| `libero_goal/1` 把碗放到炉子上 | 100.00% | 6 / 108 | 5.56% | 94.44 pp |
+| `libero_10/6` 杯子放盘子且布丁放右侧 | 85.00% | 16 / 193 | 8.29% | 76.71 pp |
+| `libero_goal/3` 打开顶层抽屉并放入碗 | 90.00% | 19 / 212 | 8.96% | 81.04 pp |
+| `libero_spatial/1` 拿起 ramekin 旁黑碗并放盘子 | 100.00% | 12 / 132 | 9.09% | 90.91 pp |
+
+最高的任务是 `libero_object/1` 的 cream-cheese-to-basket：
+`88/95 = 92.63%`。同一 suite 内也同时存在高低极端，说明一个总体 OOD 数字无法
+替代 task-level 报告。
+
+这些结果支持“任务与扰动有强交互”，但尚不能自动回答失败究竟来自目标检测、
+相机几何、抓取、接触、长时序误差还是成功判定。所有失败视频已保存，因果化的
+失败 taxonomy 仍需按预定义抽样进行人工复核。
+
+## 8. 配对结果应该怎样解释
+
+机器报告给出：
+
+- Clean-success / OOD-failure：3,541
+- Both-success：3,230
+- Clean-failure / OOD-success：0
+- Both-failure：0
+
+这 6,771 个展开比较只对应 **40 个唯一 Clean anchor**：每个基础任务的
+`episode_index=0`。这 40 个 anchor 恰好全部成功，而每个 anchor 对应
+95–225 个 OOD variants。
+
+因此该四格表可以解释为：
+
+> 在标准环境中成功的同一任务/初态 anchor，切换到各官方 OOD variant 后，
+> 3,541 个 variant 失败、3,230 个仍成功。
+
+它不能解释为 6,771 组相互独立的 Clean/OOD trial，也不适合直接做普通
+McNemar 推断。主结论仍使用 800 条 Clean 基线与 6,771 条 OOD variant；
+补充的 40-task 等权分析为：
+
+- Clean task-macro：97.25%，CI `[95.88%, 98.50%]`
+- OOD task-macro：48.03%，CI `[40.38%, 55.65%]`
+- 配对 task-macro drop：49.22 pp，CI `[42.14, 56.39] pp`
+
+任务聚类区间更宽，但结论方向和效应量与主统计一致。
+
+## 9. 运行成本
 
 | 指标 | 实测值 |
 | --- | ---: |
-| 三个模型并发加载 Wan/Fast-WAM | 约 369 s |
-| pilot 总墙钟时间 | 约 11 min 35 s |
-| 单个 completed episode 平均时长 | 71.53 s |
-| 平均推理延迟 | 983.42 ms |
-| P50 / P95 推理延迟 | 970.31 / 1038.35 ms |
-| 每卡记录的峰值显存 | 23,814.42 MB |
+| 首条到末条结果跨度 | 44.26 h |
+| Clean / OOD episode GPU-hours | 6.95 / 116.25 h |
+| 合计 episode GPU-hours | 123.20 h |
+| 三卡窗口内近似 episode 利用率 | 92.8% |
+| Clean / OOD 平均 episode 时长 | 31.27 / 61.81 s |
+| Clean / OOD 平均总步数 | 183.05 / 366.27 |
+| action-chunk 推理延迟 mean | 970.07 ms |
+| action-chunk 推理延迟 p50 / p95 | 969.51 / 978.18 ms |
+| 每 worker 最大记录显存 | 23,814.42 MB |
+| 正式输出占用 | 约 1.8 GiB |
 
-按 pilot 平均 episode 时长理想线性外推，6,771 个 OOD rollout 约消耗 134.5 GPU-hours，即三卡理想墙钟约 44.8 小时；800 个 Clean 若按相同速度约需 5.3 小时。考虑静态分片尾部、suite 切换、`libero_10` 使用 700 policy steps、任务难度差异和失败视频 I/O，正式 Clean+OOD 应预留 **60–72 小时连续三卡窗口**。该区间是容量规划，不是完成时长承诺。
+推理延迟是一次 action-chunk 规划调用，不是单个控制 action 的独立延迟。
+三卡实际在约 44.3 小时内完成，低于 pilot 阶段保守预留的 60–72 小时。
 
-机器生成的 pilot 汇总见 [outputs/ood_pilot/summary/report.md](../outputs/ood_pilot/summary/report.md) 和 [metrics.json](../outputs/ood_pilot/summary/metrics.json)。
+## 10. 可以写与不能写的结论
 
-## 6. 正式 manifest 审计
+### 已由 `P1-FORMAL-v1` 支持
 
-### 6.1 按 suite
+1. 官方 Fast-WAM release 在标准 LIBERO 上成功率为 97.25%，但在所评
+   LIBERO-Plus variant 上降至 47.70%，绝对下降 49.55 pp。
+2. 相机视角是最严重且跨 suite 稳定的脆弱因素；光照整体最轻。
+3. easy→medium→hard 在五类扰动内均呈粗粒度下降，说明 severity 标签具有
+   描述性区分度。
+4. suite、任务与扰动之间存在强交互，任务 OOD SR 跨越 4.57%–92.63%。
+5. 全量计算链路没有 exception、遗漏、重复、NaN 或静止策略；失败是
+   max-steps 任务失败，而不是评测基础设施故障。
 
-| Suite | Clean runnable | OOD planned | OOD runnable | OOD skipped |
-| --- | ---: | ---: | ---: | ---: |
-| libero_spatial | 200 | 1,685 | 1,661 | 24 |
-| libero_object | 200 | 1,755 | 1,742 | 13 |
-| libero_goal | 200 | 1,692 | 1,681 | 11 |
-| libero_10 | 200 | 1,707 | 1,687 | 20 |
-| 合计 | **800** | **6,839** | **6,771** | **68** |
+### 本实验仍不支持
 
-### 6.2 按扰动类别
+1. “未来想象能够/不能够改善 OOD”：当前 uncond action 不读取预测未来。
+2. unseen-object 或 unseen-task：release 训练配置已包含四个评测 suite。
+3. cross-platform 或真机结论：当前只有 LIBERO 系仿真。
+4. 自动化失败机制归因：尚无正式人工视频 taxonomy。
+5. 将 row-bootstrap CI 解释为对所有任务、所有环境或现实世界的置信区间。
 
-| OOD 类别 | Runnable variants |
-| --- | ---: |
-| Camera viewpoints | 1,599 |
-| Light conditions | 1,021 |
-| Background textures | 1,076 |
-| Robot initial states | 1,550 |
-| Objects layout | 1,525 |
-| 合计 | **6,771** |
+## 11. 后续工作
 
-### 6.3 按 difficulty
+1. 对 3,563 个失败视频做预定义的 suite/category/level/task 分层抽样和双人
+   标注，报告实际 reviewed 分母与一致性，不能凭少量印象外推。
+2. 阶段二 future-consistency 分析必须单独记录为 observational diagnostics；
+   阶段一失败本身不能证明未来有用。
+3. 若要做 future/no-future 因果比较，需要相同数据、初始化、训练预算和多个
+   seed 的 recipe-matched checkpoint。
+4. 若要证明 unseen object/task/platform，需要重新定义互斥训练/测试 split
+   或跨平台接口，不能复用本次四个已见 suite 的结果。
 
-| Difficulty | Runnable variants |
-| --- | ---: |
-| Easy | 2,561 |
-| Medium | 1,535 |
-| Hard | 2,675 |
-| 合计 | **6,771** |
+## 12. 权威工件与哈希
 
-审计同时确认：所有 manifest 内 job ID 唯一；所有 runnable Plus row 使用 `all_once`；官方变体 `(suite, upstream_task_id)` 无重复；全部 10,030 个 classification row 均能解析到真实 init-state 文件。
+- 机器生成报告：
+  [combined/summary/report.md](../outputs/thought1/fastwam/combined/summary/report.md)
+- 机器指标：
+  [combined/summary/metrics.json](../outputs/thought1/fastwam/combined/summary/metrics.json)
+- 逐条结果：
+  [combined/summary/episode_results.jsonl](../outputs/thought1/fastwam/combined/summary/episode_results.jsonl)
+- 正式 manifest：
+  [combined/experiment_manifest.json](../outputs/thought1/fastwam/combined/experiment_manifest.json)
 
-## 7. 剩余工作与完成门槛
+| Artifact | SHA-256 |
+| --- | --- |
+| `combined/experiment_manifest.json` | `57dd93f51a2491423f1b14f0d90523f219218698e231a133dcef114caca132ee` |
+| `combined/summary/metrics.json` | `0aa1173038a1c37d37123570a83ff9f08667490e3f94276345c802151897dbb5` |
+| `combined/summary/report.md` | `889d567e4882b9982fb2121788dbbacdf983e1556faf8e4f9bb5a29768f8e137` |
+| `combined/summary/episode_results.jsonl` | `2f478526ab66a3eacc42e14196a5dbaf13cec6e282230915c2c74973e62cf5e9` |
 
-### 7.1 必须执行的正式计算
-
-1. 四个 suite 的 800 个 Clean rollout。
-2. 四个 suite 的 6,771 个 OOD runnable rollout。
-3. 保留 68 条 skipped 审计记录，不为它们伪造 variant 或 init state。
-4. 对八个实验目录聚合，并生成一个显式包含 Clean 与 OOD 输入的 combined report。
-
-默认 resume 会跳过已经落盘的 job，适合中断恢复。正式运行中不要把 `--rerun failed` 当作常规 resume，因为它也可能重跑正常的 `max_steps` 策略失败；只有定位并修复系统性异常后才使用，并保留旧 JSONL 审计记录。
-
-### 7.2 正式结果验收
-
-- 7,571 个 runnable job 均有最终记录；68 个 skipped 均有明确原因。
-- 无未解释的 exception、CUDA OOM、EGL 冲突、重复 job 或分片遗漏。
-- Clean/OOD checkpoint hash 与 stats 来源一致。
-- action 均为 finite，异常的全零轨迹单独审计。
-- 按 suite、task、category、difficulty 输出成功率、CI 和失败数。
-- combined aggregate 输出 Clean/OOD drop 与配对四格。
-- 抽检各类别/难度视频，确认扰动真实生效；对主要失败模式完成人工分类。
-
-## 8. 当前可写与不可写的结论
-
-### 当前可以写
-
-- 构建并真实验证了 Fast-WAM 在 LIBERO/LIBERO-Plus 上的三卡、可恢复、可审计 OOD 评测系统。
-- Clean、OOD smoke 与三卡 pilot 均无运行 exception；正式 6,771 个 OOD variant 的 manifest 已按官方 task-instance 协议生成并审计。
-- pilot 显示系统能够捕获真实策略失败，同时 action、机器人运动、视频和成功判定保持正常。
-
-### 当前不能写
-
-- “Fast-WAM 的正式 OOD 成功率是 25%”或“object layout 最差”。
-- “Fast-WAM 从 Clean 到 OOD 下降了 X%”。
-- “模型具有 unseen-object/task/platform 泛化能力”。
-- “未来想象能提升或不能提升 OOD 泛化”。
-
-这些表述分别需要正式全量结果、真正的 holdout split、跨平台 adapter/checkpoint 或配方匹配的 future/no-future 训练对照。
-
-## 9. 证据索引
-
-- 实施步骤与停止条件：[thought1_execution_guide.md](thought1_execution_guide.md)
-- 完成度审计：[thought1_readiness.md](thought1_readiness.md)
-- 研究结论边界：[thought1_generalization.md](thought1_generalization.md)
-- 实验协议：[experiment_protocol.md](experiment_protocol.md)
-- 工程难点与简历素材：[engineering_highlights.md](engineering_highlights.md)
-- Clean smoke：`outputs/clean_smoke/`
-- OOD smoke：`outputs/ood_smoke/`
-- 三卡 pilot：`outputs/ood_pilot/`
-- 正式 manifests：`outputs/thought1/fastwam/<suite>/{clean,ood}/job_manifest.jsonl`
-
-## 10. 阶段结论
-
-思考点一的**工程准备阶段已经完成**：单卡与三卡真实链路、两套 backend、官方扰动、init-state、安全加载、分片、resume、记录与聚合均有运行证据。思考点一的**科学实验阶段尚未完成**：正式结果还需要 800 个 Clean 和 6,771 个 OOD rollout。完成这 7,571 个 rollout 并生成 combined report 后，才能回答相同 Fast-WAM checkpoint 在标准 LIBERO 到 LIBERO-Plus 环境 shift 下的成功率下降及敏感扰动分布。
+机器报告是原始主统计的权威来源；本文增加了 task-macro、task-mix 和
+task×category 聚类敏感性分析，并明确标注其补充性质。

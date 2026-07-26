@@ -1,64 +1,65 @@
 # 思考点一完成度审计
 
-审计日期：2026-07-23
+审计日期：2026-07-26
 
-本文只回答“哪些能力已经被真实运行验证、哪些结论仍缺数据”。完整阶段报告见 [thought1_report.md](thought1_report.md)。plan、doctor、pytest 和 smoke 都不能替代正式泛化结果。
+思考点一的工程链路与正式科学实验均已完成。正式结果见
+[thought1_report.md](thought1_report.md)，机器权威结果见
+[combined report](../outputs/thought1/fastwam/combined/summary/report.md)。
 
 ## 逐项状态
 
-| 要求 | 当前证据 | 状态 |
+| 要求 | 正式证据 | 状态 |
 | --- | --- | --- |
-| 本地可复现环境 | Python 3.10.20、PyTorch 2.7.1+cu128、项目内 Conda、可 source 激活脚本 | 已完成 |
-| checkpoint/stats/runtime models | 官方 checkpoint 与配套 stats 已校验；Wan VAE/T5/tokenizer 已离线准备 | 已完成 |
-| LIBERO-Plus assets | 官方 assets 已解压到正确 checkout；doctor 与真实 reset 通过 | 已完成 |
-| 单卡 Clean | 2/2 completed、0 exception，action/运动/视频通过 | Smoke 已完成 |
-| 单卡 OOD | camera/light 4/4 completed、0 exception，扰动首帧可见 | Smoke 已完成 |
-| 三卡评测 | rank 0/1/2 分别处理 3/4/2 条；8 completed、1 expected skipped、0 exception | Pilot 已完成 |
-| 正式任务规划 | 800 Clean；6,839 OOD planned=6,771 runnable+68 skipped | 已生成并审计 |
-| 正式 Clean baseline | `outputs/thought1/fastwam/*/clean/` 尚无 worker result | 未执行 |
-| 正式 OOD | `outputs/thought1/fastwam/*/ood/` 尚无 worker result | 未执行 |
-| Clean/OOD drop | 需要 combined aggregate 的正式配对结果 | 尚不可报告 |
+| 本地可复现环境 | Python 3.10.20、PyTorch 2.7.1+cu128、项目内 Conda、source 激活脚本 | 已完成 |
+| checkpoint/stats/runtime models | 官方 checkpoint、配套 stats 与离线 Wan runtime models 已校验 | 已完成 |
+| LIBERO-Plus assets | 官方 assets 位于 pinned checkout；doctor 与真实 reset 通过 | 已完成 |
+| 单卡 Clean/OOD | Clean 2/2、OOD 4/4 completed，0 exception | Smoke 已完成 |
+| 三卡 pilot | 8 attempted、1 expected skipped、0 exception | Pilot 已完成 |
+| 正式任务规划 | 800 Clean；6,839 OOD planned=6,771 runnable+68 skipped | 已审计 |
+| 正式 Clean baseline | 800/800 completed，778 success，0 exception | Formal 已完成 |
+| 正式 OOD | 6,771/6,771 completed，3,230 success，0 exception | Formal 已完成 |
+| Combined aggregate | 7,639 行，7,571 attempted，68 skipped，0 重复/遗漏 | 已完成 |
+| Clean/OOD drop | 97.25%→47.70%，绝对下降 49.55 pp，相对下降 50.95% | 可正式报告 |
+| 分层分析 | suite、40 tasks、5 categories、3 difficulty levels 均有统计 | 已完成 |
+| trace/video 完整性 | 7,571 traces；3,563 failure videos；0 缺失、0 空文件 | 已完成 |
+| 自动失败机制分类 | 所有系统失败已排除，但语义失败仍需人工视频 taxonomy | 待人工复核 |
 | unseen object/task | release 训练配置包含全部四个评测 suite | 当前 checkpoint 不可识别 |
-| cross-platform | 缺少同一策略的跨平台 observation/action 适配与权重 | 阻塞 |
-| future imagination 因果比较 | 缺少训练配方匹配的 Joint WAM/IDM checkpoint | 阻塞 |
+| cross-platform | 缺少同一策略的跨平台接口与权重 | 阻塞 |
+| future imagination 因果比较 | 缺少 recipe-matched Joint WAM/IDM checkpoint | 阻塞 |
 
-## 已通过的真实门禁
+## 正式分母与结果
 
-- checkpoint 加载和 dataset stats 动作反归一化链路正常。
-- 原版 LIBERO 与 LIBERO-Plus 能在独立进程隔离加载。
-- PyTorch 2.6+ init-state 兼容修复通过 Clean 和 Plus reset。
-- LIBERO-Plus 全部 10,030 个 classification row 的 init-state 路径审计通过。
-- 三卡 CUDA/EGL、每 GPU 一模型、job hash 分片、worker JSONL 和视频落盘均通过。
-- pilot 的 8 条 action trace 均 finite 且非全零，机器人末端执行器均发生明显位移。
-- aggregate 正确得到 8 attempted、2 success、6 failure、0 exception、1 skipped。
-- `pytest -q`：142 passed；覆盖阶段一评测和阶段二诊断链路。测试证明机制与门禁，不证明模型泛化性能。
+| Suite | Clean success / N | OOD success / N | OOD skipped | Absolute drop |
+| --- | ---: | ---: | ---: | ---: |
+| `libero_spatial` | 197 / 200 | 926 / 1,661 | 24 | 42.75 pp |
+| `libero_object` | 197 / 200 | 1,132 / 1,742 | 13 | 33.52 pp |
+| `libero_goal` | 193 / 200 | 531 / 1,681 | 11 | 64.91 pp |
+| `libero_10` | 191 / 200 | 641 / 1,687 | 20 | 57.50 pp |
+| 合计 | **778 / 800** | **3,230 / 6,771** | **68** | **49.55 pp** |
 
-## 正式 manifest 权威计数
+68 条 skipped 是上游没有对应官方 variant 的空分层审计行，不消耗 rollout，
+不进入成功率分母。正式 6,771 条 attempted OOD 记录均有官方 difficulty，
+且 1–2/easy、3/medium、4–5/hard 的映射无不一致。
 
-| Suite | Clean runnable | OOD runnable | OOD skipped |
-| --- | ---: | ---: | ---: |
-| libero_spatial | 200 | 1,661 | 24 |
-| libero_object | 200 | 1,742 | 13 |
-| libero_goal | 200 | 1,681 | 11 |
-| libero_10 | 200 | 1,687 | 20 |
-| 合计 | **800** | **6,771** | **68** |
+## 已通过的正式门禁
 
-121 条没有 difficulty 的 Goal/Light variant 明确排除在 easy/medium/hard 主实验之外。68 条 skipped 是空分层的审计占位，不消耗 rollout。
+- 八个 source manifest 与结果全部使用 checkpoint
+  `1000437c...a49579` 和项目 commit `575ba8f...406c5`。
+- 项目、Fast-WAM、LIBERO、LIBERO-Plus 在正式运行时均为 clean source。
+- 7,639 个 manifest job ID 与 raw worker result ID 集合完全一致。
+- 7,571 个 runnable job 均为 `completed`；0 exception、0 raw duplicate。
+- 2,399,314 个 action step 中无 NaN/Inf、空动作、错误维度或全零运动 episode。
+- 机器人首末位移最小 0.0385 m；3,563 个失败全部是 `max_steps`。
+- 3,563 个失败视频路径全部存在且非空；success-only 视频按配置不保存。
+- combined aggregate 正确排除 68 skipped，并输出总体、suite、task、category、
+  difficulty、CI 与配对四格。
 
-## 剩余完成条件
+## 尚未完成但不阻塞思考点一主结论
 
-正式研究问题不是只剩 6,771 个 OOD rollout。要计算相同 checkpoint 的 Clean→OOD 下降，还需要 800 个 Clean baseline，因此剩余真实计算量为：
+1. 失败视频的正式人工 taxonomy；当前只能报告成功判定和 max-steps，不能自动
+   宣称感知、抓取或规划是哪一种根因。
+2. wrist camera 的逐 episode 录制证据；当前 failure video 只保存 agent view。
+3. 相机位姿、光源参数等底层扰动值的统一 runtime introspection；正式记录已保留
+   classification ID、variant name、上游 commit 和任务文件，可追溯但未完全结构化。
 
-```text
-800 Clean + 6,771 OOD = 7,571 runnable rollouts
-```
-
-完成标准：
-
-1. 八个 suite/condition 实验目录都产生完整 worker results。
-2. 7,571 个 runnable job 无遗漏，68 个 skipped 有明确原因。
-3. 未解释的 exception 为 0；合法 `max_steps` 保留为失败，不反复重跑美化结果。
-4. 对八个目录执行 combined aggregate，生成 Clean/OOD drop、CI、配对四格和分层结果。
-5. 抽检扰动视频并完成人工失败分类。
-
-在这些条件完成前，科学状态应写为“正式实验待运行”，而不是“Fast-WAM 已证明泛化”或“pilot 25% 是正式 OOD 成功率”。
+这些缺口限制机制解释和媒体审计，不改变已经完成的 Clean/OOD 成功率测量。

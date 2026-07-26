@@ -1,6 +1,11 @@
 # 阶段二盲审与 outcome-blind 抽样手册
 
-更新日期：2026-07-23
+更新日期：2026-07-26
+
+> 状态更新：`P1-FORMAL-v1` outcome 已于 2026-07-26 完成，而 v2 cohort
+> 在此前保持 `frozen=false`。因此当前 v2 不能追溯升级为 FORMAL
+> preregistration；本手册的 freeze 命令只适用于新的、尚无 outcome 的
+> holdout/run。
 
 ## 1. 本手册解决什么问题
 
@@ -251,7 +256,9 @@ status = draft_not_frozen
 frozen = false
 ```
 
-原因是 planner 所在项目 tree 当前有尚未提交的实现和文档修改。旧目录
+生成当时的原因是 planner 所在项目 tree 有尚未提交的实现和文档修改。
+现在 `P1-FORMAL-v1` outcome 已存在，v2 即使规则可重放也不能事后改写为
+`frozen=true`；它最多作为 PILOT。旧目录
 `thought2_outcome_blind_cohort_draft/` 是已废弃 v1：它没有强制 Clean
 `episode_index=0` anchor，不能用于正式配对；保留该目录只为记录失败尝试。
 
@@ -266,10 +273,11 @@ v2 的 cohort ID：
 
 缩写只用于阅读；机器分析必须使用 manifest 内的完整 ID 和 hash。
 
-## 8. 如何真正冻结
+## 8. 新 holdout/run 如何真正冻结
 
-冻结必须发生在**项目代码提交且 tree clean之后、任何阶段一正式 outcome JSONL
-出现之前**。planner 会同时检查：
+冻结必须发生在**项目代码提交且 tree clean之后、目标 source 的任何 outcome
+JSONL 出现之前**。当前 `P1-FORMAL-v1` 已越过这个时间点，下面命令不能用于
+追溯冻结现有 source；planner 会同时检查：
 
 - 当前项目 tree 显式 `git_dirty=false`；
 - source formal 目录不存在非空 episode-result JSONL；

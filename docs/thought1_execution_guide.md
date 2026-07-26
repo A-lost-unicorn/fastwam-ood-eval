@@ -2,13 +2,16 @@
 
 本文是“标准 LIBERO → LIBERO-Plus 环境扰动鲁棒性评测”的操作手册。它回答“按什么顺序做、每一步看什么证据、什么时候必须停”，不代替研究结论边界或实验结果。
 
-当前状态（2026-07-22）：代码、配置、本地 Conda 环境、官方 Fast-WAM checkpoint/配套 stats、运行时公共模型和 LIBERO-Plus assets 均已准备。单卡 Clean smoke（2/2 completed）、单卡 OOD smoke（4/4 completed）和三卡 pilot（8 completed、1 expected skipped、0 exception）均已通过；正式 manifests 已按当前协议重建，full 尚未运行。smoke/pilot 的小样本成功率只用于链路验收，不是性能结论。
+当前状态（2026-07-26）：单卡 Clean/OOD smoke、三卡 pilot 和正式三卡 full
+均已完成。正式结果为 800/800 Clean、6,771/6,771 runnable OOD、68 expected
+skipped、0 exception；combined aggregate 为 Clean 97.25%、OOD 47.70%。
+本手册保留复现和恢复命令，不应在现有正式输出上无目的重跑。
 
 配套文档：
 
-- [阶段报告](thought1_report.md)：研究问题、当前证据、pilot 结果、正式 manifest 和资源预算。
+- [正式报告](thought1_report.md)：完整分母、正式结果、分层统计、完整性审计和结论边界。
 - [研究结论边界](thought1_generalization.md)：本阶段能回答和不能回答什么。
-- [完成度审计](thought1_readiness.md)：当前哪些内容已实现、哪些仍待实测。
+- [完成度审计](thought1_readiness.md)：正式完成证据和仍限制机制解释的缺口。
 - [环境配置](environment_setup.md)：Python、PyTorch、CUDA、MuJoCo/EGL 兼容方案。
 - [实验协议](experiment_protocol.md)：配对、统计和成功率口径。
 - [上游勘察](upstream_notes.md)：锁定的上游 commit、真实 API 与许可证。
@@ -377,7 +380,10 @@ Rollouts:   7,571 runnable = 800 Clean + 6,771 OOD
 Excluded:     121 ungraded Light Conditions rows（单独报告，不擅自分级）
 ```
 
-每次都应重新从实际 manifest 计算这些数字；不要把它们当作跨上游版本的常量。只执行 6,771 个 OOD job 不能得到 Clean→OOD drop，正式研究结论还需要 800 个 Clean baseline。按 pilot 速度理想线性外推约需 50.1 三卡墙钟小时；考虑 `libero_10` 的 700 steps、尾部不均衡和 I/O，应预留 60–72 小时。正式执行仍需逐个 suite 审核配置、checkpoint/stats hash、输出目录和视频策略，并由用户显式确认后再调用三卡 launcher。
+每次都应重新从实际 manifest 计算这些数字；不要把它们当作跨上游版本的常量。
+`P1-FORMAL-v1` 已完成全部 7,571 个 rollout，实际首条到末条结果跨度为
+44.26 小时，合计 123.20 episode GPU-hours。保守的 60–72 小时窗口仍适合作为
+新机器或新版本重跑预算，但不再是本次实验的待完成事项。
 
 ### 8.1 单卡 RTX 4090 全量脚本
 
@@ -479,7 +485,10 @@ watch -n 2 nvidia-smi
 ps -fp "$(cat outputs/logs/thought1_3gpu.pid)"
 ```
 
-按 pilot 估算应预留约 60–72 小时。若中断，保持同一 Git commit，重新运行相同命令；incomplete-only resume 会读取全部 `rank_*` 文件，只补未完成 job。
+本次正式运行已在约 44.3 小时内完成。若只是复核现有结果，不要再次启动 full；
+直接读取 `outputs/thought1/fastwam/combined/summary/`。只有要严格复现或补真正
+incomplete job 时才保持同一 Git commit 重运行；incomplete-only resume 会读取
+全部 `rank_*` 文件并跳过已完成与合法 `max_steps` 记录。
 
 ## 9. 立即停止条件
 

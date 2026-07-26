@@ -6,8 +6,15 @@
 4. 每个 job 最多执行 suite 配置的 policy steps，之前执行与官方 evaluator 相同的 30 次 no-op。
 5. success 只使用环境官方 done/check-success；异常不被悄悄忽略，skipped 也不进入成功率分母。
 6. success rate 分母包含正常完成和 exception job（exception 计失败），但排除 skipped。这样环境崩溃不会让成功率虚高。
-7. CI 是 episode Bernoulli 指标的 2,000 次确定性 bootstrap percentile interval。
-8. 优先报告 paired seed 的 clean-success/OOD-failure、clean-failure/OOD-success、both-success、both-failure。
+7. 主 CI 是 result-row Bernoulli 指标的 2,000 次确定性 bootstrap percentile
+   interval；它把官方 variant row 作为重采样单位。正式报告同时给 task-macro
+   与 task-cluster bootstrap 作为任务异质性敏感性分析，不能混称为同一个
+   estimand。
+8. 报告 paired seed 的 clean-success/OOD-failure、
+   clean-failure/OOD-success、both-success、both-failure，但必须同时报告唯一
+   Clean anchor 数。`all_once` OOD 全部使用 episode index 0 时，同一 Clean
+   anchor 会对应多个 variant；展开的 variant pair 不是相互独立的 Clean trial，
+   不直接做普通 McNemar 推断。
 
 9. 每个结果显式记录 `policy_variant` 与 `test_time_future_imagination`。Clean/OOD checkpoint hash 只允许在同一策略变体内相同；不同策略的 checkpoint 本来就应不同。
 10. 未来想象比较按 `(suite, task, episode seed, condition, category, level, official variant)` 配对，报告配对成功率差、bootstrap CI 与 exact McNemar p-value。

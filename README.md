@@ -36,6 +36,10 @@ clean_success_rate - ood_success_rate
 (clean_success_rate - ood_success_rate) / max(clean_success_rate, epsilon)
 ```
 
+`P1-FORMAL-v1` 已完成 800 个 Clean 和 6,771 个 runnable OOD rollout：
+Clean `97.25%`、OOD `47.70%`，绝对下降 `49.55` 个百分点，0 exception。
+完整分层结果与结论边界见 [思考点一正式报告](docs/thought1_report.md)。
+
 ## 3. 当前阶段不做什么
 
 不训练 Fast-WAM，不修改主模型，不在本项目中实现 Future Adapter、Joint WAM 或历史记忆，也不把仿真 OOD 结论外推成真机结论。若以后提供上游已经实现且训练配方匹配的 Joint WAM/IDM checkpoint，本项目只负责调用和公平评测。未运行的实验不会填入虚构结果。
@@ -54,7 +58,7 @@ clean_success_rate - ood_success_rate
 
 - [研究总控与阶段状态](docs/research_index.md)：论文主线、证据等级、阶段隔离和当前优先级。
 - [实验、卡点与结论台账](docs/experiment_ledger.md)：已运行数字、失败尝试、可写与不可写结论。
-- [思考点一阶段报告](docs/thought1_report.md)：当前结论、真实 smoke/pilot 证据、正式 manifest 与剩余计算量。
+- [思考点一正式报告](docs/thought1_report.md)：全量结果、完整性审计、suite/category/difficulty 分层与结论边界。
 - [思考点 1 实施与验收手册](docs/thought1_execution_guide.md)：checkpoint/assets、单卡 smoke、三卡 pilot 与正式运行门禁。
 - [思考点二上游审计](docs/thought2_upstream_audit.md)：`infer_joint()`、官方预处理、动作语义、VAE、时间对齐和 release 能力门禁。
 - [思考点二概念说明](docs/thought2_concepts.md)：Shadow Diagnostics 的研究问题、旁观语义和因果边界。
@@ -165,7 +169,9 @@ CUDA_VISIBLE_DEVICES=0 MUJOCO_GL=egl MUJOCO_EGL_DEVICE_ID=0 \
 
 ## 8. Clean baseline
 
-单卡 Clean/OOD smoke 和三卡 pilot 已通过，正式 manifest 也已审核。正式研究仍需要运行 800 个 Clean baseline：
+单卡 Clean/OOD smoke、三卡 pilot 和正式 800 个 Clean baseline 均已完成。
+现有结果位于 `outputs/thought1/fastwam/*/clean/`；下面命令只用于新目录复现或
+真正的 incomplete resume，不要对已完成正式结果使用 `--overwrite`：
 
 ```bash
 fastwam-ood plan --config configs/eval_clean_full.yaml
@@ -188,7 +194,11 @@ LIBERO-Plus 的扰动来自其 BDDL、场景 XML、robot class、init state 和 
 
 ## 10. 3 GPU 正式评测
 
-先确认 checkpoint/stats hash、suite、task 子集、最大步数、五类扰动、三个等级和输出目录。Clean 可使用多个 seed；LIBERO-Plus 正式计划必须保持每个官方 task variant 1 次，不能把 Clean 的 20 次口径复制到 OOD。三卡一键入口会顺序运行四个 suite 的 800 Clean 和 6,771 OOD，支持跨 rank 断点续跑，并最终生成 combined report：
+`P1-FORMAL-v1` 已用三卡入口顺序完成四个 suite 的 800 Clean 和 6,771 OOD，
+并生成 combined report。该入口保留用于严格复现或 incomplete resume；运行前
+仍须确认 checkpoint/stats hash、suite、最大步数、五类扰动、三个等级和新输出
+策略。LIBERO-Plus 必须保持每个官方 task variant 1 次，不能复制 Clean 的
+20 次口径：
 
 ```bash
 CONFIRM_FULL_EVAL=YES GPU_IDS=0,1,2 \
@@ -335,9 +345,10 @@ diagnostics:
   require_frozen_cohort: true
 ```
 
-在阶段一正式 outcome 出现前，仍需先决定沿用五类 732 条，还是按原研究路线在
-layout/robot-init 中二选一形成 612/622 条，再在 clean commit 上生成 frozen
-manifest。完整命令和审计边界见
+阶段一正式 outcome 现已出现，而 v2 草案此前没有通过 clean-tree freeze。
+因此不能在事后把它改名为 FORMAL 预注册 cohort；它最多降级作为 PILOT，或由
+未接触当前 outcome 的独立保管人针对新 holdout/run 冻结新 manifest。完整命令
+和审计边界见
 [盲审与 outcome-blind 抽样手册](docs/thought2_blind_review_and_sampling.md)。
 
 ## 13. 查看失败视频

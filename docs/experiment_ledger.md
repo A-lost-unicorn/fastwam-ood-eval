@@ -1,6 +1,6 @@
 # 实验、卡点与结论台账
 
-更新日期：2026-07-26
+更新日期：2026-07-27
 
 本台账只记录可追溯事实。机器工件是权威来源，本文是便于论文、周报、简历和面试使用的索引。
 
@@ -20,11 +20,14 @@
 | `P2-STATIC-CLEAN-PILOT-v1` | 2026-07-23 | 2 / CALIBRATION PILOT | `outputs/thought2_static_calibration_clean` | 2 planned/completed/eligible，0 error | 独立 Clean null，小样本 |
 | `P2-STATIC-OOD-PILOT-v1` | 2026-07-23 | 2 / CALIBRATION PILOT | `outputs/thought2_static_calibration_ood` | 五类 OOD 各 1；5/5 eligible，0 error | 类别覆盖 smoke，不是分布估计 |
 | `P2-STATIC-COMP-v1` | 2026-07-23 | 2 / CALIBRATION PILOT | 独立 calibration comparison + 只读 pilot sensitivity | 候选阈值 `0.013223`；旧/候选 predicted-static `7/7→0/7` | `candidate_only`，不得冻结 |
-| `P2-STATIC-FORMAL-PLAN-v2` | 2026-07-23 | 2 / CALIBRATION PLAN | `thought2_static_calibration_formal_{clean,ood}.yaml` | Clean 100 + OOD 100；五类 OOD 各 20；dry-run 0 skipped | 只读计划已审计，尚未运行 |
+| `P2-STATIC-FORMAL-PLAN-v2` | 2026-07-23 | 2 / CALIBRATION PLAN | `thought2_static_calibration_formal_{clean,ood}.yaml` | Clean 100 + OOD 100；五类 OOD 各 20；dry-run 0 skipped | 历史计划；已由 `P2-STATIC-FORMAL-v1` 执行完成 |
 | `P2-BLIND-PACKET-PILOT-v1` | 2026-07-23 | 2 / WORKFLOW PILOT | 20-step Clean/OOD diagnostic 输入；public packet/private key 分离 | 7 cases / 28 media；0 sensitive public key；全媒体可解码；human labels 0/7 | 只证明盲审链路，不是人工 future 质量结果 |
 | `P2-COHORT-FORMAL-DRAFT-v2` | 2026-07-23 | 2 / PLAN | 八份 outcome-blind manifests；seed `20260724` | Clean 200 + OOD 532；68 unsupported；0 supported shortfall；Clean 含 episode-0 anchor | `draft_not_frozen`；类别方案和 clean commit 待定 |
 | `P2-SAP-DRAFT-v1` | 2026-07-23 | 2 / ANALYSIS PLAN | `thought2_statistical_analysis_plan.md` | 先 episode 后 task 聚合；suite-stratified task bootstrap；human/outcome/missing gate | 未冻结；不得据此声称已预注册或已有正式效应 |
-| `P2A-FIVE-CATEGORY-FULL-PLAN-v1` | 2026-07-26 | 2A / FORMAL DATA-COLLECTION PLAN | `run_thought2_five_category_full.sh` + formal five-category template | static 100+100；diagnostic 200 Clean + 532 OOD；8 suite×condition 组；20 video steps、≤2 probes/episode | 实现与 732-job dry-run 已审计，真实 GPU run 尚未启动；ratification 只覆盖 Phase 2 指标前锁定 |
+| `P2A-FIVE-CATEGORY-FULL-PLAN-v1` | 2026-07-26 | 2A / FORMAL DATA-COLLECTION PLAN | `run_thought2_five_category_full.sh` + formal five-category template | static 100+100；diagnostic 200 Clean + 532 OOD；8 suite×condition 组；20 video steps、≤2 probes/episode | 历史计划；已由后续 collection 执行完成；ratification 只覆盖 Phase 2 指标前锁定 |
+| `P2-STATIC-FORMAL-v1` | 2026-07-26 | 2 / FORMAL CALIBRATION | `outputs/thought2/five_category_formal_v1/static` | 200/200 eligible；Clean/OOD 各 100；五类 OOD 各 20；阈值 `0.0167421166` | diagnostic 启动前通过全部 freeze gate 并由 runner 显式接受 |
+| `P2A-FIVE-CATEGORY-COLLECTION-v1` | 2026-07-26–27 | 2A / FORMAL DATA COLLECTION | commit `0fb8350`；`run_thought2_five_category_full.sh` | 200 Clean + 532 OOD；732 episodes / 1,010 probes / 2,020 aligned frames；0 error | 正式 raw collection 完成；项目与三个上游 clean |
+| `P2A-FIVE-CATEGORY-ANALYSIS-v1` | 2026-07-27 | 2A / POST-RUN ANALYSIS | `formal_analysis_v1`；10,000 次 suite-stratified task bootstrap | cosine OOD−Clean `+0.0316`；direction `−0.1898`；730/732 outcome match；4,040 media 0 decode error | 与运行前 DRAFT 方法一致，但 DRAFT 未冻结；不得称 preregistered confirmatory |
 
 ### `P1-FORMAL-v1` 机器证据
 
@@ -193,8 +196,55 @@
   hash 和 source outcome 已存在；未 ratify 的 draft 仍由
   `require_frozen_cohort=true` 拒绝。
 - 原始路线说第四类采用“layout 或 robot-init”，而现有阶段一计划覆盖五类。
-  因此 732 仍是覆盖草案：排除 robot-init 后为 612，排除 layout 后为 622；
-  必须在查看正式 outcome 前选择并生成新 ID。
+  2026-07-26 正式 runner 明确选择并锁定五类 732-job 版本；因此本轮结果回答
+  五类扰动，不可事后删掉某一类再把 612/622 当成同一 formal cohort。
+
+### `P2A-FIVE-CATEGORY-COLLECTION/ANALYSIS-v1` 机器证据
+
+- 运行状态 `completed`、exit code 0；时间
+  `2026-07-26 18:18:15—2026-07-27 00:41:46`，三卡墙钟约
+  `6 h 23 min 31 s`。
+- 正式 raw collection 使用项目 clean commit `0fb8350`；项目与 Fast-WAM、
+  LIBERO、LIBERO-Plus 均 clean。checkpoint SHA-256 与阶段一相同：
+  `1000437cfcf55c000094f79a2600634c502bcb5b492476b94bf8509883a49579`。
+- static/no-op calibration 为 `200/200` eligible：Clean/OOD 各 100、
+  五类 OOD 各 20、0 error；runner 在 diagnostics 前显式接受正式阈值
+  `0.016742116587908088`。
+- diagnostics 完成 `200 Clean + 532 OOD = 732 episodes`、
+  `1,010 probes`、`2,020 aligned future frames`，0 diagnostic error。
+  Clean 为 198 success/2 failure；OOD 为 256 success/276 failure。
+- 每个成功 episode 有 1 个 probe，每个失败 episode 有 2 个 probe。因此主表
+  同时给全部可用 probe 与仅首 probe sensitivity，避免把失败轨迹的额外 probe
+  当作独立证据。
+- 同一次 rerun 内 `1,010/1,010` probe 的 action hash before/after 完全一致。
+  与阶段一历史 trace 跨运行比较为 `996/1,010` exact、13 mismatch、1 unavailable；
+  最大绝对差 2.0。Phase 1/2 outcome 为 `730/732` 一致；两个不一致 episode
+  从 outcome association 排除，但保留在 ID/OOD consistency 分析。
+- 1,010 张 current PNG，加 predicted/actual/side-by-side 各 1,010 个 MP4，
+  共 4,040 个媒体工件；全量解码、帧数、分辨率检查均为 0 error。
+- 40-task 等权主 contrast：
+  cosine distance Clean/OOD `0.1025/0.1341`，OOD−Clean
+  `+0.0316`，95% CI `[0.0254, 0.0381]`；latent L1 为
+  `+0.0277 [0.0238, 0.0317]`；motion-direction cosine 为
+  `−0.1898 [−0.2134, −0.1664]`。
+- outcome-matched OOD 分母为 255 success/275 failure、40/40 mixed tasks。
+  failure−success cosine 为 `+0.0249 [0.0166, 0.0328]`；仅首 probe 为
+  `+0.0197 [0.0116, 0.0282]`。Direction contrast 分别为
+  `−0.2127 [−0.2328, −0.1923]` 与
+  `−0.0784 [−0.1046, −0.0541]`。
+- 仅首 probe 的 cosine 最低误差四分位仍有 `55/132=41.67%` failure，
+  最高误差四分位为 `87/133=65.41%` failure。未来一致性与失败相关，但既非
+  成功充分条件，也非必要条件。
+- 20-step generation mean/p50/p95 为
+  `3,354.66/3,316.96/3,564.12 ms`；完整 diagnostic 为
+  `5,816.77/5,762.95/6,271.52 ms`；峰值显存 `24,841.09 MB`。
+  这是 control-loop 外 shadow 成本，不是 base policy action latency。
+- 权威人工解读见 [thought2_formal_results.md](thought2_formal_results.md)；
+  机器工件位于
+  `outputs/thought2/five_category_formal_v1/formal_analysis_v1/`。
+- 统计方法与运行前 DRAFT 一致，但 DRAFT 未冻结。因此资格是
+  `formal data collection + protocol-consistent post-run analysis`，
+  不能表述为 preregistered confirmatory analysis。
 
 ## 2. 失败尝试与解决记录
 
@@ -237,16 +287,31 @@ Provenance 补充核对：Fast-WAM 和 LIBERO checkout clean；LIBERO-Plus
    identity 留在私有 key 中，并对 28 个公开媒体做 hash/解码审计。
 10. Outcome-blind planner 能在不读取 episode result 的条件下固定精确 job ID、
    unsupported cell 和 Clean index-0 anchor，并拒绝正式 runner 使用未冻结草案。
+11. 五类正式 static/no-op calibration 已完成：200/200 eligible，正式阈值
+    `0.0167421166` 在 diagnostic 启动前通过全部 freeze gate。
+12. 五类 Phase 2 raw collection 已完成：732 episodes、1,010 probes、
+    2,020 aligned future frames、0 error；4,040 个媒体全部通过解码审计。
+13. 自动 future–realized proxy 在 OOD 下稳定变差：task-equal cosine distance
+    增加 `0.0316 [0.0254, 0.0381]`，motion-direction cosine 下降
+    `0.1898 [0.1664, 0.2134]`。
+14. OOD failure 的 future inconsistency 高于 success，且仅首 probe sensitivity
+    仍保持同方向；这是同轨迹关联证据，不是 future 对 action 的因果依赖。
+15. 同一次 Phase 2 执行中 1,010/1,010 probe 的动作哈希保持不变；该 shadow
+    诊断没有把 future 反馈给控制动作。
 
 ### 尚未支持
 
-1. unconditional future consistency 与成功/OOD 的稳定相关性；当前只有方向一致的 PILOT 趋势。
-2. “失败来自未来错误还是动作错误”的自动因果分类。
-3. 显式未来能改善 OOD，或 K=1/2/4 中哪个最好。
-4. 正式 static threshold；当前 `0.013223` 只有 candidate 资格。
-5. 人工盲审结论；当前只有空模板，human labels 为 0/7。
-6. 732 是否是最终正式 cohort；五类/四类取舍、power justification 和 clean-tree
-   freeze 均未完成。
+1. 自动 proxy 是否等价于语义上的“未来预测正确”；goal progress、物理合理性、
+   wrong-object/wrong-goal 仍缺标签盲化人工评审。
+2. “失败来自未来错误还是动作错误”的自动或因果分类。基础模型的动作不读取
+   shadow future，因此本阶段不能把 future error 写成失败原因。
+3. 显式未来能否改善 OOD，或 K=1/2/4 中哪个最好；必须由阶段三
+   B0/A0/A1/A2/A4 对照回答。
+4. 正式 human-review 结论与 reviewer agreement；当前只有 7-case pilot 空模板。
+5. 把本次自动统计称为 preregistered confirmatory analysis；统计 DRAFT 在
+   formal future 指标生成前没有冻结。
+6. 20-step shadow RGB 生成成本是否等于阶段三 cached latent 或在线 Adapter
+   成本；阶段三必须单独计时。
 
 ## 4. 待填论文主表
 
@@ -271,10 +336,15 @@ Provenance 补充核对：Fast-WAM 和 LIBERO checkout clean；LIBERO-Plus
 
 | Cohort | Mode | Condition/outcome | Episodes / probes / aligned frames | Video steps | L1 | Cosine distance | Motion-direction cosine | Human agreement | Generation / diagnostic latency | FORMAL Run ID |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- | --- |
-| 待正式阈值冻结与正式抽样 | 2A | — | — | 20 | — | — | — | — | — | — |
+| 五类正式 cohort | 2A | Clean | 200 / 202 / 404 | 20 | 0.1431 | 0.1025 | 0.7416 | 待人工盲审 | 3,336.63 / 5,785.64 ms（mean） | `P2A-FIVE-CATEGORY-ANALYSIS-v1` |
+| 五类正式 cohort | 2A | OOD | 532 / 808 / 1,616 | 20 | 0.1708 | 0.1341 | 0.5518 | 待人工盲审 | 3,361.44 / 5,828.48 ms（mean） | `P2A-FIVE-CATEGORY-ANALYSIS-v1` |
+| OOD outcome association | 2A | 255 success / 275 failure；排除 2 mismatch | 530 / 805 / 1,610 | 20 | failure−success +0.0196 | failure−success +0.0249 | failure−success −0.2127 | 待人工盲审 | 同上 | `P2A-FIVE-CATEGORY-ANALYSIS-v1` |
 
 自动指标与盲审标签分开保存。success/failure matched cohort 不能用于估计总体失败率；
-2A 结果始终标记 `causal_interpretation_allowed=false`。
+2A 结果始终标记 `causal_interpretation_allowed=false`。前两行是全部可用 probe
+的 task-equal 均值；outcome 行 L1 的 `+0.0196`、cosine 的 `+0.0249` 和
+direction 的 `−0.2127` 也是全部可用 probe 口径，首 probe sensitivity 另见
+正式结果文档。
 
 ### 4.3 阶段三：部分未来 Adapter
 
@@ -295,7 +365,8 @@ future 信息效应。
 | Claim ID | 拟写结论 | 所属阶段 | 必须满足的证据 | 当前状态 | Artifact/Run ID |
 | --- | --- | --- | --- | --- | --- |
 | `C1` | Fast-WAM 对特定环境 shift 敏感 | 1 | 完整 ID/OOD 分母、配对 drop、CI、0 未解释 exception | **支持** | `P1-FORMAL-v1`；`outputs/thought1/fastwam/combined/summary/` |
-| `C2` | future consistency 在 OOD 或失败样本下降 | 2A | 冻结 cohort、校准阈值、episode-level 统计与盲审 | 未支持 | — |
+| `C2a` | 自动 future–realized consistency proxy 在 OOD/失败样本下降 | 2A | 固定 cohort、正式阈值、episode→task 统计、probe-count sensitivity | **支持（post-run analysis，非 preregistered）** | `P2A-FIVE-CATEGORY-ANALYSIS-v1`；`formal_analysis_v1/` |
+| `C2b` | 语义 future 正确性与“未来错误/动作错误”失败机制 | 2A | 双人标签盲审、agreement、解盲后机制标签；因果措辞仍禁止 | 未支持 | 仅 blind packet PILOT |
 | `C3` | 显式部分未来提高 OOD 成功率 | 3 | B0/A0/A1/A2/A4 配方匹配、跨 seed 配对 CI | 未支持 | — |
 | `C4` | 某个 K 位于效果—延迟 Pareto 前沿 | 3 | 在线 latency/memory 与同 manifest ID/OOD 结果 | 未支持 | — |
 

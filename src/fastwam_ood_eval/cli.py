@@ -45,6 +45,11 @@ from fastwam_ood_eval.diagnostics.diagnostic_cohort import (
     ratify_diagnostic_cohort,
     validate_diagnostic_cohort,
 )
+from fastwam_ood_eval.diagnostics.formal_analysis import (
+    DEFAULT_BOOTSTRAP_REPLICATES,
+    DEFAULT_BOOTSTRAP_SEED,
+    analyze_thought2_formal,
+)
 from fastwam_ood_eval.diagnostics.report import generate_diagnostic_report
 from fastwam_ood_eval.diagnostics.static_calibration import (
     StaticCalibrationWriter,
@@ -202,6 +207,51 @@ def build_parser() -> argparse.ArgumentParser:
         help="Generate the thirteen-section Thought 2 diagnostic report",
     )
     report_diagnostic.add_argument("--experiment-dir", required=True, type=Path)
+    formal_analysis = subparsers.add_parser(
+        "analyze-thought2-formal",
+        help=(
+            "Create the task-equal, cluster-bootstrap Thought 2 post-run "
+            "analysis bundle"
+        ),
+    )
+    formal_analysis.add_argument(
+        "--experiment-dir",
+        required=True,
+        type=Path,
+        help="Thought 2 five-category run root",
+    )
+    formal_analysis.add_argument(
+        "--thought1-summary",
+        required=True,
+        type=Path,
+        help="Combined Thought 1 episode_results.csv",
+    )
+    formal_analysis.add_argument(
+        "--output-dir",
+        required=True,
+        type=Path,
+        help="Fresh derived-analysis output directory",
+    )
+    formal_analysis.add_argument(
+        "--source-trace-root",
+        type=Path,
+        help="Optional Thought 1 root for cross-run action trace comparison",
+    )
+    formal_analysis.add_argument(
+        "--bootstrap-replicates",
+        type=int,
+        default=DEFAULT_BOOTSTRAP_REPLICATES,
+    )
+    formal_analysis.add_argument(
+        "--bootstrap-seed",
+        type=int,
+        default=DEFAULT_BOOTSTRAP_SEED,
+    )
+    formal_analysis.add_argument(
+        "--verify-media",
+        action="store_true",
+        help="Decode every current/predicted/actual/side-by-side artifact",
+    )
 
     aggregate_calibration = subparsers.add_parser(
         "aggregate-static-calibration",
@@ -971,6 +1021,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         if args.command == "report-diagnostics":
             print(generate_diagnostic_report(args.experiment_dir))
+            return 0
+        if args.command == "analyze-thought2-formal":
+            result = analyze_thought2_formal(
+                experiment_dir=args.experiment_dir,
+                thought1_summary_csv=args.thought1_summary,
+                output_dir=args.output_dir,
+                source_trace_root=args.source_trace_root,
+                bootstrap_replicates=args.bootstrap_replicates,
+                bootstrap_seed=args.bootstrap_seed,
+                verify_media=args.verify_media,
+            )
+            print(json.dumps(result, ensure_ascii=False, sort_keys=True))
             return 0
         if args.command == "aggregate-static-calibration":
             metrics = aggregate_static_calibration(

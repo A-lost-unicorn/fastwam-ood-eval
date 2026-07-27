@@ -1,6 +1,6 @@
 # 研究总控：Fast-WAM 在 OOD 环境中真的不需要未来想象吗？
 
-更新日期：2026-07-26
+更新日期：2026-07-27
 
 本文是项目的研究入口与证据总账。详细命令、协议和实现分别链接到各阶段手册；这里只回答四件事：当前做到哪里、哪些数字可以使用、阶段之间如何隔离、下一步是什么。
 
@@ -19,11 +19,11 @@
 | 阶段 | 工程状态 | 真实运行证据 | 科学结论状态 |
 | --- | --- | --- | --- |
 | 阶段一：ID/OOD 评测 | Clean/OOD、3 GPU、resume、聚合和全量 trace/video 审计均完成 | `P1-FORMAL-v1`：800 Clean + 6,771 OOD，68 skipped，0 exception | **FORMAL 完成**。Clean 97.25%→OOD 47.70%，drop 49.55 pp |
-| 阶段二 A：unconditional future consistency | 已实现；读取阶段一 source manifest，只写独立输出 | 2-step smoke 1 episode；20-step Clean/OOD pilot 5 episodes / 7 probes / 14 aligned future frames / 0 error | **PILOT 完成，正式分析未完成**。当前趋势只用于形成假设 |
-| 阶段二校准：static/no-op null | 独立命令、输出、resume、聚合和 freeze gate 已实现 | 2 Clean + 五类 OOD 共 7/7 eligible；候选阈值 `0.013223` | **PILOT 完成，阈值未冻结**。仅 7/200，且 v1 未预先固定 quantile 插值法 |
+| 阶段二 A：unconditional future consistency | 五类正式 runner、task-level 派生分析、trace/media 审计均完成 | 200 Clean + 532 OOD；1,010 probes / 2,020 aligned frames / 0 error | **正式数据收集完成；自动关联结果完成**。OOD consistency proxy 下降；统计计划未预冻结，human endpoint 待完成 |
+| 阶段二校准：static/no-op null | 独立命令、输出、resume、聚合和 freeze gate 已实现 | 100 Clean + 100 OOD；200/200 eligible；阈值 `0.0167421166` | **正式校准完成并在 diagnostic 启动前接受**。0 predicted-static、6 actual-static probes |
 | 阶段二盲审 | public packet/private key 分离与泄漏校验已实现 | 真实 pilot 7 cases / 28 media 全量解码；0 sensitive public key | **流程 PILOT 完成，人工标注未开始**。不得写成人工质量结果 |
-| 阶段二正式抽样 | outcome-blind planner、anchor、exact-ratification 与 formal gate 已实现 | v2 草案在阶段一 outcome 前生成但未冻结；200 Clean + 532 OOD | **待运行时 ratify**。只认证 Phase 2 future 指标前 exact job ID 不变；不冒充阶段一 outcome 前 preregistration |
-| 阶段二统计协议 | episode→task 分层 estimand、task-cluster bootstrap、missing/uncertain/outcome gate 已写成 DRAFT | 合成双 reviewer 标签验证 agreement 工具；无正式效应估计 | **尚未冻结**。primary metric、bootstrap、human budget 和 outcome gate 待确认 |
+| 阶段二正式抽样 | outcome-blind planner、anchor、exact-ratification 与 formal gate 已实现 | 200 Clean + 532 OOD 已 exact-ratify 并全部运行 | **完成**。只认证 Phase 2 future 指标前 job ID 不变；不冒充阶段一 outcome 前 preregistration |
+| 阶段二统计协议 | episode→task 分层、task bootstrap、首 probe/outcome gate 已实现 | 10,000 次 suite-stratified task bootstrap；730/732 outcome match | **post-run analysis 完成，非 preregistered confirmatory**。DRAFT 未在正式指标前冻结；人工 endpoint 待完成 |
 | 阶段二 B：action-conditioned future consistency | 严格门禁、schema、runner、测试已实现 | CPU/mock 与门禁测试通过 | **阻塞**。官方 release 为 `action_conditioned=false`，且没有可信匹配 checkpoint |
 | 阶段三：Future-to-Action Adapter | 研究与隔离方案已设计 | 无训练或真实评测结果 | **未开始** |
 
@@ -40,7 +40,9 @@
 | `TEST` | 单元/集成测试或 mock | 否 |
 | `SMOKE` | 少量真实模型和环境运行，验证链路 | 否 |
 | `PILOT` | 小规模真实样本，估算失败模式和成本 | 只能作为预实验，必须显式标注 |
-| `FORMAL` | 预注册配置、完整分母、聚合与审计通过 | 可以 |
+| `FORMAL-COLLECTION` | 数据收集配置/分母前锁定，provenance、聚合与审计通过 | raw 数据可进入论文；统计 claim 资格另审 |
+| `FROZEN-CONFIRMATORY` | estimand、统计方法与停止规则在指标产生前冻结 | 可以作为确认性推断 |
+| `POST-RUN-ANALYSIS` | 正式 raw 数据上的事后或未冻结分析 | 可以披露为探索/关联结果，不能冒充预注册确认性 |
 
 任何 `SMOKE/PILOT` 成功率都不得自动抄入摘要、主表或简历效果数字。
 
@@ -67,6 +69,7 @@ outputs/thought2_static_calibration_* # 阶段二独立 null 校准
 outputs/thought2_outcome_blind_*     # 阶段二只读抽样 manifest
 outputs/thought2_future_blind_*       # 阶段二 public packet/private key
 outputs/thought2_shadow_*            # 阶段二 B
+outputs/thought2/five_category_formal_v1/ # 阶段二五类正式 raw + 独立派生分析
 outputs/thought3/...                 # 阶段三训练、cache、评测
 ```
 
@@ -119,6 +122,12 @@ outcome JSONL 前使用 `frozen_before_source_outcomes`；现有 v2 则走更窄
 | static 候选敏感性 | 候选 `0.013223` 下 predicted/actual static 均 0/7；旧阈值下均 7/7 | 只读派生重分类；原 diagnostics 未改写，candidate 未冻结 |
 | 阶段二 blind packet pilot | packet `16a1dbc...665aef`；7 cases / 28 media；public/private hash 校验通过；human labels 0/7 | 盲审工具链可用；不能评价 future 质量 |
 | 阶段二 outcome-blind draft v2 | 200 Clean + 532 OOD = 732；68 unsupported；0 supported shortfall；Clean 强制 episode-0 anchor | 覆盖设计草案；`frozen=false`，不是预注册正式样本 |
+| 阶段二 static FORMAL | 200/200 eligible，Clean/OOD 各 100、五类 OOD 各 20；阈值 `0.0167421166` | 本次 formal diagnostic 的 run-level 阈值锁；对应 re-encoded frame embedding |
+| 阶段二五类正式收集 | 732/732 episodes；1,010 probes；2,020 aligned future frames；0 error | 正式数据完整；4,040 个媒体全量解码通过 |
+| 阶段二 ID→OOD consistency | cosine distance `0.1025→0.1341`，task-equal 差 `+0.0316`，95% CI `[0.0254,0.0381]` | OOD 下自动 future–realized consistency proxy 变差；非语义正确率 |
+| 阶段二视觉方向 | motion-direction cosine `0.7416→0.5518`，差 `−0.1898`，95% CI `[−0.2134,−0.1664]` | OOD 下预测与受保护动作实际造成的视觉变化方向更不一致；不是直接 action cosine |
+| 阶段二 outcome 关联 | OOD failure−success cosine `+0.0249`；仅首 probe `+0.0197`，两者 CI 均不跨 0 | future inconsistency 与失败相关；不能写成 future error 导致失败 |
+| 阶段二正式资源 | 20-step generation mean/p50/p95 `3354.66/3316.96/3564.12 ms`；full diagnostic `5816.77/5762.95/6271.52 ms`；峰值 `24841.09 MB` | Shadow 诊断成本；不是动作延迟或阶段三 K-step 在线成本 |
 
 20-step pilot 的 episode-weighted Clean→OOD 描述值为：latent L1
 `0.1512→0.2002`、cosine distance `0.1168→0.1942`、motion-direction cosine
@@ -134,6 +143,7 @@ OOD 一致性下降假设”，不能进入论文结论表。
 - 阶段二执行与标注手册：[thought2_execution_guide.md](thought2_execution_guide.md)
 - 阶段二盲审与 outcome-blind 抽样：[thought2_blind_review_and_sampling.md](thought2_blind_review_and_sampling.md)
 - 阶段二统计分析计划（当前 DRAFT）：[thought2_statistical_analysis_plan.md](thought2_statistical_analysis_plan.md)
+- 阶段二五类正式结果：[thought2_formal_results.md](thought2_formal_results.md)
 - 阶段二 static/no-op 校准手册：[thought2_static_calibration.md](thought2_static_calibration.md)
 - 阶段三 Adapter 方案：[thought3_adapter_plan.md](thought3_adapter_plan.md)
 - 实验、失败尝试和结论台账：[experiment_ledger.md](experiment_ledger.md)
@@ -141,18 +151,14 @@ OOD 一致性下降假设”，不能进入论文结论表。
 
 ## 7. 当前优先级
 
-1. 固定 `P1-FORMAL-v1` 报告、artifact hash 和 claim ledger；不得在现有正式
-   JSONL 上通过重跑合法 `max_steps` 美化结果。
-2. 对 3,563 个失败视频制定 suite/category/level/task 分层、reviewer 和
-   agreement 规则，再做描述性 failure taxonomy；报告 reviewed 分母。
-3. 五类 732 条方案已经锁定为执行计划；提交当前 runner/ratification/聚合代码，
-   然后在 clean tree 上后台启动，保留“阶段一 outcome 已存在”的 protocol
-   deviation。
-4. runner 首先把已完成的 7 条 no-op calibration pilot 扩展到预注册的 200 条
-   （Clean/OOD 各 100、五类 OOD 各 20）；两份 formal 配置已通过
-   `assigned=100, pending=100, skipped=0` 的只读计划审计，待在 clean commit
-   上真实运行，并只在所有自动 gate 通过后接受阈值。
-5. 由两名 reviewer 对已生成的 7-case pilot packet 做第一轮流程演练；它不替代
-   正式 packet。
-6. 只有阶段一主表和阶段二正式一致性结果稳定后，冻结 Adapter 输入和缓存
-   schema，进入阶段三。
+1. 固定本次阶段二派生分析代码与文档 commit，并在 clean commit 上重建
+   `formal_analysis_v1` manifest；当前 raw collection provenance 已经 clean。
+2. 在不按自动 metric/outcome 挑案例的前提下，冻结正式 human-review budget、
+   seed 和每 job 至多一个 probe；至少两名 reviewer 独立标注并保留 agreement/
+   adjudication。
+3. 人工 endpoint 只回答 goal progress、physical plausibility、局部 action
+   execution 和 future–actual agreement；不把它升级成 future-to-action 因果。
+4. 阶段三单独建立 branch/output/checkpoint namespace，先实现单样本
+   K=1/2/4 原生 future latent 导出与等价性测试，再实现 A0/A1/A2/A4 Adapter。
+5. 阶段三 OOD 结果不用于边训练边选择 K；先在 train/ID validation 固定
+   checkpoint，再解锁预先固定的 OOD cohort。

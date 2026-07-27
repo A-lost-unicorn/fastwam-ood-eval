@@ -1,5 +1,7 @@
 # 思考点二概念说明：未来预测与真实变化是否一致
 
+更新日期：2026-07-27
+
 ## 1. 思考点一在测什么
 
 思考点一只改变测试环境，不改变策略本身：
@@ -75,10 +77,20 @@ release 能在本机生成并保存未来；随后 20-step Clean/OOD PILOT 完�
 [执行手册](thought2_execution_guide.md)，上游语义证据见
 [上游审计](thought2_upstream_audit.md)。
 
+随后完成的五类正式收集包含 200 Clean + 532 OOD、732 episodes、1,010
+probes、2,020 aligned frames，0 error；同次 1,010/1,010 action hash 不变。
+task-equal cosine distance 从 `0.1025` 增至 `0.1341`，motion-direction
+cosine 从 `0.7416` 降至 `0.5518`。它支持 OOD 下自动 consistency proxy
+下降，但统计 DRAFT 未预冻结，资格是 post-run association，而非 preregistered
+confirmatory/causal result。详见
+[五类正式结果](thought2_formal_results.md)。
+
 Static flag 另由 outcome-independent no-op 协议校准。2026-07-23 的 7 条
 Clean/五类 OOD PILOT 得到候选 `0.013223`，但只有 7/200 且采样前未固定
 quantile 插值法，因此状态为 `candidate_only`。它只能说明首版阈值 1.0
-明显失配，不能把重分类后的 0/7 static 写成模型能力结论。详见
+明显失配，不能把重分类后的 0/7 static 写成模型能力结论。2026-07-26 的
+独立正式 null set 已完成 200/200 eligible，并在 diagnostics 前接受阈值
+`0.0167421166`；该值只控制 motion eligibility，不定义 future 正确率。详见
 [静态/无动作校准手册](thought2_static_calibration.md)。
 
 ## 5. 时间对齐为什么不能按“一帧一步”处理

@@ -1,6 +1,7 @@
 # 思考点二上游审计：Fast-WAM 未来预测—动作—真实环境变化一致性
 
 审计日期：2026-07-23
+正式运行状态更新：2026-07-27
 思考点一基线 commit：`0df5fe224e5c5dd767ed105802821b69c141e041`
 
 保护 tag：`thought1-baseline-v1`
@@ -237,11 +238,11 @@ class: FastWAM
 5. 对 action-conditioned 模型，还必须从实际 VAE temporal factor、DiT temporal patch、video length、attention mask 和 action horizon 推导传递依赖闭包。Pinned `first_frame_causal` 下所有 future frame 都要求完整 32-action horizon，而基线只执行 10；temporal patch 不等于 1 或未知 mask 也必须拒绝。
 6. `action_conditioned=true` 不是充分证据；必须同时通过源码 allowlist 的训练 provenance 与 checkpoint action-embedding 实值加载验证。当前 allowlist 为空。
 7. 当前 release 在 `action_conditioned_future` 触发能力门禁是预期结果；`unconditional_future` 必须由独立配置显式选择。不得通过修改思考点一执行 horizon 绕过 2B 条件覆盖门禁。
-8. `static_motion_threshold=1.0` 是首版 schema 初值。独立 no-op PILOT 已完成
-   2 Clean + 五类 OOD 共 7 条，8-step null 最大值为 `0.013223`；候选敏感性
-   将 predicted/actual static 从 7/7、7/7 改为 0/7、0/7。该候选仍只有
-   7/200，且 v1 未预先记录 quantile 插值法，因此不能冻结；latent direction
-   也不是光流方向。
+8. `static_motion_threshold=1.0` 是首版 schema 初值。独立 no-op PILOT 的
+   2 Clean + 五类 OOD 共 7 条、8-step null 最大值 `0.013223` 只形成
+   candidate；不能冻结。后续 FORMAL 已完成 200/200 eligible（Clean/OOD 各
+   100、五类各 20），并在 diagnostic 前接受 `0.0167421166`。该阈值只控制
+   representation-motion eligibility；latent direction 仍不是光流方向。
 9. Static calibration 使用第三个互斥 runner：不调用 `policy.act()`、不读取
    pilot 标签，只执行标准 no-op；checkpoint/encoder/offset/实现 hash 不同的
    cohort 不能合并，协议变化时旧目录拒绝 resume。

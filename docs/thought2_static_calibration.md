@@ -1,6 +1,6 @@
 # 阶段二静态/无动作校准手册
 
-更新日期：2026-07-23
+更新日期：2026-07-27
 
 ## 1. 为什么需要独立校准
 
@@ -208,7 +208,7 @@ pilot 中最小 predicted/actual energy 仍分别是候选阈值的约 `16.41×/
 - `outputs/thought2_static_calibration_pilot_comparison/summary/static_threshold_sensitivity.json`
 - `outputs/thought2_static_calibration_pilot_comparison/summary/static_calibration_report.md`
 
-## 7. FORMAL 冻结门槛
+## 7. FORMAL 冻结门槛与完成状态
 
 正式阈值至少需要：
 
@@ -235,8 +235,27 @@ variant pool 是否发生有放回选择会逐行保留在
 variant 冒充 100 个不同外观。
 
 达到这些条件只会得到 `eligible_for_manual_freeze`，不会自动修改诊断配置。
-人工冻结后应以新 output/protocol fingerprint 重跑或重新聚合正式 diagnostics，
-同时保留原始连续 energy，避免二值 flag 成为唯一结果。
+runner 还要求启动者显式设置 `ACCEPT_STATIC_THRESHOLD=YES`；接受值与 calibration
+artifact 会写入正式 diagnostic provenance，原始连续 energy 始终保留。
+
+2026-07-26 的 `P2-STATIC-FORMAL-v1` 已完成上述流程：
+
+| Gate | 正式结果 |
+| --- | ---: |
+| Completed / eligible | 200 / 200 |
+| Clean / OOD | 100 / 100 |
+| 五类 OOD | 各 20 |
+| Exception / excluded / skipped | 0 / 0 / 0 |
+| Quantile method | 0.99 `higher` |
+| Project / three upstream trees | 全部 clean |
+| Runtime frame/frequency | 全部一致 |
+| Formal threshold | `0.016742116587908088` |
+
+完整 runner 在生成任何 formal future diagnostic 前验证所有 gate，并由
+`ACCEPT_STATIC_THRESHOLD=YES` 显式接受该阈值。正式 calibration 位于
+`outputs/thought2/five_category_formal_v1/static/`；其值已经用于本轮 732
+episode 的 direction/static eligibility。旧 PILOT 的 `0.0132230342` 仍保持
+`candidate_only`，不得与正式阈值混写。
 
 ## 8. 可用于简历/面试的工程事实
 
@@ -249,5 +268,10 @@ variant 冒充 100 个不同外观。
   probe。
 - 将样本数、condition/category 覆盖和预注册 quantile method 编码为自动
   freeze gate，防止小样本 candidate 被误写成 paper 结论。
+- 在正式运行中完成 200-job、Clean/OOD 平衡且五类覆盖的 no-op calibration，
+  以 `0.0167421166` 冻结 motion eligibility threshold，并在 diagnostics
+  启动前完成 provenance/gate 审计。
 
-不能把 `0.013223` 写成最终阈值，也不能把 0/7 static 写成模型能力提升。
+不能把 `0.013223` 写成最终阈值，也不能把 0/7 static 写成模型能力提升；
+正式 `0.0167421166` 只定义 representation-motion eligibility，不是 future
+“正确/错误”的二值阈值。

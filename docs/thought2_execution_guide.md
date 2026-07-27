@@ -1,6 +1,6 @@
 # 阶段二执行手册：未来—动作—实际变化一致性
 
-更新日期：2026-07-23
+更新日期：2026-07-27
 
 ## 1. 阶段二拆成 2A 与 2B
 
@@ -145,11 +145,17 @@ fingerprint 和 source manifest hash；禁止把 comparison summary 写回任一
 - 同帧噪声全部为 0，8-step no-op energy 中位数/最大值为
   `0.00661479/0.01322303`。
 
-当前只得到 `candidate_static_motion_threshold=0.01322303`。它仍是
-`candidate_only`：正式门槛为 200 条（Clean/OOD 各 100、五类 OOD 各
-20），而且 PILOT-v1 采样前没有把 `higher` quantile 插值法写进 source
-manifest。当前协议已补齐该字段，旧目录会因 fingerprint 改变而拒绝 resume；
-v2/FORMAL 必须使用新 output。
+2026-07-23 的 7-job PILOT 只得到
+`candidate_static_motion_threshold=0.01322303`，资格仍是
+`candidate_only`。2026-07-26 正式 runner 随后完成独立的 200-job null set：
+Clean/OOD 各 100、五类 OOD 各 20、200/200 eligible、0 error；在任何
+diagnostic future 指标生成前，全部 freeze gate 通过并由 runner 显式接受：
+
+```text
+formal_static_motion_threshold = 0.016742116587908088
+```
+
+PILOT 候选值仍只作为历史记录，不能与正式阈值混用或回写旧 diagnostics。
 
 只读敏感性分析把旧阈值下 predicted/actual static 的 `7/7` / `7/7` 重分类为
 候选阈值下 `0/7` / `0/7`，原 diagnostics JSONL 未改写。它证明旧阈值量纲
@@ -215,28 +221,32 @@ cohort：
 
 一对多 OOD variant 不应假装成独立 Clean 配对。主分析应在 task/seed 层聚类，或为每个 category/level 预先固定一个 OOD variant 做一对一配对。
 
-当前 outcome-blind v2 草案使用 seed `20260724`：每个 suite/task 抽 5 个
+outcome-blind v2 草案使用 seed `20260724`：每个 suite/task 抽 5 个
 Clean，并强制包含 episode index 0；每个可运行
 suite/task/category/difficulty cell 抽 1 个 OOD。共 200 Clean + 532 OOD =
 732，另有 68 个 skipped-only cell，supported shortfall 为 0。八份 manifest
-均是 `draft_not_frozen`，不能直接通过正式 runner 的安全门。
+最初均是 `draft_not_frozen`，不能直接通过正式 runner 的安全门。
 
 由于这些草案在阶段一 outcome JSONL 产生前已经固定 exact job ID，现在采用
 `ratified_before_diagnostic_outcomes`：不重新抽样，只在 clean commit 上把原
 job ID 锁定到新的 manifest，同时明确披露阶段一 outcome 已经存在。这不是阶段一
 outcome 前的 preregistration，但可以防止根据尚未观察的阶段二 future 指标改样本。
 
-草案覆盖阶段一现有五类扰动；若主文坚持原路线的四类，必须在看 outcome 前决定
-保留 object-layout 还是 robot-init，并重新生成 612 或 622 条的新 manifest。
+2026-07-26 正式 runner 选择五类版本，在任何 Phase 2 future metric 产生前
+exact-ratify 八份 manifest，并完成全部 732 条。若后续论文另做四类分析，
+612/622 只能作为明确标注的 sensitivity 或新实验，不能事后冒充本次 formal
+cohort。
 完整计数、cohort ID、freeze 命令和废弃 v1 记录见
 [盲审与 outcome-blind 抽样手册](thought2_blind_review_and_sampling.md)。
 Episode 内先聚合 probe、task 内再聚合 cell、suite-stratified task bootstrap
 及 outcome 最小分母见
-[统计分析计划](thought2_statistical_analysis_plan.md)；该计划仍是 DRAFT。
+[统计分析计划](thought2_statistical_analysis_plan.md)。该计划在正式
+collection 前仍是 DRAFT；本次 v1 分析与其方法一致，但只能称
+protocol-consistent post-run analysis，不能称 preregistered confirmatory。
 
 ### 9.1 五类后台 runner
 
-已提供完整、可续跑的入口：
+完整、可续跑的入口已于 2026-07-26—27 成功执行：
 
 ```bash
 CONFIRM_PHASE2_FIVE_CATEGORY=YES \
@@ -259,27 +269,67 @@ bash scripts/run_thought2_five_category_full.sh --background all
 和尾部不均衡后建议预留 8–12 h。4 卡可通过 `GPU_IDS=0,1,2,3` 启动，但应先
 确认第四张卡和 EGL 均正常。
 
+本次实际状态：
+
+```text
+status=completed
+exit_code=0
+started_at=2026-07-26 18:18:15
+finished_at=2026-07-27 00:41:46
+```
+
+完成后使用只读分析命令；它要求全新 output，不修改 raw JSONL/CSV/video：
+
+```bash
+source scripts/activate_env.sh
+fastwam-ood analyze-thought2-formal \
+  --experiment-dir outputs/thought2/five_category_formal_v1 \
+  --thought1-summary outputs/thought1/fastwam/combined/summary/episode_results.csv \
+  --source-trace-root outputs/thought1/fastwam \
+  --output-dir outputs/thought2/five_category_formal_v1/formal_analysis_v1 \
+  --bootstrap-replicates 10000 \
+  --bootstrap-seed 20260725 \
+  --verify-media
+```
+
+人工解释见 [thought2_formal_results.md](thought2_formal_results.md)，机器表位于
+`outputs/thought2/five_category_formal_v1/formal_analysis_v1/`。
+
 ## 10. 正式完成门槛
 
-- **已通过 PILOT**：20-step Clean/OOD 无 error，媒体、动作复现和时间对齐抽检通过。
-- **PILOT 已完成**：独立 static/no-op calibration 7/7 eligible，
-  候选阈值 `0.013223`。
-- **待完成**：扩展到预注册 200 条并人工冻结 static threshold；当前
-  candidate 不得进入正式表。
-- **已生成草案、待 ratify**：outcome-blind v2 为 200 Clean + 532 OOD，
-  0 supported shortfall、68 unsupported cell；runner 会保留全部 exact job ID，
-  生成范围为 Phase 2 diagnostic 的 ratified manifest。
+- **正式 static 已完成**：200/200 eligible，Clean/OOD 各 100、五类各 20；
+  阈值 `0.0167421166` 在 diagnostic 启动前通过全部 freeze gate。
+- **正式 cohort 已完成**：五类 200 Clean + 532 OOD exact-ratify，732/732
+  episodes、1,010 probes、2,020 aligned future frames，0 error。
 - **已实现**：正式配置可设 `require_frozen_cohort=true`，草案会在模型加载和
   environment reset 前被拒绝。
-- **future PILOT 已验证**：项目与三个上游 checkout 的输入 manifest dirty
-  状态全部为 `false`；static calibration PILOT 是新实现的
-  `git_dirty=true` 开发运行，只能保留 PILOT 资格。
+- **正式 provenance 已通过**：raw collection 使用 clean commit `0fb8350`，
+  项目与三个上游 checkout 均 clean；checkpoint 与阶段一相同。
 - **已实现**：每个条件报告 episode/probe/aligned-frame 分母。
-- **已实现**：主统计先在 episode 内聚合 probe，再按 episode 等权；clip-weighted 仅作诊断。
+- **正式统计已运行**：先 probe→episode→task，40 task 等权，进行 10,000 次
+  suite-stratified task bootstrap；另报告 first-probe-only sensitivity。
+- **已通过动作/媒体审计**：1,010/1,010 probe 的同次运行 action hash 不变；
+  4,040 个媒体全量解码 0 error。
 - **待完成**：人工标注完成并保留原始/裁决版本。
 - **已实现**：报告明确区分 2A 与 2B，`causal_interpretation_allowed=false`。
+- **资格边界**：raw collection 为正式数据；统计计划未预冻结，v1 推断必须标为
+  post-run、not preregistered。
 
-## 11. 当前 real smoke 与 20-step pilot
+## 11. 五类正式结果
+
+- Clean/OOD task-equal cosine distance 为 `0.1025/0.1341`，
+  OOD−Clean `+0.0316 [0.0254, 0.0381]`。
+- Motion-direction cosine 为 `0.7416/0.5518`，
+  OOD−Clean `−0.1898 [−0.2134, −0.1664]`。
+- 排除两个 Phase 1/2 outcome mismatch 后，OOD 为 255 success/275 failure；
+  failure−success cosine 为 `+0.0249 [0.0166, 0.0328]`，仅首 probe
+  sensitivity 为 `+0.0197 [0.0116, 0.0282]`。
+- 首 probe 最低/最高 cosine-error 四分位 failure rate 分别为
+  `41.67%/65.41%`。一致性与失败相关，但不是成功的充分或必要条件。
+- 这些结果回答“自动 future–realized proxy 是否在 OOD/失败下降”；它们不回答
+  语义 goal correctness，也不能把失败归因为 future error。
+
+## 12. 历史 real smoke 与 20-step pilot
 
 `P2A-CLEAN-SMOKE-v1` 已于 2026-07-23 完成：
 

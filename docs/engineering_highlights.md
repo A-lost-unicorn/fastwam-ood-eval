@@ -4,12 +4,12 @@
 
 ## 1. 当前事实快照
 
-截至 2026-07-26：
+截至 2026-07-27：
 
 | 项目 | 状态 | 可用证据 |
 | --- | --- | --- |
 | 配置、planner、adapter、分片、resume、聚合 | 已实现 | `src/`、`configs/`、`tests/` |
-| 自动化测试 | 已通过 | `pytest -q`：173 passed；覆盖阶段一评测、PyTorch 2.6+ 安全边界、LIBERO-Plus 10,030 行路径审计、阶段二诊断、static calibration、label-blind packet、cohort ratification 与 freeze 门禁 |
+| 自动化测试 | 已通过 | `pytest -q`：175 passed；覆盖阶段一评测、PyTorch 2.6+ 安全边界、LIBERO-Plus 10,030 行路径审计、阶段二诊断、static calibration、label-blind packet、cohort ratification、formal analysis 与 freeze 门禁 |
 | Conda 环境与激活入口 | 已配置 | `scripts/create_env.sh`、`scripts/activate_env.sh` |
 | checkpoint/stats | 已下载并人工校验 | checkpoint SHA-256 `1000437c...a49579`；stats SHA-256 `30f81ad7...68638` |
 | FastWAM 公共运行时模型 | 已下载并逐文件校验 | `scripts/download_fastwam_runtime_models.sh`；T5、VAE、tokenizer 共约 11.9 GiB |
@@ -19,9 +19,11 @@
 | 三卡真实 pilot | 已通过 | 2026-07-22：9 planned、8 completed、1 expected skipped、0 exception；三个 rank 均有真实结果 |
 | 阶段一正式 full | FORMAL 已完成 | 800 Clean + 6,771 OOD runnable 全部完成；68 expected skipped；0 exception、0 job 重复/遗漏 |
 | 阶段一鲁棒性结论 | 可正式报告 | Clean 97.25%→OOD 47.70%，drop 49.55 pp；camera 15.13% 最敏感，light 81.88% 最稳健 |
-| 阶段二 2A unconditional future | 20-step PILOT 已通过 | smoke 后完成 Clean/OOD 5 episodes、7 probes、14 aligned future frames、0 error；全部媒体可解码 |
+| 阶段二 2A unconditional future | 正式收集与自动分析完成 | 200 Clean + 532 OOD；732 episodes、1,010 probes、2,020 aligned frames、0 error；4,040 media 全量解码 |
+| 阶段二自动关联结论 | post-run analysis 完成 | OOD−Clean cosine `+0.0316 [0.0254,0.0381]`；direction `−0.1898 [−0.2134,−0.1664]`；统计 DRAFT 未预冻结 |
+| 阶段二 static/no-op | FORMAL 完成 | 200/200 eligible；Clean/OOD 各 100、五类各 20；diagnostic 前接受阈值 `0.0167421166` |
 | 阶段二标签盲审 | WORKFLOW PILOT 已通过 | 7 cases / 28 media；public/private hash 校验和全量解码通过；human labels 仍为 0/7 |
-| 阶段二 outcome-blind 抽样 | DRAFT 已生成；exact-ratification 已实现 | 200 Clean + 532 OOD；不能追溯称为阶段一 outcome 前预注册，但可在 Phase 2 future 指标前锁定原 job ID |
+| 阶段二 outcome-blind 抽样 | 五类 exact-ratification 已执行 | 200 Clean + 532 OOD 全部运行；不能追溯称为阶段一 outcome 前预注册，但在 Phase 2 future 指标前锁定原 job ID |
 | 阶段二 2B action-conditioned future | 严格阻塞 | release 配置为 `action_conditioned=false`，且不存在通过 provenance 门禁的匹配 checkpoint |
 
 ## 2. 可以对外说明的工程亮点
@@ -38,13 +40,14 @@
 | 可审计 OOD 元数据 | 记录官方 category、difficulty、classification ID、variant name、candidate/selection 信息和上游 commit | `jobs.py`、`episode_result.py` | 真实 Plus result 已验证，运行时底层数值参数采集仍有限 |
 | 研究结论防越界 | 明确 release Fast-WAM、Joint WAM、IDM 是不同架构/权重；训练配方不匹配时禁止把比较写成未来想象的因果增益 | `config.py`、`thought1_generalization.md` | 配置门禁已单测，匹配权重缺失 |
 | 失败分析闭环 | 记录 action/robot state trace、异常、失败视频和聚合统计，提供静态 failure review 页面 | `recording/`、`analysis/review.py` | full 已保存 7,571 traces 与 3,563 failure videos；0 缺失，人工 taxonomy 待标注 |
-| 阶段二只读 shadow probe | 先冻结并哈希基线动作，再从同一 checkpoint 单独生成 future；current/predicted/actual/side-by-side 工件写入独立目录 | `policy/fastwam_future_probe.py`、`diagnostics/` | smoke 与 5-episode 20-step pilot 已验证；不会改写阶段一 source manifest/result |
+| 阶段二只读 shadow probe | 先冻结并哈希基线动作，再从同一 checkpoint 单独生成 future；current/predicted/actual/side-by-side 工件写入独立目录 | `policy/fastwam_future_probe.py`、`diagnostics/` | 732-episode 正式运行完成；1,010/1,010 probe 同次 action hash 不变，不会改写阶段一 source manifest/result |
 | 诊断语义双门禁 | 将 release 可支持的 unconditional consistency（2A）与需要匹配 action-conditioned checkpoint 的动力学一致性（2B）分开，禁止静默降级 | `config.py`、`fastwam_future_probe.py`、`thought2_upstream_audit.md` | 2A 实测通过；2B 对 release 预期拒绝 |
-| Source rerun 精确复现 | 将阶段二每个 probe 的 executed action 与阶段一 trace 按环境 step 对齐核对 | `diagnostics.jsonl`、阶段一 `traces/*.jsonl` | 7/7 probe 逐元素相同（最大绝对差 0），5/5 outcome 相同 |
+| Source rerun 稳定性审计 | 将阶段二每个 probe 的 executed action 与阶段一 trace 按环境 step 对齐核对，并区分同次动作保护与跨运行非确定性 | `source_action_audit.csv`、阶段一 `traces/*.jsonl` | 正式 run：996/1,010 exact、13 mismatch、1 unavailable；730/732 outcome match；同次 1,010/1,010 action hash 不变 |
 | 多输入语义安全聚合 | Clean/OOD comparison 单独生成 manifest，锁定 mode、共同 provenance、输入 fingerprint 与 source hash；unknown mode 不再猜测 | `diagnostics/aggregate.py`、`diagnostics/report.py` | 5-episode comparison 实测并可重复聚合 |
-| 独立 null-motion 校准 | 不读取 pilot 标签、不调用 policy action；以同帧编码噪声和 0/4/8 no-op residual 建候选阈值，自动检查 200 条 freeze gate | `diagnostics/static_calibration*.py`、独立 YAML/manifest/JSONL | 7/7 真实 Clean/五类 OOD 样本有效；旧阈值 1.0 与候选 `0.013223` 相差约 75.6× |
+| 独立 null-motion 校准 | 不读取 diagnostic outcome、不调用 policy action；以同帧编码噪声和 0/4/8 no-op residual 建阈值，自动检查 200 条 freeze gate | `diagnostics/static_calibration*.py`、独立 YAML/manifest/JSONL | 正式 200/200 eligible、五类各 20；阈值 `0.0167421166` 在 diagnostics 前显式接受 |
 | 标签盲化媒体审阅 | 将 condition/outcome/metric/source mapping 放入独立 `0600` private key；公开 packet 使用 opaque alias 和逐媒体 SHA-256；盲态导入区分 missing/uncertain/decisive 并计算 pairwise κ | `diagnostics/blind_review*.py`、静态 HTML/CSV/JSON | 7 个真实 probe 的 28 个媒体全部解码，public sensitive key/token 泄漏为 0；agreement 工具由合成双 reviewer 标签验证，真人标签仍为 0 |
-| Outcome-blind 正式抽样 | 只从阶段一 job manifest 分层哈希选样，记录 skipped-only cell，并强制 Clean episode-0 anchor；formal runner 拒绝未冻结草案 | `diagnostics/diagnostic_cohort.py`、`require_frozen_cohort` | v2 草案 732 jobs、0 supported shortfall；门禁正确阻止未冻结草案，阶段一 outcome 已出现后不允许追溯升级 |
+| Outcome-blind 正式抽样 | 只从阶段一 job manifest 分层哈希选样，记录 skipped-only cell，并强制 Clean episode-0 anchor；formal runner 拒绝未冻结草案 | `diagnostics/diagnostic_cohort.py`、`require_frozen_cohort` | 五类 732-job exact-ratification 与运行完成；阶段一 outcome 已出现后不允许追溯升级 |
+| 层级化正式分析与审计 | probe→episode→task 聚合、suite-stratified task bootstrap、首 probe sensitivity、outcome mismatch 排除、BH-FDR、媒体/trace 全量审计 | `diagnostics/formal_analysis.py`、`formal_analysis_v1/` | 40 task、10,000 bootstrap；4,040 media 0 decode error；175 tests passed |
 
 ## 3. 难点、阻碍、方案与剩余风险
 
@@ -242,6 +245,25 @@
   40-task 等权/cluster bootstrap。两者的 drop 分别为 49.55 pp 与 49.22 pp，
   方向一致，但 task-cluster CI 更宽 `[42.14, 56.39] pp`。
 
+### 3.21 阶段二 failure 多一个 probe，不能把 clip 数直接当独立样本
+
+- 问题：正式 runner 对成功 episode 在完成后停止，只产生首 probe；失败 episode
+  运行到 `max_steps`，产生两个 probe。最终 198/2 个 Clean success/failure
+  对应 202 probes，256/276 个 OOD success/failure 对应 808 probes。若直接按
+  probe 平均，会把失败轨迹系统性加权更高。
+- 方案：主统计先在 episode 内平均，再在 task 内平均，40 个 task 等权；outcome
+  association 同时报告全部可用 probe 与仅首 probe。两个 Phase 1/2 outcome
+  mismatch 从 outcome association 排除，但保留在 ID/OOD consistency。
+- 结果：OOD failure−success cosine 从全部 probe 的
+  `+0.0249 [0.0166,0.0328]` 变为首 probe 的
+  `+0.0197 [0.0116,0.0282]`，方向不变；direction 对比也保持同方向。
+- 边界：最低 cosine-error 四分位仍有 41.67% failure，最高四分位仍有
+  34.59% success。Consistency 是关联信号，不是成败判定器；shadow future
+  不在 control loop 内，更不能被写成失败原因。
+- 统计资格：分析方法与运行前 DRAFT 一致，但 DRAFT 未冻结。机器报告显式写
+  `formal_data_collection_post_run_protocol_consistent_not_preregistered`，
+  防止把事后分析包装成预注册确认性结果。
+
 ## 4. 简历表达素材
 
 ### 当前即可使用的版本
@@ -256,11 +278,16 @@
 - 对 7,571 条 trace 与 3,563 个失败视频做完整性审计，排除 NaN、空动作、
   静止机器人和落盘故障；任务级 OOD 成功率跨度 4.57%–92.63%。
 - 为表征运动指标建立 outcome-independent no-op calibration、自动 freeze gate
-  与只读历史敏感性分析，在真实 Clean/五类 OOD pilot 中识别并量化旧阈值的
-  数量级错误。
+  与只读历史敏感性分析；正式完成 200-job、Clean/OOD 平衡且五类各 20 的
+  null 校准，在 diagnostic 前冻结阈值 `0.0167421166`。
 - 实现 outcome-blind 分层抽样与 label-blind 双目录审阅协议，以 source/hash、
   pre-outcome freeze、opaque alias 和公开/私有泄漏校验阻止结果后选样；已完成
   7-case/28-media 真实工作流演练。
+- 搭建 Fast-WAM/LIBERO-Plus 多 GPU future-consistency 评测与层级统计管线，
+  完成 732 episodes、1,010 probes、2,020 aligned frames 和 4,040 媒体全量
+  审计；发现 OOD 下 cosine consistency distance 增加
+  `0.0316 [0.0254,0.0381]`、视觉方向一致性下降
+  `0.1898 [0.1664,0.2134]`。
 
 ### 可直接使用的量化表述
 
@@ -269,6 +296,12 @@
 > 0 exception、0 重复/遗漏；测得标准 LIBERO 97.25% 到 LIBERO-Plus OOD
 > 47.70% 的 49.55 个百分点下降，并定位 camera viewpoint 为最敏感扰动
 > （15.13% success rate）。
+
+> 在冻结控制动作的 Fast-WAM shadow diagnostic 中完成 732 个
+> Clean/LIBERO-Plus episode 与 1,010 次 future probe，实施
+> probe→episode→task 层级聚合、10,000 次 task-cluster bootstrap、首 probe
+> 敏感性和 4,040 媒体全量审计；测得 OOD future consistency distance 增加
+> 0.0316（95% CI 0.0254–0.0381），并明确限定为非因果关联。
 
 在人工标注完成前，不要追加“归纳出 K 类失败模式”。可以写“保存并审计
 3,563 个失败视频”，但“reviewed/labelled”分母目前仍为 0。
@@ -293,9 +326,10 @@
 2. 核心约束：两个同名 `libero` backend、24 GB 级显存预算、海量独立 rollout、可中断服务器任务和严格配对要求。
 3. 关键决策：adapter 隔离、episode-level data parallel、确定性 manifest/resume、checkpoint+seed 科学门禁。
 4. 发现并纠正的协议问题：Plus 的评测单位是预生成 task instance，每个变体 1 次；不能机械执行 10,030×20。
-5. 防选择偏差：实现了 pre-outcome freeze 和标签盲化门禁；本次 v2 cohort 因
-   clean-tree freeze 未通过而不能事后升级为 FORMAL，这个负面过程本身说明门禁
-   确实阻止了追溯性“预注册”。
+5. 防选择偏差：原 v2 cohort 没有在阶段一 outcome 前完成 clean-tree freeze，
+   因而没有追溯包装成预注册；正式 runner 只在 Phase 2 future 指标前 exact-ratify
+   原 job ID。raw collection 正式完成，但统计 DRAFT 未预冻结，分析如实标为
+   post-run。
 6. 尚未解决但已诚实限定的问题：底层扰动参数、双相机证据、null difficulty、许可证和 future checkpoint 可识别性。
 7. 用正式数字回答效果与成本；失败机制仍明确写“待分层人工复核”，不把
    `max_steps` 自动等同为某种感知或规划错误。

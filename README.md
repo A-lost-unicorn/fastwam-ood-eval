@@ -63,6 +63,7 @@ Clean `97.25%`、OOD `47.70%`，绝对下降 `49.55` 个百分点，0 exception�
 - [思考点二上游审计](docs/thought2_upstream_audit.md)：`infer_joint()`、官方预处理、动作语义、VAE、时间对齐和 release 能力门禁。
 - [思考点二概念说明](docs/thought2_concepts.md)：Shadow Diagnostics 的研究问题、旁观语义和因果边界。
 - [思考点二执行手册](docs/thought2_execution_guide.md)：2A/2B、真实命令、指标、阈值校准与人工盲审。
+- [思考点二五类正式结果](docs/thought2_formal_results.md)：732 episodes 的 ID/OOD、outcome association、资源与结论边界。
 - [思考点二盲审与抽样](docs/thought2_blind_review_and_sampling.md)：public/private 盲审包、outcome-blind cohort、anchor 与 pre-outcome freeze。
 - [思考点二统计分析计划](docs/thought2_statistical_analysis_plan.md)：episode/task 层级、primary estimand、cluster bootstrap、缺失与停止规则。
 - [思考点二 static/no-op 校准](docs/thought2_static_calibration.md)：独立 null set、候选阈值、freeze gate、真实数据与恢复规则。
@@ -283,6 +284,23 @@ Clean→OOD 数值为 L1 `0.1512→0.2002`、cosine distance
 5 个 episode、1 个严格 pair 且 static 阈值只有小样本 candidate、尚未冻结，
 这些只能作为预实验假设。
 
+五类正式 2A runner 已于 2026-07-26—27 完成：200 Clean + 532 OOD =
+732 episodes、1,010 probes、2,020 aligned future frames，0 error；4,040 个
+媒体工件全部通过解码审计。同次运行 1,010/1,010 probe 的 action hash
+before/after 一致。40-task 等权结果为：
+
+- cosine distance `0.1025→0.1341`，OOD−Clean
+  `+0.0316 [0.0254, 0.0381]`；
+- motion-direction cosine `0.7416→0.5518`，OOD−Clean
+  `−0.1898 [−0.2134, −0.1664]`；
+- OOD failure−success cosine 为 `+0.0249 [0.0166, 0.0328]`，仅首 probe
+  sensitivity 为 `+0.0197 [0.0116, 0.0282]`。
+
+这支持“OOD/失败与较差的自动 future–realized consistency proxy 相关”，不支持
+“future error 导致动作失败”。统计方法与运行前 DRAFT 一致，但 DRAFT 没有预先
+冻结，因此应标为正式 raw collection 上的 protocol-consistent post-run
+analysis，而不是 preregistered confirmatory result。
+
 三卡 20-step episode-level pilot 的精确命令是：
 
 ```bash
@@ -310,8 +328,10 @@ Clean/OOD 联合结果必须写到新的 comparison 目录；聚合器会生成�
 
 独立 static/no-op PILOT 也已完成：2 条 Clean + 五类 OOD 各 1 条，共
 7/7 eligible、0 error；同帧编码噪声全为 0，8-step no-op energy 最大为
-`0.013223`。这只产生 `candidate_only` 阈值；正式门槛是 200 条，不能把它
-写成 frozen paper 数字。聚合和只读重分类命令为：
+`0.013223`。这批历史 PILOT 只产生 `candidate_only` 阈值。后续正式 runner
+已独立完成 200/200 eligible null jobs（Clean/OOD 各 100、五类各 20），并在
+diagnostics 启动前接受正式阈值 `0.0167421166`。聚合和只读重分类 PILOT 的
+命令为：
 
 ```bash
 fastwam-ood aggregate-static-calibration \
@@ -334,11 +354,12 @@ fastwam-ood report-static-calibration \
 identifier，私有 key 独立保存映射；全部媒体完成解码与 hash 审计。当前 human
 annotation 为 0/7，所以这仍不是 future 质量结论。
 
-正式阶段二抽样也已实现。v2 草案按 suite/task 选 200 条 Clean，
+正式阶段二抽样也已实现并执行。v2 草案按 suite/task 选 200 条 Clean，
 并强制每个 task 包含 episode index 0；按每个 supported
 suite/task/category/difficulty cell 选 532 条 OOD，另记录 68 个 unsupported
-cell。源 manifest 保持 `draft_not_frozen`，五类 runner 会把 exact job ID
-复制到新的 `ratified_before_diagnostic_outcomes` manifest。正式配置必须设置：
+cell。正式五类 runner 在任何 Phase 2 future metric 产生前把 exact job ID
+复制并锁定到新的 `ratified_before_diagnostic_outcomes` manifest，随后完成
+732/732。正式配置必须设置：
 
 ```yaml
 diagnostics:
@@ -360,6 +381,21 @@ bash scripts/run_thought2_five_category_full.sh --background all
 
 完整命令和审计边界见
 [盲审与 outcome-blind 抽样手册](docs/thought2_blind_review_and_sampling.md)。
+正式派生分析命令为：
+
+```bash
+fastwam-ood analyze-thought2-formal \
+  --experiment-dir outputs/thought2/five_category_formal_v1 \
+  --thought1-summary outputs/thought1/fastwam/combined/summary/episode_results.csv \
+  --source-trace-root outputs/thought1/fastwam \
+  --output-dir outputs/thought2/five_category_formal_v1/formal_analysis_v1 \
+  --bootstrap-replicates 10000 \
+  --bootstrap-seed 20260725 \
+  --verify-media
+```
+
+完整数值和论文/简历措辞见
+[思考点二五类正式结果](docs/thought2_formal_results.md)。
 
 ## 13. 查看失败视频
 

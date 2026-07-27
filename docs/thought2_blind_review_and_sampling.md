@@ -1,12 +1,16 @@
 # 阶段二盲审与 outcome-blind 抽样手册
 
-更新日期：2026-07-26
+更新日期：2026-07-27
 
 > 状态更新：`P1-FORMAL-v1` outcome 已于 2026-07-26 完成，而 v2 cohort
 > 在此前保持 `frozen=false`。因此当前 v2 不能追溯升级成“阶段一 outcome
 > 之前的 preregistration”。项目现增加一个范围更窄的 exact-ratification：
 > 保留原草案全部 job ID，在正式 future diagnostic 指标产生前锁定，并明确记录
 > 阶段一 outcome 在 ratification 时已经存在。两种证据资格不得混称。
+>
+> 完成更新：五类 200 Clean + 532 OOD 已于 2026-07-26 在 Phase 2 future
+> metric 产生前 exact-ratify，并于 2026-07-27 完成 732/732。raw collection
+> 资格不等于统计 preregistration；正式 human-review packet 仍待冻结与生成。
 
 ## 1. 本手册解决什么问题
 
@@ -230,18 +234,18 @@ worker/summary 的 `episode_results.jsonl`。每个候选的排序键是
 OOD 532 条按类别为：background 103、camera 104、light 95、object-layout
 110、robot-initial-state 120。
 
-这份设计覆盖了当前阶段一计划中的五类扰动，尚未替用户把“布局或机器人初态”
-二选一。若主文坚持四类：
+这份设计覆盖当前阶段一计划中的五类扰动。正式 runner 已选择并锁定五类 732
+版本；“布局或机器人初态”二选一没有用于本轮。若后续另做四类 sensitivity：
 
 - 保留 object-layout、排除 robot-init：总队列为 200 + 412 = 612；
 - 保留 robot-init、排除 object-layout：总队列为 200 + 422 = 622。
 
 这两种都必须用 category filter 重新生成全新的 manifest/ID，不能在 732 条
-结果出来后再按效果选择类别。当前 732 也只是覆盖性设计，尚未做 statistical
-power justification；冻结前仍可基于研究问题和算力缩小，但不能基于 outcome
-方向缩小。
+结果出来后再按效果选择类别。当前 732 是 coverage-driven design，未做
+pre-run statistical power justification；不得用观察到的结果追溯声称预先
+power 足够。
 
-## 7. 当前 v2 草案及其资格
+## 7. v2 草案、正式 ratification 与资格
 
 八份草案位于：
 
@@ -278,6 +282,17 @@ v2 的 cohort ID：
 | libero_10 | `a79d716f...4a981` | `85d7e0a8...ec30b` |
 
 缩写只用于阅读；机器分析必须使用 manifest 内的完整 ID 和 hash。
+
+2026-07-26 的正式 runner 在 clean commit `0fb8350` 上将这八份草案逐一
+exact-ratify 到：
+
+```text
+outputs/thought2/five_category_formal_v1/cohorts/<suite>/<condition>.json
+```
+
+总分母严格为 200 Clean + 532 OOD，随后 732/732 episode 全部完成、0
+diagnostic error。该事实将 cohort 状态从“待运行草案”推进为“Phase 2 指标前
+exact-ratified 并已执行”，但不会把它追溯升级为 Phase 1 outcome 前冻结。
 
 ## 8. 两种 cohort 锁定资格
 
@@ -357,7 +372,7 @@ fastwam-ood ratify-diagnostic-cohort \
     outputs/thought2/five_category_formal_v1/cohorts/libero_spatial/clean.json
 ```
 
-正式五类 runner 会对八份 manifest 自动执行或验证这个动作，并检查合计恰为
+正式五类 runner 已对八份 manifest 执行并验证这个动作，检查合计恰为
 `200 + 532 = 732`。论文方法部分必须使用
 “locked before Phase 2 future-diagnostic outcomes”，不能写成
 “pre-registered before Phase 1 outcomes”。
@@ -366,7 +381,7 @@ fastwam-ood ratify-diagnostic-cohort \
 
 ```yaml
 diagnostics:
-  cohort_manifest_path: outputs/thought2_outcome_blind_cohort_frozen/<suite>/<condition>.json
+  cohort_manifest_path: outputs/thought2/five_category_formal_v1/cohorts/<suite>/<condition>.json
   require_frozen_cohort: true
 ```
 
@@ -388,7 +403,7 @@ diagnostics:
 
 ## 10. 粗略算力预算
 
-阶段二 runner 会重新执行环境，不是只读阶段一 trace。用现有 pilot 的 OOD
+阶段二 runner 会重新执行环境，不是只读阶段一 trace。运行前用 pilot 的 OOD
 completed episode 平均 `71.53 s`，以及两次 20-step probe 约
 `2×(7.21–8.20) s` 的完整 diagnostic latency 做线性外推：
 
@@ -402,17 +417,25 @@ episode 长度都不同。理想均衡时约为 3 GPU 上 5.9 小时或 4 GPU �
 和重试，实际应保留更宽的时间窗口。四类的 612/622 设计按同一粗略模型约为
 14.8/15.0 GPU-hours。
 
+实际五类 runner 在三卡上从 `2026-07-26 18:18:15` 到
+`2026-07-27 00:41:46`，墙钟 `6 h 23 min 31 s`，与 5.9 h 纯 workload 加
+冷启动/I/O/尾部开销的估算一致。该实际时间用于今后容量规划，不是模型单次
+latency benchmark。
+
 当前 7-case public packet 为约 1.4 MiB，且 formal 默认
-`save_latents=false`；相较 rollout 时间，当前媒体存储不是主要瓶颈。正式开始前
-仍应以 20–50 条跨 suite pilot 重新测吞吐，而不是把上述外推当作完成时承诺。
+`save_latents=false`；相较 rollout 时间，当前媒体存储不是主要瓶颈。未来若改变
+去噪步数、保存 latent 或 cohort，应重新做 20–50 条跨 suite 吞吐 pilot，而不
+直接外推本轮墙钟。
 
 ## 11. 当前下一步
 
-1. 当前执行方案已选择五类 732 条；四类 612/622 保留为未采用备选。
-2. 提交 runner、ratification 与聚合实现，使项目 tree clean。
-3. 后台 runner 先完成 200 条 static/no-op threshold，只有全部自动 gate 通过
-   才接受候选阈值。
-4. 对八份 v2 exact-ratify，并使用 `require_frozen_cohort=true` 运行八个
-   suite×condition shadow diagnostic 组。
-5. 完成后冻结统计分析计划、生成正式盲审 packet；当前自动总报告仍是
-   episode-weighted 描述结果，不能替代 task-cluster inferential analysis。
+1. 五类 732 条、200-job static calibration、八份 exact-ratification 与
+   task-cluster 自动分析均已完成。
+2. 提交本次派生分析代码/文档，并在 clean commit 上用全新目录重建 analysis
+   manifest；不重跑或改写 raw collection。
+3. 在不查看自动 metric/outcome 的选择规则下，冻结正式 human-review budget、
+   seed、每 job 最多一个 probe和至少两名 reviewer。
+4. 生成新的 public packet/private key，完成两份原始 blind labels、
+   agreement、解盲与 adjudication；所有版本分目录保留。
+5. 人工机制结论仍只允许描述关联/候选失败模式；future 对动作的因果收益转交
+   阶段三 B0/A0/A1/A2/A4。

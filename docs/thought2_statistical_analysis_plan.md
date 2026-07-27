@@ -1,12 +1,26 @@
-# 阶段二统计分析计划（DRAFT，尚未冻结）
+# 阶段二统计分析计划（DRAFT；未在 v1 正式分析前冻结）
 
-更新日期：2026-07-23
+更新日期：2026-07-27
 
 ## 1. 资格与目的
 
-本文件把“未来—动作—实际变化一致性”转成可执行 estimand。当前状态是
-`DRAFT_NOT_FROZEN`：类别范围、human-review 预算和正式 static threshold 尚未
-确定，不能把本文件称为 preregistration。
+本文件把“未来—动作—实际变化一致性”转成可执行 estimand。历史状态是
+`DRAFT_NOT_FROZEN`：它在 2026-07-26 正式 future 指标开始生成前没有完成版本
+冻结，不能把本文件称为 preregistration，也不能在看到结果后追溯升级。
+
+2026-07-27 的 `P2A-FIVE-CATEGORY-ANALYSIS-v1` 使用了本文预先写下的
+episode→task 聚合、cosine primary、suite-stratified task bootstrap、静止资格、
+outcome mismatch 排除和 multiplicity 思路。准确资格是：
+
+```text
+formal raw data collection
++ protocol-consistent post-run statistical analysis
++ not preregistered confirmatory analysis
+```
+
+正式结果与全部 deviation 见
+[thought2_formal_results.md](thought2_formal_results.md)。本文继续保留 DRAFT
+标签，作为方法设计历史和后续预注册版本的起点。
 
 阶段二只回答关联问题：
 
@@ -211,11 +225,12 @@ Reviewer 能从画面推断相机/光照或明显成败，因此论文用
 
 ## 10. 样本量与 power 状态
 
-当前 200 Clean + 532 OOD 是**coverage-driven design**，不是已经完成的 power
+200 Clean + 532 OOD 是**coverage-driven design**，不是已经完成的 power
 analysis。真正的独立 cluster 主要是 40 个 task，不能用 `n=732` 的独立样本公式
-夸大 power。
+夸大 power。这一限制在 v1 collection 完成后仍成立。
 
-冻结前应使用不进入主分析的 20–50 条跨 suite technical/power pilot，估计：
+原计划建议在冻结前使用不进入主分析的 20–50 条跨 suite technical/power
+pilot，估计：
 
 - task-level contrast variance；
 - task 内/episode 内相关性；
@@ -224,8 +239,8 @@ analysis。真正的独立 cluster 主要是 40 个 task，不能用 `n=732` 的
 - human label prevalence 与 review 时长。
 
 随后对“40 task、当前 cell layout、suite-stratified cluster bootstrap”做 simulation
-power 或报告 minimum detectable effect。当前 5-episode camera/easy pilot 太小，
-且 task/outcome 混杂，只能估算链路和成本，不能提供可信 power。
+power 或报告 minimum detectable effect。v1 没有在正式 collection 前完成这项
+power freeze；因此不得用观察到的窄 CI 追溯声称设计事先具备某个 power。
 
 ## 11. 停止与冻结门禁
 
@@ -241,9 +256,11 @@ power 或报告 minimum detectable effect。当前 5-episode camera/easy pilot �
 - retry 上限和技术失败定义；
 - code commit、所有 input manifest/hash、output namespace。
 
-只有在项目与上游 clean、outcome-blind manifests `frozen=true`、static threshold
-人工冻结后，才能把状态改为 `FROZEN_BEFORE_ANALYSIS`。冻结后不因结果方向修改；
-必要变更必须产生新版本并在论文中列出 deviation。
+v1 raw collection 确实在 clean project/upstream、exact-ratified cohort 和正式
+static threshold 下运行，但本 SAP 本身没有完成 `FROZEN_BEFORE_ANALYSIS`。
+因此只给 raw collection 正式资格，不给统计推断“预注册确认性”资格。后续若建立
+v2 preregistration，必须用新版本、新 hash 和新 output namespace；不得覆盖本文
+或 v1 分析。
 
 ## 12. 论文表图映射
 
@@ -259,13 +276,15 @@ power 或报告 minimum detectable effect。当前 5-episode camera/easy pilot �
 阶段三 K=0/1/2/4 的成功率—延迟曲线使用另一套训练/评测 manifest，绝不追加到本
 阶段二表中。
 
-## 13. 待用户冻结的决策
+## 13. v1 实际采用的决策与剩余缺口
 
-| 决策 | 推荐草案 | 当前状态 |
+| 决策 | 推荐草案 | v1 实际状态 |
 | --- | --- | --- |
-| 扰动范围 | 五类 732；若严格四类，优先保留 object-layout 得到 612 | 待确认 |
-| 自动 primary | `future_latent_cosine_distance` | 待确认 |
-| Bootstrap | suite-stratified task bootstrap，10,000 次，seed `20260725` | 待确认 |
-| Human budget | 先做跨 suite power/timing pilot，再固定；不从结果反推 | 待确认 |
-| Outcome inferential gate | ≥20 success、≥20 failure、≥10 mixed-outcome tasks | 待确认 |
+| 扰动范围 | 五类 732；若严格四类，优先保留 object-layout 得到 612 | runner 前选择五类并 exact-ratify；不是 SAP freeze |
+| 自动 primary | `future_latent_cosine_distance` | post-run v1 按此实现 |
+| Bootstrap | suite-stratified task bootstrap，10,000 次，base seed `20260725` | post-run v1 按此实现 |
+| Human budget | 先做跨 suite power/timing pilot，再固定；不从结果反推 | 仍未冻结；正式 human 结论缺失 |
+| Outcome inferential gate | ≥20 success、≥20 failure、≥10 mixed-outcome tasks | v1 实际为 255/275、40 mixed tasks，门槛通过 |
 
+这里的“按此实现”只表示方法与较早 DRAFT 一致，不表示该决策在观察 formal
+future metrics 前已经不可变。论文 methods/limitations 必须披露这一点。

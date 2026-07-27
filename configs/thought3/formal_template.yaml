@@ -1,0 +1,44 @@
+schema_version: thought3.config.v1
+# Copy this file once per preregistered B0/A0/A1/A2/A4/A-shuffle run.
+variant: A4
+experiment:
+  name: REPLACE_WITH_FROZEN_FORMAL_RUN_ID
+  output_dir: outputs/thought3/formal/REPLACE_WITH_FROZEN_FORMAL_RUN_ID
+  seed: 3407
+runtime:
+  backend: fastwam
+  device: cuda:0
+  action_denoise_steps: 20
+  online_use_cache: false
+  max_gpu_memory_gb: 43
+sampler:
+  active_k: 4
+  cache_k: [1, 2, 4]
+  global_cache_seed: 3407
+  rand_device: cpu
+adapter:
+  enabled: true
+  injection: action_encoder_output
+  future_dim: 256
+  attention_dim: 512
+  num_heads: 8
+  zero_init_gate: true
+  lora_enabled: false
+data:
+  dataset_revision: REPLACE_WITH_STANDARD_LIBERO_REVISION
+  dataset_roots:
+    - /path/to/standard_libero/lerobot
+  inventory_path: /path/to/standard_libero/thought3_inventory.jsonl
+  split_seed: 3407
+  development_fraction: 0.1
+cache:
+  root: outputs/thought3/cache/formal
+  shard_size: 512
+training:
+  max_steps: 10000
+  microbatch_size: 1
+  gradient_accumulation_steps: 8
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  train_seed: 3407
+  checkpoint_interval: 500

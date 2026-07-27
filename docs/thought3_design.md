@@ -1,6 +1,6 @@
 # Thought3 设计：Partial-Future Adapter
 
-状态：Phase A 设计候选，等待确认后才进入 Phase B 编码  
+状态：Phase A 设计已于 2026-07-27 确认；Phase B CPU/mock 已实现，真实模型仍未加载
 科学问题：显式读取低成本 future latent，能否改善 Fast-WAM 的 OOD 控制，而收益不是由
 额外参数、重新训练或错误对照造成？
 
@@ -407,7 +407,8 @@ Action DiT 本身参数冻结，但从 Adapter 注入点到 action head 的计�
 
 ## 9. 数据协议候选
 
-在 Phase B 编码前先新增 `docs/thought3_data_protocol.md`，这里记录待确认默认值。
+Phase B 已新增并实现 `docs/thought3_data_protocol.md`；本节保留设计摘要，机器
+schema 以 `src/fastwam_ood_eval/thought3/` 为准。
 
 ### 9.1 来源
 
@@ -856,7 +857,7 @@ tests/test_thought3_provenance.py
 - `thought3_upstream_audit.md`；
 - `thought3_risk_register.md`。
 
-门禁：用户确认第 19 节的关键选择。不得训练。
+门禁：用户确认第 19 节的关键选择。该门禁已于 2026-07-27 通过；没有因此启动训练。
 
 ### Phase B：CPU/mock
 
@@ -878,6 +879,9 @@ tests/test_thought3_provenance.py
 - dry-run 不加载大模型；
 - Thought1/2 文件哈希不变；
 - 无 GPU/大 checkpoint load。
+
+状态：**已通过**。验收见
+`docs/thought3_phase_b_report.md`；Phase B 只产生临时测试工件，无真实研究结果。
 
 ### Phase C：单 GPU tensor smoke
 
@@ -950,9 +954,9 @@ tests/test_thought3_provenance.py
 
 pilot 只作 go/no-go 和协议固定，不写成正式效果结论。
 
-## 19. 需要确认的关键选择
+## 19. 已确认的关键选择
 
-建议按以下默认值进入 Phase B：
+用户于 2026-07-27 确认 Phase A，以下默认值已用于 Phase B：
 
 1. **K 语义**：每个 K 使用同一连续 scheduler 的完整 K-step 离散化并到达
    sigma=0，不取 20-step prefix。
@@ -966,4 +970,5 @@ pilot 只作 go/no-go 和协议固定，不写成正式效果结论。
 9. **并行**：先 DDP，不启用 FSDP/ZeRO/CPU offload。
 10. **训练 API**：项目侧 action-only flow loss，真实 future video 不进入对象。
 
-确认后才能开始正式编码；确认本身不会启动 GPU smoke、cache 或训练。
+Phase B 编码和 CPU/mock 测试已完成。该确认没有授权 GPU smoke、真实 cache 或训练；
+这些动作仍受 Phase C/D/E 独立门禁约束。

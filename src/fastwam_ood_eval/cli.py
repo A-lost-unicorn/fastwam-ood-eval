@@ -393,6 +393,44 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ratify_cohort.add_argument("--source-dir", required=True, type=Path)
     ratify_cohort.add_argument("--output", required=True, type=Path)
+
+    thought3_commands = (
+        ("thought3-audit", "Report the frozen Phase A audit and Phase B boundary"),
+        ("thought3-plan-cache", "Plan paired K=1/2/4 future cache shards"),
+        ("thought3-build-cache", "Build this rank's future cache shards"),
+        ("thought3-validate-cache", "Validate cache schema, pairing and checksums"),
+        ("thought3-train", "Run Adapter training (Phase B supports CPU mock only)"),
+        ("thought3-counterfactual", "Build A-shuffle assignments and action interventions"),
+        ("thought3-evaluate", "Run isolated online evaluation (Phase B mock only)"),
+        ("thought3-aggregate", "Aggregate Thought3 evaluation records"),
+        ("thought3-report", "Generate an isolated Thought3 report"),
+    )
+    for name, help_text in thought3_commands:
+        command = subparsers.add_parser(name, help=help_text)
+        command.add_argument("--config", required=True, type=Path)
+        command.add_argument(
+            "--set",
+            action="append",
+            default=[],
+            metavar="KEY=VALUE",
+            help="Override a dotted Thought3 YAML setting; repeat as needed",
+        )
+        command.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Validate and describe work without loading torch/model or writing artifacts",
+        )
+        command.add_argument(
+            "--resume",
+            action="store_true",
+            help="Resume only from committed, checksum-valid Thought3 artifacts",
+        )
+        command.add_argument(
+            "--device",
+            help="Explicit runtime device; Phase B accepts cpu only",
+        )
+        command.add_argument("--rank", type=int, default=0)
+        command.add_argument("--world-size", type=int, default=1)
     return parser
 
 
@@ -922,6 +960,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.command.startswith("thought3-"):
+            # Keep all torch/safetensors/Fast-WAM integration behind this
+            # branch so existing Thought1/Thought2 command imports and defaults
+            # are unchanged.
+            from fastwam_ood_eval.thought3.cli import dispatch
+
+            return dispatch(args)
         if args.command == "doctor":
             return _doctor(args)
         if args.command == "fetch-upstreams":

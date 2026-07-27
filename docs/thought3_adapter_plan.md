@@ -1,6 +1,8 @@
 # 阶段三手册：轻量 Future-to-Action Adapter
 
-状态：设计阶段，尚无训练或结果
+状态：历史路线摘要；Phase B 的权威定义已迁移到
+`thought3_design.md`、`thought3_data_protocol.md` 和
+`thought3_phase_b_report.md`。若本文件与它们冲突，以新版文档为准；尚无真实训练或结果。
 
 ## 1. 要回答的因果问题
 
@@ -212,4 +214,3 @@ total policy latency = current/action path + K-step future latent + adapter
 3. 明确选用的 native future latent 层、形状和 K scheduler 语义。
 4. 数据 split 与 cache schema 冻结。
 5. B0/A0/A1/A2/A4 预注册配置。
-

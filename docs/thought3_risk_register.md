@@ -1,6 +1,6 @@
 # Thought3 风险登记与停止条件
 
-状态：Phase A 候选；每次 gate 后更新  
+状态：Phase A 已确认、Phase B 已完成；每次 gate 后更新
 范围：Partial-Future Adapter 的数据、cache、训练、推理、统计和阶段隔离
 
 ## 1. 等级
@@ -185,25 +185,29 @@ Phase F/G 聚合前对 A0/A1/A2/A4 manifest 做 structural diff。允许不同�
 - [x] Thought1/2 冻结文件 hash；
 - [x] latent/scheduler/action call chain；
 - [x] 参数、磁盘、显存估算；
-- [ ] 用户确认关键设计选择。
+- [x] 用户确认关键设计选择（2026-07-27）。
 
 未确认前不得进入模型编码。
 
 ### Gate B：CPU/mock
 
-- [ ] old tests 全通过；
-- [ ] old CLI regression；
-- [ ] zero-gate parity；
-- [ ] A0/A1/A2/A4 param count 一致；
-- [ ] cache ID deterministic；
-- [ ] resume 不重复；
-- [ ] checksum 检出人为损坏；
-- [ ] shuffle derangement；
-- [ ] leakage schema/mutation；
-- [ ] mock training loss 下降；
-- [ ] Adapter-only checkpoint round-trip；
-- [ ] dry-run 不 import torch/load checkpoint；
-- [ ] Thought1/2 hash 不变。
+- [x] old tests 全通过；
+- [x] old CLI regression；
+- [x] zero-gate parity；
+- [x] A0/A1/A2/A4 param count 一致；
+- [x] cache ID deterministic；
+- [x] cache 与 training resume 不重复且 deterministic；
+- [x] checksum 检出人为损坏；
+- [x] shuffle derangement；
+- [x] leakage allowlist、source guard 与 sampler signature；
+- [x] mock training loss 下降；
+- [x] Adapter-only checkpoint round-trip；
+- [x] dry-run 独立进程不 import torch/safetensors、不 load checkpoint；
+- [x] Thought1/2 hash 不变。
+
+Phase B closure：全量回归、冻结哈希和最终测试分母见
+`docs/thought3_phase_b_report.md`。真实 future mutation invariance 仍属于 Gate C，
+不能由 mock schema 测试替代。
 
 ### Gate C：单 GPU
 
@@ -301,6 +305,6 @@ Phase F/G 聚合前对 A0/A1/A2/A4 manifest 做 structural diff。允许不同�
 | R28 cache 容量 | 数据下载后的 sample inventory + plan-cache |
 | R32 sampler parity | Phase C same-seed upstream comparison |
 | R35 数据缺失 | 下载并冻结 `yuanty/LIBERO-fastwam` revision |
-| 用户设计确认 | 确认 `thought3_design.md` 第 19 节 |
+| 真实 action loss parity | Phase C 与官方 scheduler/target/mask/reduction 对照 |
 
 在这些证据出现前，文档必须使用“预计”“待验证”，不能写成已完成结果。

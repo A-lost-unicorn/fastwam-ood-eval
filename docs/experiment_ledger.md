@@ -28,6 +28,8 @@
 | `P2-STATIC-FORMAL-v1` | 2026-07-26 | 2 / FORMAL CALIBRATION | `outputs/thought2/five_category_formal_v1/static` | 200/200 eligible；Clean/OOD 各 100；五类 OOD 各 20；阈值 `0.0167421166` | diagnostic 启动前通过全部 freeze gate 并由 runner 显式接受 |
 | `P2A-FIVE-CATEGORY-COLLECTION-v1` | 2026-07-26–27 | 2A / FORMAL DATA COLLECTION | commit `0fb8350`；`run_thought2_five_category_full.sh` | 200 Clean + 532 OOD；732 episodes / 1,010 probes / 2,020 aligned frames；0 error | 正式 raw collection 完成；项目与三个上游 clean |
 | `P2A-FIVE-CATEGORY-ANALYSIS-v1` | 2026-07-27 | 2A / POST-RUN ANALYSIS | `formal_analysis_v1`；10,000 次 suite-stratified task bootstrap | cosine OOD−Clean `+0.0316`；direction `−0.1898`；730/732 outcome match；4,040 media 0 decode error | 与运行前 DRAFT 方法一致，但 DRAFT 未冻结；不得称 preregistered confirmatory |
+| `P3-PHASE-A-v1` | 2026-07-27 | 3 / PLAN-AUDIT | `thought3_{upstream_audit,design,risk_register}.md` | 上游/shape/scheduler/injection/显存/隔离审计；用户确认 10 项默认值 | 允许进入 Phase B；无模型结果 |
+| `P3-PHASE-B-v1` | 2026-07-27 | 3 / TEST | `src/fastwam_ood_eval/thought3/`、`configs/thought3/`、Thought3 tests | 1.371M Adapter、paired cache、mock trainer、Adapter-only resume、counterfactual、online-no-cache 与旧 CLI 回归通过 | 只证明 CPU/mock 工程 contract；无真实 latent/训练/OOD 结论 |
 
 ### `P1-FORMAL-v1` 机器证据
 
@@ -246,6 +248,23 @@
   `formal data collection + protocol-consistent post-run analysis`，
   不能表述为 preregistered confirmatory analysis。
 
+### `P3-PHASE-B-v1` 机器证据
+
+- 独立分支 `feature/thought3-partial-future-adapter`；所有新 writer 强制
+  `thought3` path component，并拒绝 Thought1/Thought2/third_party。
+- 默认 Adapter 参数精确为 `1,371,137`；A0/A1/A2/A4 structure/count 相同，
+  zero-gate A0/B0 action 逐元素一致。
+- K1/K2/K4 cache 使用相同 base-sample seed 与 initial-noise hash；native schema
+  `[48,2,14,28]`，支持原子 safetensors shard、resume 和多级 checksum。
+- Adapter-only checkpoint 不包含 backbone；固定输入 round-trip 输出一致，
+  mid-run resume 与 uninterrupted 的最终 Adapter semantic hash 一致。
+- 60 个 Thought3 tests、235 个仓库全量 tests 全部通过；5 条 warning 均为测试
+  环境 NVML 初始化限制。
+- Thought1/Thought2 八个冻结 sentinel SHA-256 与 Phase A 前完全一致；
+  `third_party/FastWAM` 无修改。
+- 未加载官方大 checkpoint、未使用 GPU、未生成真实 cache、未训练真实模型。
+  因此该 run 只能登记为 `TEST`，不能填写阶段三成功率表。
+
 ## 2. 失败尝试与解决记录
 
 | 日期/尝试 | 现象 | 根因 | 修复与证据 | 是否污染实验 |
@@ -351,10 +370,10 @@ direction 的 `−0.2127` 也是全部可用 probe 口径，首 probe sensitivit
 | Variant | K | Train seed | Trainable params | ID SR | OOD SR | Absolute drop | Future latency | Action latency | Total latency | Peak memory | FORMAL Run ID |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | `B0-base` | 0 | — | 0 | — | — | — | 0 | — | — | — | — |
-| `A0-null` | 0 | — | — | — | — | — | 0 | — | — | — | — |
-| `A1` | 1 | — | — | — | — | — | — | — | — | — | — |
-| `A2` | 2 | — | — | — | — | — | — | — | — | — | — |
-| `A4` | 4 | — | — | — | — | — | — | — | — | — | — |
+| `A0-null` | 0 | — | 1,371,137（设计/TEST） | — | — | — | 0 | — | — | — | — |
+| `A1` | 1 | — | 1,371,137（设计/TEST） | — | — | — | — | — | — | — | — |
+| `A2` | 2 | — | 1,371,137（设计/TEST） | — | — | — | — | — | — | — | — |
+| `A4` | 4 | — | 1,371,137（设计/TEST） | — | — | — | — | — | — | — | — |
 
 所有行必须使用相同 episode manifest、Action DiT 去噪步数、训练预算和选模规则。
 `B0-base` 对 `A0-null` 控制额外参数/训练效应；`A0-null` 对 A1/A2/A4 才隔离

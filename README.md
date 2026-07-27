@@ -42,7 +42,10 @@ Clean `97.25%`、OOD `47.70%`，绝对下降 `49.55` 个百分点，0 exception�
 
 ## 3. 当前阶段不做什么
 
-不训练 Fast-WAM，不修改主模型，不在本项目中实现 Future Adapter、Joint WAM 或历史记忆，也不把仿真 OOD 结论外推成真机结论。若以后提供上游已经实现且训练配方匹配的 Joint WAM/IDM checkpoint，本项目只负责调用和公平评测。未运行的实验不会填入虚构结果。
+阶段一、二仍冻结，不重训或改写其 Fast-WAM 基线，也不把仿真 OOD 结论外推成
+真机结论。阶段三已在独立 namespace 完成 Future-to-Action Adapter 的 Phase A
+审计与 Phase B CPU/mock 实现，但尚未加载大模型、生成真实 future cache、训练或
+评测成功率。未运行的实验不会填入虚构结果。
 
 当前 pinned Fast-WAM 代码与 release 权重带来四个结论边界：
 
@@ -67,7 +70,8 @@ Clean `97.25%`、OOD `47.70%`，绝对下降 `49.55` 个百分点，0 exception�
 - [思考点二盲审与抽样](docs/thought2_blind_review_and_sampling.md)：public/private 盲审包、outcome-blind cohort、anchor 与 pre-outcome freeze。
 - [思考点二统计分析计划](docs/thought2_statistical_analysis_plan.md)：episode/task 层级、primary estimand、cluster bootstrap、缺失与停止规则。
 - [思考点二 static/no-op 校准](docs/thought2_static_calibration.md)：独立 null set、候选阈值、freeze gate、真实数据与恢复规则。
-- [思考点三 Adapter 方案](docs/thought3_adapter_plan.md)：cache、B0/A0/A1/A2/A4、公平训练与评测门禁。
+- [思考点三 Phase B 验收](docs/thought3_phase_b_report.md)：1.37M Adapter、cache、mock trainer、checkpoint、测试与 Phase C 门禁。
+- [思考点三设计与数据协议](docs/thought3_design.md)、[训练手册](docs/thought3_training.md)、[在线评测手册](docs/thought3_evaluation.md)。
 - [工程亮点、难点与阻碍台账](docs/engineering_highlights.md)：工程复盘、未解决风险和简历素材。
 - [环境配置](docs/environment_setup.md)、[实验协议](docs/experiment_protocol.md)、[上游勘察](docs/upstream_notes.md)。
 
@@ -397,7 +401,32 @@ fastwam-ood analyze-thought2-formal \
 完整数值和论文/简历措辞见
 [思考点二五类正式结果](docs/thought2_formal_results.md)。
 
-## 13. 查看失败视频
+## 13. 思考点三：Partial-Future Adapter
+
+Phase B 已实现独立的 `thought3-*` CPU/mock 链路，不会读取或修改
+Thought1/Thought2 输出。只看计划且不 import torch/加载 checkpoint：
+
+```bash
+fastwam-ood thought3-train \
+  --config configs/thought3/train_a1_smoke.yaml \
+  --dry-run
+```
+
+完整 mock 工程演练按顺序使用：
+
+```bash
+fastwam-ood thought3-plan-cache --config configs/thought3/cache_smoke.yaml
+fastwam-ood thought3-build-cache --config configs/thought3/cache_smoke.yaml
+fastwam-ood thought3-validate-cache --config configs/thought3/cache_smoke.yaml
+fastwam-ood thought3-train --config configs/thought3/train_a1_smoke.yaml
+fastwam-ood thought3-counterfactual --config configs/thought3/train_a1_smoke.yaml
+```
+
+这些产物是 `TEST`，不能解释为 OOD 提升。下一步是 Phase C 单 GPU、单条标准
+LIBERO train sample 的 tensor/backward/memory smoke；Gate C 未过前不生成真实
+cache 或长训练。见 [Phase B 报告](docs/thought3_phase_b_report.md)。
+
+## 14. 查看失败视频
 
 ```bash
 fastwam-ood review-failures --experiment-dir outputs/ood_full
@@ -406,11 +435,11 @@ fastwam-ood review-failures --experiment-dir outputs/ood_full
 
 页面不需要后端；标注保存在浏览器 localStorage，并可导出 `annotations.json`。默认只保留失败视频。
 
-## 14. 如何理解结果
+## 15. 如何理解结果
 
 报告能够说明 Fast-WAM 对已测扰动是否敏感、哪类/哪个强度下降最大，以及标准分布与 OOD 分布的实测差距。它不能说明显式未来想象一定能修复 OOD、Fast-WAM 完全没有世界建模能力、所有 WAM 都不需要未来想象，或仿真与真机 OOD 等价。详细统计口径见 [实验协议](docs/experiment_protocol.md)。
 
-## 15. 常见报错
+## 16. 常见报错
 
 - `checkpoint ... missing`：运行下载脚本，或覆盖 `checkpoint.path` 和 `checkpoint.dataset_stats_path`。
 - `A different libero package is already loaded`：Clean/OOD 必须分别启动新进程，不要在 notebook 内切换 backend。
@@ -420,20 +449,19 @@ fastwam-ood review-failures --experiment-dir outputs/ood_full
 
 更多见 [故障排查](docs/troubleshooting.md)。
 
-## 16. 下一阶段路线
+## 17. 下一阶段路线
 
-四个 suite 的正式计划已经按当前协议生成并审计：800 Clean、6,771 OOD
-runnable 和 68 OOD skipped。启动 7,571 个真实 rollout 前，应先提交当前
-outcome-blind 实现并冻结阶段二 sampling manifest；一旦正式 outcome JSONL
-出现，就不能事后认证为 pre-outcome selection。之后仍需明确算力授权才能启动
-正式 rollout；只运行 OOD 无法计算 Clean→OOD drop。
+阶段一与阶段二正式计算已完成；阶段三 Phase B 也已完成。当前只推进 Phase C：
 
-配置或 classification 改变时，先重新规划但不启动模型：
+1. 冻结标准 LIBERO training revision 与 episode inventory；
+2. 单卡加载同一官方 checkpoint；
+3. 一条样本生成 K=1/2/4 native latent；
+4. 验证 upstream sampler parity、zero-gate action parity；
+5. 做一次 action loss backward，确认 only-Adapter gradient；
+6. 记录 frozen hash 与 <43 GiB peak memory；
+7. 通过真实 future mutation leakage test。
 
-```bash
-bash scripts/plan_thought1.sh
-```
-
-正式运行后完成所有 suite 的 Clean/OOD combined aggregate 和人工失败标注；再依据最敏感的扰动与失败类型提出下一阶段假设。任何 Future Adapter、Joint WAM 或历史记忆实验都应作为新的训练/消融项目，不混入本仓库第一阶段基线。
+完成这些门禁后才进入一个 suite/task 的真实 cache smoke，之后才是 A0/A1 的
+100–500 step 小训练。正式 OOD 结果必须等 Phase F 后冻结分析协议再解锁。
 
 实施过程中的工程决策、阻碍和可量化简历素材持续记录在 [工程台账](docs/engineering_highlights.md)。

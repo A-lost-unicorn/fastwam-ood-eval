@@ -1,6 +1,6 @@
 # Thought3 上游与可行性审计
 
-状态：Phase A 已完成静态审计，等待设计确认；尚未实现模型、生成 cache 或训练  
+状态：Phase A 已确认；Phase B CPU/mock 已完成；尚未加载真实模型、生成真实 cache 或训练
 审计时间：2026-07-27（Asia/Shanghai）  
 研究分支：`feature/thought3-partial-future-adapter`
 
@@ -110,7 +110,7 @@ Thought1 tag 的 tag object 是
 | 4 | Action DiT 结构 | 30 blocks，hidden 1024，FFN 4096，24 heads × 128，action `[B,32,7]` | 通过 |
 | 5 | future latent tensor | 原生 VAE/diffusion layout `[B,C,T,H,W]`；完整 `[B,48,3,14,28]`，future tail `[B,48,2,14,28]`，bf16 | 静态 contract 通过；Phase C 实测待办 |
 | 6 | K-step sampling 入口 | 上游 scheduler 可直接构建 K 步完整 schedule；上游没有 video-only public sampler，需项目侧封装 `video_expert` | 可实现 |
-| 7 | Adapter 注入位置 | `action_encoder` 后、block 0 前最少侵入；中层 `cross_attn` hook 受 MoT/checkpoint 耦合影响 | 推荐方案已定，待确认 |
+| 7 | Adapter 注入位置 | `action_encoder` 后、block 0 前最少侵入；中层 `cross_attn` hook 受 MoT/checkpoint 耦合影响 | 已确认并在 Phase B 实现 |
 | 8 | action normalization | 官方 stats + `FastWAMProcessor` min/max normalize；执行前官方 denormalize 与 gripper 变换 | 必须原样复用 |
 | 9 | LIBERO 训练加载 | 上游 LeRobot 按 frame 取 33 observation、32 action；配置默认 `val_set_proportion=0.0` | 不能直接作为 Thought3 split |
 | 10 | checkpoint save/resume | 上游支持 full MoT 与 Accelerate state，但会保存/训练过多参数 | 只借鉴机制，需 Adapter-only 实现 |
@@ -512,7 +512,7 @@ current RGB observation
 ## 15. Phase A 判定
 
 架构在工程上可行，且可以在不修改上游、Thought1/Thought2 命令和正式输出的前提下
-隔离实现。进入 Phase B 前需要确认：
+隔离实现。以下选择已于 2026-07-27 在进入 Phase B 前确认：
 
 1. K 使用“每个 K 完整走到 sigma=0”的 schedule；
 2. 第一版注入在 `action_encoder` 后；
@@ -524,7 +524,8 @@ current RGB observation
 8. 当前帧 VAE latent 是否作为可选共享 cache（默认先不缓存）。
 
 详细方案见 `docs/thought3_design.md`，风险与停止条件见
-`docs/thought3_risk_register.md`。
+`docs/thought3_risk_register.md`。Phase B 验收见
+`docs/thought3_phase_b_report.md`。
 
 ## 16. Phase A 完成校验
 

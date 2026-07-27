@@ -1,0 +1,22 @@
+schema_version: thought3.config.v1
+variant: B0
+experiment:
+  name: thought3_pilot_b0
+  output_dir: outputs/thought3/pilot/b0
+runtime:
+  backend: fastwam
+  device: cuda:0
+sampler:
+  active_k: 0
+adapter:
+  enabled: false
+data:
+  dataset_revision: REPLACE_WITH_STANDARD_LIBERO_REVISION
+  dataset_roots:
+    - /path/to/standard_libero/lerobot
+  inventory_path: /path/to/standard_libero/thought3_inventory.jsonl
+cache:
+  root: outputs/thought3/cache/pilot
+  pilot_limit: 512
+training:
+  max_steps: 100

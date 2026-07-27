@@ -1,0 +1,20 @@
+schema_version: thought3.config.v1
+variant: A1
+experiment:
+  name: thought3_cache_smoke
+  output_dir: outputs/thought3/cache_smoke_control
+runtime:
+  backend: mock
+  device: cpu
+sampler:
+  active_k: 1
+  cache_k: [1, 2, 4]
+data:
+  dataset_revision: mock-phase-b-v1
+  mock_sample_count: 16
+cache:
+  root: outputs/thought3/cache/smoke
+  shard_size: 4
+  pilot_limit: 16
+training:
+  max_steps: 10

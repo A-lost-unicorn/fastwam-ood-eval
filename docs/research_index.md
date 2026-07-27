@@ -25,7 +25,7 @@
 | 阶段二正式抽样 | outcome-blind planner、anchor、exact-ratification 与 formal gate 已实现 | 200 Clean + 532 OOD 已 exact-ratify 并全部运行 | **完成**。只认证 Phase 2 future 指标前 job ID 不变；不冒充阶段一 outcome 前 preregistration |
 | 阶段二统计协议 | episode→task 分层、task bootstrap、首 probe/outcome gate 已实现 | 10,000 次 suite-stratified task bootstrap；730/732 outcome match | **post-run analysis 完成，非 preregistered confirmatory**。DRAFT 未在正式指标前冻结；人工 endpoint 待完成 |
 | 阶段二 B：action-conditioned future consistency | 严格门禁、schema、runner、测试已实现 | CPU/mock 与门禁测试通过 | **阻塞**。官方 release 为 `action_conditioned=false`，且没有可信匹配 checkpoint |
-| 阶段三：Future-to-Action Adapter | 研究与隔离方案已设计 | 无训练或真实评测结果 | **未开始** |
+| 阶段三：Future-to-Action Adapter | Phase A 审计已确认；Phase B Adapter/cache/mock trainer/checkpoint/CLI 已完成 | CPU/mock 全量测试通过；1,371,137 参数；无 GPU/大 checkpoint load | **工程进入 Phase C 前门禁**。无真实 latent、训练或 OOD 结果 |
 
 因此，“阶段一已经完成”的准确说法是：**阶段一工程、正式全量计算、聚合与
 完整性审计均已完成；失败机制人工 taxonomy 尚未完成，但不阻塞主成功率结论。**
@@ -58,7 +58,8 @@
 - 阶段二 static calibration 使用
   `configs/studies/thought2_static_calibration_*.yaml`。
 - 阶段二 B 使用 `configs/studies/thought2_shadow_*.yaml`，当前应在能力门禁处失败。
-- 阶段三将使用新的 `configs/studies/thought3_*`、训练配置和 checkpoint namespace。
+- 阶段三使用 `configs/thought3/`、`src/fastwam_ood_eval/thought3/` 和独立
+  `outputs/thought3/` namespace；根 CLI 只做惰性加法式分发。
 
 ### 4.2 输出
 
@@ -128,6 +129,7 @@ outcome JSONL 前使用 `frozen_before_source_outcomes`；现有 v2 则走更窄
 | 阶段二视觉方向 | motion-direction cosine `0.7416→0.5518`，差 `−0.1898`，95% CI `[−0.2134,−0.1664]` | OOD 下预测与受保护动作实际造成的视觉变化方向更不一致；不是直接 action cosine |
 | 阶段二 outcome 关联 | OOD failure−success cosine `+0.0249`；仅首 probe `+0.0197`，两者 CI 均不跨 0 | future inconsistency 与失败相关；不能写成 future error 导致失败 |
 | 阶段二正式资源 | 20-step generation mean/p50/p95 `3354.66/3316.96/3564.12 ms`；full diagnostic `5816.77/5762.95/6271.52 ms`；峰值 `24841.09 MB` | Shadow 诊断成本；不是动作延迟或阶段三 K-step 在线成本 |
+| 阶段三 Phase B | 默认 Adapter `1,371,137` 参数；native future schema `[48,2,14,28]`；K1/K2/K4 paired cache、resume/checksum/mock training/checkpoint/online-no-cache tests 通过 | 只证明工程 contract；不是模型效果、真实延迟或显存结果 |
 
 20-step pilot 的 episode-weighted Clean→OOD 描述值为：latent L1
 `0.1512→0.2002`、cosine distance `0.1168→0.1942`、motion-direction cosine
@@ -145,7 +147,11 @@ OOD 一致性下降假设”，不能进入论文结论表。
 - 阶段二统计分析计划（当前 DRAFT）：[thought2_statistical_analysis_plan.md](thought2_statistical_analysis_plan.md)
 - 阶段二五类正式结果：[thought2_formal_results.md](thought2_formal_results.md)
 - 阶段二 static/no-op 校准手册：[thought2_static_calibration.md](thought2_static_calibration.md)
-- 阶段三 Adapter 方案：[thought3_adapter_plan.md](thought3_adapter_plan.md)
+- 阶段三审计与设计：[thought3_upstream_audit.md](thought3_upstream_audit.md)、[thought3_design.md](thought3_design.md)
+- 阶段三 Phase B 验收：[thought3_phase_b_report.md](thought3_phase_b_report.md)
+- 阶段三数据/训练/评测：[thought3_data_protocol.md](thought3_data_protocol.md)、[thought3_training.md](thought3_training.md)、[thought3_evaluation.md](thought3_evaluation.md)
+- 阶段三分析 DRAFT 与限制：[thought3_analysis_protocol_DRAFT.md](thought3_analysis_protocol_DRAFT.md)、[thought3_limitations.md](thought3_limitations.md)
+- 阶段三旧版路线摘要：[thought3_adapter_plan.md](thought3_adapter_plan.md)
 - 实验、失败尝试和结论台账：[experiment_ledger.md](experiment_ledger.md)
 - 工程难点与简历素材：[engineering_highlights.md](engineering_highlights.md)
 
@@ -158,7 +164,8 @@ OOD 一致性下降假设”，不能进入论文结论表。
    adjudication。
 3. 人工 endpoint 只回答 goal progress、physical plausibility、局部 action
    execution 和 future–actual agreement；不把它升级成 future-to-action 因果。
-4. 阶段三单独建立 branch/output/checkpoint namespace，先实现单样本
-   K=1/2/4 原生 future latent 导出与等价性测试，再实现 A0/A1/A2/A4 Adapter。
-5. 阶段三 OOD 结果不用于边训练边选择 K；先在 train/ID validation 固定
-   checkpoint，再解锁预先固定的 OOD cohort。
+4. 阶段三进入 Phase C：先补齐标准 LIBERO train data revision/inventory，再用
+   单卡一条样本验证 K=1/2/4 原生 latent、upstream parity、一次 backward、冻结
+   gradient/hash 和 <43 GiB 显存。
+5. Gate C 未通过前不生成真实 cache；阶段三 OOD 结果不用于边训练边选择 K，
+   Phase F 后先冻结分析协议再解锁正式 cohort。

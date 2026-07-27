@@ -264,6 +264,26 @@
   `formal_data_collection_post_run_protocol_consistent_not_preregistered`，
   防止把事后分析包装成预注册确认性结果。
 
+### 3.22 不改 6B 上游，给动作分支建立可审计 future 输入
+
+- 问题：基础 Fast-WAM 的 Action DiT 读取当前帧 Video DiT 表征，但不读取生成的
+  future；直接修改上游或全量重训会破坏阶段隔离，也超出 3×4090 的现实预算。
+- 方案：在项目侧给 `action_encoder` 输出注册受 context 管理的单次 hook，将
+  `[B,48,2,14,28]` future 经过 Conv3d projector 和 gated cross-attention 注入
+  `[B,32,1024]` action hidden。标量 gate 零初始化，使 A0 与 B0 初始 action
+  逐元素相同；默认 trainable 参数精确为 1,371,137。
+- 可恢复 cache：同一 base sample 的 K1/K2/K4 共享由 SHA-256 推导、且不含 K 的
+  初始 noise；按 safetensors shard 原子提交，保存文件/tensor/逐样本 checksum。
+  resume 只跳过完整且校验通过的 shard，单字节损坏会 fail-fast。
+- 科学门禁：训练 batch 使用 allowlist，拒绝真实 future、next observation、
+  success 和 Thought1/2/LIBERO-Plus 来源；A-shuffle 使用跨 task/episode 的
+  确定性一一 derangement，不另训错误-future 模型。
+- 恢复证据：Adapter-only checkpoint 绑定 backbone/stats/config/split/cache hash，
+  保存 optimizer/global step/sample cursor；CPU mock 的中断+恢复与不中断训练最终
+  Adapter semantic hash 相同。
+- 边界：上述均为 Phase B `TEST`，没有加载官方 checkpoint 或 GPU，不能写成 OOD
+  提升。真实 shape、loss parity、显存和成功率由 Phase C–G 逐级解锁。
+
 ## 4. 简历表达素材
 
 ### 当前即可使用的版本
@@ -288,6 +308,10 @@
   审计；发现 OOD 下 cosine consistency distance 增加
   `0.0316 [0.0254,0.0381]`、视觉方向一致性下降
   `0.1898 [0.1664,0.2134]`。
+- 设计 1.37M 参数 zero-gated Future-to-Action Adapter，并实现 K=1/2/4
+  paired latent cache、原子 shard/resume/多级 checksum、Adapter-only
+  deterministic resume、跨 task/episode 反事实置换和真实未来泄漏门禁；
+  当前证据等级为 CPU/mock TEST，不宣称 OOD 效果。
 
 ### 可直接使用的量化表述
 

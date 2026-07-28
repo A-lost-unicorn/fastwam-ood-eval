@@ -10,6 +10,7 @@ that checkpoint restore preserves exact Adapter semantics.
 from __future__ import annotations
 
 import gc
+import math
 import os
 import time
 import traceback
@@ -449,12 +450,26 @@ def _validate_track(
             f"{cfg.variant}/{cfg.experiment.name} manifest failed: {result}"
         )
     if (
-        result.get("loss_decreased") is not True
-        or float(result["final_validation_action_loss"])
-        >= float(result["initial_validation_action_loss"])
+        result.get("training_probe_loss_decreased") is not True
+        or float(result["final_training_probe_action_loss"])
+        >= float(result["initial_training_probe_action_loss"])
     ):
         raise PhaseEGateError(
-            f"{cfg.variant} development loss did not decrease"
+            f"{cfg.variant} fixed training-probe loss did not decrease"
+        )
+    initial_development = float(
+        result["initial_validation_action_loss"]
+    )
+    final_development = float(
+        result["final_validation_action_loss"]
+    )
+    if (
+        not math.isfinite(initial_development)
+        or not math.isfinite(final_development)
+        or final_development > initial_development * 1.05
+    ):
+        raise PhaseEGateError(
+            f"{cfg.variant} development loss is non-finite/catastrophic"
         )
     for key in (
         "first_non_gate_nonzero_gradient_step",
@@ -509,6 +524,14 @@ def _validate_track(
     ]:
         raise PhaseEGateError(
             f"{cfg.variant} development checkpoint schedule changed"
+        )
+    if not all(
+        math.isfinite(float(row["action_loss"]))
+        and math.isfinite(float(row["training_probe_action_loss"]))
+        for row in development
+    ):
+        raise PhaseEGateError(
+            f"{cfg.variant} checkpoint loss history is non-finite"
         )
     return {
         "artifacts": _track_artifacts(cfg, result),
@@ -694,6 +717,8 @@ def _run_phase_e(
         != validations["A1"]["resumed"]["first_step_loss"]
         or a0["initial_validation_action_loss"]
         != a1["initial_validation_action_loss"]
+        or a0["initial_training_probe_action_loss"]
+        != a1["initial_training_probe_action_loss"]
     ):
         raise PhaseEGateError("A0/A1 paired-recipe invariants failed")
 
@@ -732,6 +757,7 @@ def _run_phase_e(
                 "initial_adapter_sha256"
             ],
             "initial_action_loss_equal": True,
+            "initial_training_probe_action_loss_equal": True,
             "initial_validation_action_loss_equal": True,
             "sample_order_equal": True,
             "trainable_parameter_count": a0[

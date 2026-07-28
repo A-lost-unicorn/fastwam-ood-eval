@@ -911,6 +911,7 @@ def evaluate_real_action_loss(
     samples: Sequence[RealTrainingSample],
     *,
     device: str,
+    evaluation_step_base: int = 90_000,
 ) -> float:
     adapter.eval()
     values: list[float] = []
@@ -921,7 +922,7 @@ def evaluate_real_action_loss(
             adapter,
             injector,
             sample,
-            step=90_000 + index,
+            step=evaluation_step_base + index,
             device=device,
         )
         values.append(float(loss.detach().cpu()))
@@ -1018,7 +1019,8 @@ def _validation_rows_for_resume(
     path: Path,
     *,
     start_step: int,
-    initial_loss: float,
+    initial_development_loss: float,
+    initial_training_probe_loss: float,
 ) -> list[dict[str, Any]]:
     if not path.is_file():
         if start_step:
@@ -1034,9 +1036,13 @@ def _validation_rows_for_resume(
         raise RealTrainingError(
             "development-loss history is not ordered and unique"
         )
-    if float(rows[0]["action_loss"]) != initial_loss:
+    if (
+        float(rows[0]["action_loss"]) != initial_development_loss
+        or float(rows[0]["training_probe_action_loss"])
+        != initial_training_probe_loss
+    ):
         raise RealTrainingError(
-            "development-loss history disagrees with initial state"
+            "loss history disagrees with initial training state"
         )
     return [row for row in rows if int(row["global_step"]) <= start_step]
 
@@ -1152,6 +1158,7 @@ def run_real_variant_training(
     )
     if len(train_samples) != 28 or len(development_samples) != 4:
         raise RealTrainingError("Gate E selected split must be 28 train / 4 development")
+    training_probe_samples = train_samples[:4]
 
     adapter = build_real_adapter(cfg, device=device)
     initial_adapter_sha256 = adapter_state_sha256(adapter.state_dict())
@@ -1212,6 +1219,9 @@ def run_real_variant_training(
         initial_validation_loss = float(
             state["initial_validation_action_loss"]
         )
+        initial_training_probe_loss = float(
+            state["initial_training_probe_action_loss"]
+        )
     else:
         if start_step:
             raise RealTrainingError(
@@ -1225,12 +1235,24 @@ def run_real_variant_training(
             development_samples,
             device=device,
         )
+        initial_training_probe_loss = evaluate_real_action_loss(
+            cfg,
+            model,
+            adapter,
+            injector,
+            training_probe_samples,
+            device=device,
+            evaluation_step_base=80_000,
+        )
         state = {
             "cache_fingerprint": prepared.cache_fingerprint,
             "config": cfg.to_dict(),
             "config_fingerprint": cfg.fingerprint,
             "frozen_parameter_sha256": frozen_parameter_sha256,
             "initial_adapter_sha256": initial_adapter_sha256,
+            "initial_training_probe_action_loss": (
+                initial_training_probe_loss
+            ),
             "initial_validation_action_loss": initial_validation_loss,
             "split_fingerprint": prepared.split_fingerprint,
             "variant": cfg.variant,
@@ -1240,7 +1262,8 @@ def run_real_variant_training(
     validation_rows = _validation_rows_for_resume(
         validation_path,
         start_step=start_step,
-        initial_loss=initial_validation_loss,
+        initial_development_loss=initial_validation_loss,
+        initial_training_probe_loss=initial_training_probe_loss,
     )
     if not validation_rows:
         validation_rows = [
@@ -1249,6 +1272,9 @@ def run_real_variant_training(
                 "checkpoint": None,
                 "global_step": 0,
                 "selection_split": "development",
+                "training_probe_action_loss": (
+                    initial_training_probe_loss
+                ),
                 "variant": cfg.variant,
             }
         ]
@@ -1268,6 +1294,15 @@ def run_real_variant_training(
             development_samples,
             device=device,
         )
+        resumed_training_probe_loss = evaluate_real_action_loss(
+            cfg,
+            model,
+            adapter,
+            injector,
+            training_probe_samples,
+            device=device,
+            evaluation_step_base=80_000,
+        )
         latest_for_validation = find_latest_checkpoint(checkpoints_root)
         if latest_for_validation is None:
             raise RealTrainingError(
@@ -1279,6 +1314,9 @@ def run_real_variant_training(
                 "checkpoint": str(latest_for_validation),
                 "global_step": start_step,
                 "selection_split": "development",
+                "training_probe_action_loss": (
+                    resumed_training_probe_loss
+                ),
                 "variant": cfg.variant,
             }
         )
@@ -1485,12 +1523,26 @@ def run_real_variant_training(
                     development_samples,
                     device=device,
                 )
+                checkpoint_training_probe_loss = (
+                    evaluate_real_action_loss(
+                        cfg,
+                        model,
+                        adapter,
+                        injector,
+                        training_probe_samples,
+                        device=device,
+                        evaluation_step_base=80_000,
+                    )
+                )
                 validation_rows.append(
                     {
                         "action_loss": checkpoint_validation_loss,
                         "checkpoint": str(checkpoint),
                         "global_step": global_step,
                         "selection_split": "development",
+                        "training_probe_action_loss": (
+                            checkpoint_training_probe_loss
+                        ),
                         "variant": cfg.variant,
                     }
                 )
@@ -1505,6 +1557,9 @@ def run_real_variant_training(
                             "gate": gate_after,
                             "loss": row["loss"],
                             "step": global_step,
+                            "training_probe_action_loss": (
+                                checkpoint_training_probe_loss
+                            ),
                             "variant": cfg.variant,
                         },
                     )
@@ -1528,6 +1583,9 @@ def run_real_variant_training(
             )
         final_validation_loss = float(
             final_validation_rows[0]["action_loss"]
+        )
+        final_training_probe_loss = float(
+            final_validation_rows[0]["training_probe_action_loss"]
         )
         selectable_validation = [
             row
@@ -1571,14 +1629,24 @@ def run_real_variant_training(
                 selected_validation["action_loss"]
             ),
             "development_metrics": str(validation_path),
+            "development_loss_decreased": (
+                final_validation_loss < initial_validation_loss
+            ),
             "final_validation_action_loss": final_validation_loss,
+            "final_training_probe_action_loss": (
+                final_training_probe_loss
+            ),
             "first_attention_nonzero_gradient_step": first_attention_step,
             "first_non_gate_nonzero_gradient_step": first_non_gate_step,
             "first_projector_nonzero_gradient_step": first_projector_step,
             "initial_adapter_sha256": initial_adapter_sha256,
+            "initial_training_probe_action_loss": (
+                initial_training_probe_loss
+            ),
             "initial_validation_action_loss": initial_validation_loss,
             "loss_decreased": (
-                final_validation_loss < initial_validation_loss
+                final_training_probe_loss
+                < initial_training_probe_loss
             ),
             "max_peak_memory_mib": max(
                 float(row["peak_memory_mib"]) for row in all_metrics
@@ -1609,6 +1677,13 @@ def run_real_variant_training(
                 else "intentional_gate_interruption"
             ),
             "train_sample_count": len(train_samples),
+            "training_probe_loss_decreased": (
+                final_training_probe_loss
+                < initial_training_probe_loss
+            ),
+            "training_probe_sample_count": len(
+                training_probe_samples
+            ),
             "trainable_parameter_count": adapter.trainable_parameter_count,
             "uses_ground_truth_future_input": False,
             "validation_sample_count": len(development_samples),

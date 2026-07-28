@@ -33,7 +33,7 @@ export CUBLAS_WORKSPACE_CONFIG="${CUBLAS_WORKSPACE_CONFIG:-:4096:8}"
 export TOKENIZERS_PARALLELISM=false
 export PYTHONPATH="${project_root}/src:${project_root}/third_party/FastWAM:${project_root}/third_party/FastWAM/experiments/libero${PYTHONPATH:+:${PYTHONPATH}}"
 
-log_dir="${project_root}/outputs/thought3/phase_e_training_smoke_v2/logs"
+log_dir="${project_root}/outputs/thought3/phase_e_training_smoke_v3/logs"
 mkdir -p "${log_dir}"
 log_path="${log_dir}/phase_e.log"
 

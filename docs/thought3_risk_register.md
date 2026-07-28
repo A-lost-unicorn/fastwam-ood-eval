@@ -72,9 +72,10 @@
 | R47 | 旧 CLI 因 Thought3 import/参数变化而改变 | 中 | Critical | old CLI regression、dry-run | additive lazy import；旧命令输出/计划 fixture 不变 | B | Controlled |
 | R48 | LIBERO-Plus 既有 `.downloads/` 被误归因或写入 | 低 | Medium | upstream status snapshot | 记录为审计前既有；Thought3 path guard 禁止写 third_party | A–G | Controlled |
 | R49 | 单样本通过但 residual/hidden correction 尺度过大，导致多样本不稳定 | 高 | High | residual、gate、实际 BF16 delta/action-hidden | E.1 发现 A0 1.91×、A1 0.70×；E.2 六轨迹尺度门槛均通过，最大 sample ratio 0.537，但总 Gate 因跨样本 loss 门槛失败 | E | Controlled |
-| R50 | 每 sample 只绑定一个 fixed action-flow draw，使 sample stability 被 timestep/noise 混淆 | 高 | High | initial loss/timestep、multi-flow held-out probe | E.3 v2 已确认 E.2 fixed-flow 改善未跨 flow 稳定；E.4 必须让每次训练访问使用不同 paired flow slot，并继续 sample-equal gate | E | Open |
+| R50 | 每 sample 只绑定一个 fixed action-flow draw，使 sample stability 被 timestep/noise 混淆 | 高 | High | initial loss/timestep、multi-flow held-out probe | E.3 v2 已确认风险；E.4 使用 200 个唯一 paired slots 后六条 held-out reduction 均转正，但绝对幅度仍不足 | E | Controlled |
 | R51 | 官方 scheduler 零权重端点使逐 objective `final/initial` ratio 出现零分母 | 中 | Medium | action weight、timestep、zero-loss count、v1 traceback | v2 完成 320/320 probe；8 个零权重 row 全部 exact zero loss，保留于主统计且仅排除未定义 ratio；回归测试通过 | E | Closed |
-| R52 | Adapter 在 200 step 内主要拟合固定 action noise/timestep，而非形成跨 flow 稳定 action objective | 高 | High | E.2 fixed-flow 与 E.3 held-out reduction/non-worsened 对照 | A1 `1e-4/3e-4` reduction 从 `24.19%/40.01%` 降为 held-out `0.025%/−1.31%`；下一诊断只改变 train-flow diversification，不调 LR/门槛/结构 | E | Open |
+| R52 | Adapter 在 200 step 内主要拟合固定 action noise/timestep，而非形成跨 flow 稳定 action objective | 高 | High | E.2 fixed-flow、E.3 held-out 与 E.4 diversified-train 对照 | E.4 将六条 held-out reduction 改善为 `0.997%–1.948%`，说明 fixed-flow 是混淆但不是全部原因；不得回用 E.2 checkpoint | E | Controlled |
+| R53 | microbatch 1 的单 action-flow objective 方差过高，使 scalar gate/Adapter 更新抵消 | 高 | High | per-step loss CV/top-share、gate-gradient sign/cancellation、final gate 与 delta/hidden | E.4 post-run 遥测：positive loss max/min `2268×–2342×`、top 10% 占 `58.7%–59.0%`、gate sign flip `70–107/197`；下一协议只改变 objective aggregation/effective batch | E | Open |
 
 ## 3. 最高优先级风险详解
 
@@ -323,9 +324,10 @@ frozen hash 缺口；但发现实际 hidden correction 达 A0 1.91×、A1 0.70×
 | R13 多样本是否实际使用 future | 通过 Gate E 后做 same-checkpoint correct/null/shuffle counterfactual |
 | R28 正式 cache 容量 | 扩大样本前重新执行 inventory、容量估算和 free-space gate |
 | R49 hidden correction 尺度 | E.2 六轨迹尺度门槛已通过；完整 28/4 Gate E 仍须复核 |
-| R50 单 fixed flow draw 混淆 | E.3 v2 已确认风险；运行新 Run ID 的 paired diversified train-flow 诊断 |
+| R50 单 fixed flow draw 混淆 | 已受控：E.4 使用唯一 paired slots，六条 held-out reduction 均转正但未过 Gate |
 | R51 零权重 objective ratio | 已关闭：v2 单测与真实 320 probes 的 weight/count/exact-zero 检查均通过 |
-| R52 fixed-flow objective 拟合 | Gate E.4 保持所有其他变量不变，train slots 与 held-out `1..5` 完全不重叠 |
+| R52 fixed-flow objective 拟合 | 已受控：E.4 证明 diversification 有改善但不足以形成 eligible LR |
+| R53 单 objective 梯度方差 | 先冻结 matched-budget、accumulation factor、flow slots 和 mean/sum loss，再运行单变量聚合诊断 |
 | 3-rank cache 完整性 | 正式分布式 cache 的 union/intersection/cardinality 证明 |
 | Gate E 多样本优化 | 稳定配方下重新跑 28/4 fixed train/development gate |
 

@@ -29,6 +29,7 @@
 | 阶段三 Phase D 真实 cache | SMOKE 已通过 | 32 samples、96 entries、12 shards；paired/checksum/resume/leakage 全通过；0.806 sample/s；0 optimizer step |
 | 阶段三 Gate E.2 多样本诊断 | FAILED-GATE，工程轨迹完整 | A0/A1 × 三 LR 共 1,200 step；梯度/resume/checkpoint/frozen SHA/13.0 GiB 全通过；无共同 6/8 stable LR，保留负结果并定位单-flow confound |
 | 阶段三 Gate E.3 held-out flow | FAILED-GATE，320/320 probe 完整 | 执行/provenance/zero-weight checks 全通过；E.2 A1 fixed-flow 的 24.19%/40.01% 降幅在 held-out flow 变为 0.025%/−1.31%，阻止不稳定配方进入 OOD |
+| 阶段三 Gate E.4 diversified flow | FAILED-GATE，1,200 step 完整 | 200 unique paired slots、480 held-out objectives、108 execution checks 全通过；六条 reduction 转正但仅 0.997%–1.948%，继续阻止 full E/A2/A4 |
 
 ## 2. 可以对外说明的工程亮点
 
@@ -344,6 +345,22 @@
   optimizer visit 使用唯一、A0/A1 配对且与 held-out probe 不重叠的 flow slot，
   不放宽门槛、不扩 A2/A4、不启动 OOD。
 
+### 3.26 用 paired diversified-flow 训练验证混淆是否可修复
+
+- 方案：保持八条样本、A0/A1、三档 LR、Adapter、200-step budget、official
+  loss、held-out probe 和全部门槛不变，只把 optimizer objective 改为
+  `10001..10200` 的 200 个唯一 flow slots。
+- 审计：六条轨迹共 1,200 optimizer steps、480 held-out objectives、24 个
+  checkpoint 目录；108 个 per-track execution checks、全部 paired/cross checks、
+  zero-weight step `[49,142]` 和 frozen Fast-WAM SHA 均通过。
+- 结果：E.3 中的部分负 held-out reduction 在 E.4 六条轨迹上都转为正值，但仅
+  `0.997%–1.948%`；A1@3e-4 虽有 7/8 sample 不变差，mean reduction 仍只有
+  1.787%，故严格保留 failed gate。
+- 根因线索：post-run 遥测显示 positive per-step loss `max/min` 达
+  `2268×–2342×`，top 10% step 占约 59%，scalar gate gradient 高频换号且净值
+  远小于绝对值；下一步收缩到 objective aggregation/effective-batch 单变量，而
+  不是放宽阈值或直接扩 K。
+
 ## 4. 简历表达素材
 
 ### 当前即可使用的版本
@@ -390,6 +407,10 @@
 - 为 Adapter 训练建立 320-objective held-out action-flow 门禁，识别出
   fixed-flow train loss 改善没有跨 noise/timestep 泛化；在全部执行与冻结检查
   通过的情况下仍保留负结果，并用该证据阻止不稳定 checkpoint 进入 OOD rollout。
+- 设计 1,200-step paired diversified-flow 训练诊断，以共享 schedule SHA、
+  zero-weight 审计、Adapter-only checkpoint 和 108 项 execution gate 隔离单一
+  优化变量；发现跨 flow 退化虽被缓解但绝对降幅仅 0.997%–1.948%，据此拒绝将
+  小幅工程改善包装成 future/OOD 收益。
 
 ### 可直接使用的量化表述
 

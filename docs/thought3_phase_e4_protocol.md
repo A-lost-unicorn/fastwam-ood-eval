@@ -1,7 +1,12 @@
 # Thought3 Gate E.4：Paired Diversified Train-flow 诊断协议
 
-状态：`PREREGISTERED / NOT RUN`
+状态：`EXECUTED / VALID FAILED GATE`
 证据等级：`ENGINEERING DIAGNOSTIC / NOT MODEL EFFECT`
+
+> 2026-07-28：六条 200-step 轨迹、1,200 optimizer steps 和 480 个 held-out
+> objectives 已完整执行；全部 execution checks 通过，但没有 A0/A1 共同
+> eligible LR，故 Gate E.4 有效失败。结果、边界与冻结工件见
+> [thought3_phase_e4_report.md](thought3_phase_e4_report.md)。
 
 ## 1. 触发依据
 

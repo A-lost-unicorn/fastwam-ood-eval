@@ -360,7 +360,21 @@ E.4 必须保持：
 
 train flow slot 必须与 probe slot 不相交，并在每 step 保存 timestep、official
 weight、noise/slot identity 和合法 zero-weight 计数。E.4 是序贯工程诊断，不是
-future 模型效应实验；真实运行仍需独立 Run ID 和用户显式确认。
+future 模型效应实验。
 
-冻结细节见
-[thought3_phase_e4_protocol.md](thought3_phase_e4_protocol.md)。
+E.4 已于 2026-07-28 完整执行：
+
+- 六条轨迹共 1,200 optimizer steps、480 held-out objectives；
+- 108 个 per-track execution checks、全部 cross/paired checks 通过；
+- frozen Fast-WAM SHA 前后相同；
+- 六条 held-out reduction 均为正，但只有 `0.997%–1.948%`；
+- A1@3e-4 达 7/8 non-worsened，但 mean reduction 只有 1.787%；
+- 三个 LR 均没有满足 A0/A1 共同 `10% + 6/8`，故有效失败。
+
+因此不得进入完整 Gate E、A2/A4 或 Phase F。下一单变量诊断只能针对 optimizer
+objective aggregation/effective batch；实现前必须冻结 matched-objective 或
+matched-update budget、accumulation factor、flow slots 与 mean/sum loss。
+
+冻结协议和结果分别见
+[thought3_phase_e4_protocol.md](thought3_phase_e4_protocol.md)、
+[thought3_phase_e4_report.md](thought3_phase_e4_report.md)。

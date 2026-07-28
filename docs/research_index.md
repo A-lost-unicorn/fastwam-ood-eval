@@ -25,7 +25,7 @@
 | 阶段二正式抽样 | outcome-blind planner、anchor、exact-ratification 与 formal gate 已实现 | 200 Clean + 532 OOD 已 exact-ratify 并全部运行 | **完成**。只认证 Phase 2 future 指标前 job ID 不变；不冒充阶段一 outcome 前 preregistration |
 | 阶段二统计协议 | episode→task 分层、task bootstrap、首 probe/outcome gate 已实现 | 10,000 次 suite-stratified task bootstrap；730/732 outcome match | **post-run analysis 完成，非 preregistered confirmatory**。DRAFT 未在正式指标前冻结；人工 endpoint 待完成 |
 | 阶段二 B：action-conditioned future consistency | 严格门禁、schema、runner、测试已实现 | CPU/mock 与门禁测试通过 | **阻塞**。官方 release 为 `action_conditioned=false`，且没有可信匹配 checkpoint |
-| 阶段三：Future-to-Action Adapter | Phase A/B/C/D 完成；E/E.1/E.2/E.3 真实诊断已执行，Gate E 仍未通过 | E.3 v2 完成 320/320 held-out forward；全部执行检查通过，但 A0 最好仅 1.35%/2-of-8、A1 最好仅 0.025%/2-of-8，三个 LR 均不 eligible | **当前 fixed-flow 训练配方未跨 action-flow 泛化**。下一步只允许多样化 train-flow 单变量诊断；不得扩 A2/A4 或启动 ID/OOD |
+| 阶段三：Future-to-Action Adapter | Phase A/B/C/D 完成；E/E.1/E.2/E.3/E.4 真实诊断已执行，Gate E 仍未通过 | E.4 完成 1,200 optimizer steps、480 held-out objectives；108 个 execution checks 全通过，但六条 reduction 只有 0.997%–1.948%，三个 LR 均不 eligible | **diversified train-flow 缓解但未解决小训练不稳定**。下一步只允许冻结多 objective 梯度聚合的单变量诊断；不得扩 A2/A4 或启动 ID/OOD |
 
 因此，“阶段一已经完成”的准确说法是：**阶段一工程、正式全量计算、聚合与
 完整性审计均已完成；失败机制人工 taxonomy 尚未完成，但不阻塞主成功率结论。**
@@ -133,6 +133,8 @@ outcome JSONL 前使用 `frozen_before_source_outcomes`；现有 v2 则走更窄
 | 阶段三 Phase C | 单条真实样本的 K1/K2/K4 分别为 `120.34/165.62/325.30 ms`；video-only parity max diff 0；zero-gate action bitwise equal；backbone gradient 0；执行峰值 `12.964 GiB` | 单卡真实工程可行性；latency 是单样本 telemetry，不是正式 P50/P95；不支持 OOD 增益 |
 | 阶段三 Phase D | 32 base samples、96 entries、12 shards；完整 split 37/5，cache 内 28/4；K1/K2/K4 mean `127.54/186.62/362.99 ms`；0.806 base sample/s；执行峰值 `12.677 GiB` | 真实离线 cache 工程门禁；sampling 不含 action denoising，不能作为在线总延迟或 OOD 效果 |
 | 阶段三 Gate E.2 | A0/A1 × 三 LR 共 1,200 step；六轨迹 execution/pairing/checkpoint/frozen SHA 全通过；峰值 `13,273.17 MiB`；Gate 总耗时 24.10 分钟 | A1 在 `1e-4/3e-4` 的 8-sample mean fixed loss 下降 24.19%/40.01%，但都只有 4/8 sample 不变差；无共同 eligible LR，属于 FAILED engineering gate，不是 future 效果 |
+| 阶段三 Gate E.3 v2 | 320/320 held-out multi-flow forwards；0 optimizer/backward；执行、零权重、配对和 frozen SHA 全通过 | E.2 fixed-flow checkpoint 的 A1 `24.19%/40.01%` 降幅在 held-out flow 只剩 `0.025%/−1.31%`；有效负 Gate，不否定 future latent |
+| 阶段三 Gate E.4 | 六轨迹共 1,200 optimizer steps、480 held-out objectives；峰值 `13,273.17 MiB`；总耗时 25.47 分钟；401,013,164 bytes | diversified train-flow 后六条 reduction 均为正但只有 `0.997%–1.948%`；A1@3e-4 为 7/8 但未达 10%，无共同 eligible LR |
 
 20-step pilot 的 episode-weighted Clean→OOD 描述值为：latent L1
 `0.1512→0.2002`、cosine distance `0.1168→0.1942`、motion-direction cosine
@@ -173,6 +175,8 @@ OOD 一致性下降假设”，不能进入论文结论表。
   [thought3_phase_e3_v2_report.md](thought3_phase_e3_v2_report.md)
 - 阶段三 Gate E.4 paired diversified train-flow 预注册：
   [thought3_phase_e4_protocol.md](thought3_phase_e4_protocol.md)
+- 阶段三 Gate E.4 有效负结果：
+  [thought3_phase_e4_report.md](thought3_phase_e4_report.md)
 - 阶段三数据/训练/评测：[thought3_data_protocol.md](thought3_data_protocol.md)、[thought3_training.md](thought3_training.md)、[thought3_evaluation.md](thought3_evaluation.md)
 - 阶段三分析 DRAFT 与限制：[thought3_analysis_protocol_DRAFT.md](thought3_analysis_protocol_DRAFT.md)、[thought3_limitations.md](thought3_limitations.md)
 - 阶段三旧版路线摘要：[thought3_adapter_plan.md](thought3_adapter_plan.md)
@@ -181,18 +185,19 @@ OOD 一致性下降假设”，不能进入论文结论表。
 
 ## 7. 当前优先级
 
-1. Gate E.2 已按预注册规则失败：六条轨迹工程上完整，但没有 A0/A1 共同达到
-   mean reduction、6/8 non-worsened 与尺度联合门槛；不得事后放宽为 4/8。
-2. E.3 v2 已完成 320/320 held-out forward；v1 的零权重修复通过，Fast-WAM
-   SHA 前后相同。三个 LR 均没有达到 A0/A1 共同 `10% + 6/8` 门槛。
-3. E.2 的 A1 fixed-flow reduction `24.19%/40.01%` 在相同 checkpoint 的
-   held-out flow 上变为 `0.025%/−1.31%`。当前能支持的结论是 fixed-flow
-   配方没有跨 action-flow 泛化，不是 future latent 无效。
-4. 下一步只允许把 optimizer 从固定 `flow_step=0` 改为确定性、多样化且与 probe
-   不重叠的 train flow slots；8 samples、LR grid、200 step、Adapter、loss、probe
-   和全部门槛保持不变。
-5. 只有该单变量诊断给出稳定候选 LR，并在新的完整 28/4 Gate E 中通过
-   train/dev、resume、frozen 与尺度门槛后，才允许实现和训练 A2/A4。
+1. Gate E.4 已按预注册规则有效失败：六条轨迹、1,200 optimizer steps、480
+   held-out objectives 与全部执行检查完整，但三个 LR 都没有达到 A0/A1 共同
+   `10% + 6/8`。
+2. diversified train-flow 将 E.3 的部分负 held-out reduction 改善为六条全部
+   `+0.997%～+1.948%`；A1@3e-4 达 7/8 sample 不变差，但 mean reduction 只有
+   1.787%，不得事后把它选为候选 LR。
+3. E.4 只能说明 fixed-flow confound 得到缓解但训练信号仍不足；不能写成
+   future latent 有效或无效，也不能进入完整 28/4 Gate E。
+4. 下一步只允许先冻结一个针对 optimizer objective aggregation/effective batch
+   的单变量协议；必须预先选择 matched-objective 或 matched-update budget、
+   accumulation factor、flow slots 和 mean/sum loss，不能边运行边决定。
+5. 只有新的诊断给出稳定候选 LR，并在新的完整 28/4 Gate E 中通过 train/dev、
+   resume、frozen 与尺度门槛后，才允许实现和训练 A2/A4。
 6. 在不按自动 metric/outcome 挑案例的前提下，冻结正式 human-review budget、
    seed 和每 job 至多一个 probe；至少两名 reviewer 独立标注并保留 agreement/
    adjudication。

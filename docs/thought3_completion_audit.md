@@ -17,7 +17,7 @@ Phase A/B/C/D        completed
 Gate E/E.2           failed overall
 Gate E.3 v1          invalid telemetry run; no gate conclusion
 Gate E.3 v2          valid failed gate; 320/320 probes complete
-Gate E.4             diversified train-flow diagnostic pending
+Gate E.4             valid failed gate; 1,200 steps complete
 full 28/4 Gate E     not passed
 A2/A4 real training  not started
 Phase F real pilot   not started
@@ -31,7 +31,8 @@ paper claim          unavailable
 - 小型 K1/K2/K4 cache 可恢复、可校验、无真实未来输入；
 - Adapter-only backward、checkpoint 和单卡显存可工作；
 - A0/A1 单目标可拟合；
-- E.2 六条多样本轨迹工程上完整。
+- E.2/E.4 各六条多样本训练轨迹工程上完整；
+- diversified train-flow 缓解 fixed-flow 退化，但未达到冻结训练门槛。
 
 尚无证据证明：
 
@@ -97,7 +98,7 @@ Phase D cache 只能用于训练；不得把它接入 Phase F/G 在线 policy。
 | E.2 | failed | 六轨迹完整；无共同 LR 达到 6/8 稳定门槛 |
 | E.3 v1 | invalid run | 官方 `t=1000` 零权重 objective 触发非门控 ratio 实现错误；冻结 SHA 不变，未生成 gate result |
 | E.3 v2 | valid failed gate | 320/320 probe 与全部执行检查通过；三个 LR 均未达到 A0/A1 共同 `10% + 6/8` |
-| E.4 | pending | 只把 optimizer objective 从固定 flow 改为 paired diversified train-flow slots；不得运行前改其他变量 |
+| E.4 | valid failed gate | 1,200 optimizer steps、480 held-out objectives、108 execution checks 完整；六条 reduction 仅 0.997%–1.948%，无共同 LR |
 | full E | not passed | 仍缺新的 28 train / 4 development 完整闭环 |
 
 在 full E 通过前：
@@ -105,7 +106,7 @@ Phase D cache 只能用于训练；不得把它接入 Phase F/G 在线 policy。
 - 不训练 A2/A4；
 - 不按 OOD outcome 选 LR/K/checkpoint；
 - 不启动真实 Phase F rollout；
-- 不把 E.2 的 A1 mean-loss 差写成 future 效果。
+- 不把 E.2–E.4 的 A1/A0 mean-loss 差写成 future 效果。
 
 ## 6. 反事实与真实在线推理
 
@@ -159,7 +160,7 @@ CPU/mock；`thought3-counterfactual` 在 Fast-WAM backend 上仍返回
 ## 9. 完成最终 Goal 的依赖链
 
 ```text
-run Gate E.4 diversified-flow training diagnostic
+freeze and run one-variable multi-objective gradient aggregation diagnostic
   ↓
 if pass: freeze candidate LR
   ↓
@@ -180,18 +181,20 @@ aggregate, bootstrap, failure taxonomy, latency/memory Pareto
 paper/resume conclusions with evidence levels
 ```
 
-若 E.4 或 full E 失败，应继续报告负结果并设计单变量工程诊断，不能跳过 A0、
+若下一诊断或 full E 失败，应继续报告负结果并设计单变量工程诊断，不能跳过 A0、
 shuffle、在线 no-cache 或统计冻结要求。
 
 ## 10. 当前最近一步
 
-Gate E.3 v2 已完整运行并有效失败。A0 held-out mean loss 最好只下降 `1.35%`
-且 2/8 sample 不变差；A1 最好只下降 `0.025%` 且 2/8 不变差。全部
-hidden-scale、catastrophic、pairing、provenance 和 frozen SHA 检查通过。
+Gate E.4 已完整运行并有效失败。六条 diversified-train-flow 轨迹都取得正
+held-out reduction，但范围只有 `0.997%–1.948%`；只有 A1@3e-4 达到 7/8
+sample 不变差，仍未达到冻结的 10% mean reduction。全部 execution、pairing、
+zero-weight、checkpoint、memory、provenance 和 frozen SHA 检查通过。
 
-最近允许设计的门禁是 Gate E.4：保持 8 samples、LR grid、200 step、Adapter、
-cache、loss、held-out probe 和 `10% + 6/8` 门槛不变，只让 optimizer 每次 sample
-访问使用不同且 A0/A1 配对的 train flow slot。真实运行仍须新的用户显式确认。
-E.3 结果见
-[thought3_phase_e3_v2_report.md](thought3_phase_e3_v2_report.md)，E.4 冻结协议见
-[thought3_phase_e4_protocol.md](thought3_phase_e4_protocol.md)。
+最近允许设计的门禁只能改变 optimizer objective aggregation/effective batch。
+在实现前必须冻结 matched-objective 或 matched-update budget、accumulation
+factor、flow-slot 映射和 mean/sum loss。8 samples、A0/A1、LR grid、official
+loss、held-out probe 和 `10% + 6/8` 门槛不得改变；真实运行仍需新的用户显式
+确认。E.4 协议和结果分别见
+[thought3_phase_e4_protocol.md](thought3_phase_e4_protocol.md)、
+[thought3_phase_e4_report.md](thought3_phase_e4_report.md)。

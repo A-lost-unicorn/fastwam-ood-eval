@@ -25,7 +25,7 @@
 | 阶段二正式抽样 | outcome-blind planner、anchor、exact-ratification 与 formal gate 已实现 | 200 Clean + 532 OOD 已 exact-ratify 并全部运行 | **完成**。只认证 Phase 2 future 指标前 job ID 不变；不冒充阶段一 outcome 前 preregistration |
 | 阶段二统计协议 | episode→task 分层、task bootstrap、首 probe/outcome gate 已实现 | 10,000 次 suite-stratified task bootstrap；730/732 outcome match | **post-run analysis 完成，非 preregistered confirmatory**。DRAFT 未在正式指标前冻结；人工 endpoint 待完成 |
 | 阶段二 B：action-conditioned future consistency | 严格门禁、schema、runner、测试已实现 | CPU/mock 与门禁测试通过 | **阻塞**。官方 release 为 `action_conditioned=false`，且没有可信匹配 checkpoint |
-| 阶段三：Future-to-Action Adapter | Phase A/B 完成；Phase C 单卡真实 tensor/backward/memory gate 已通过 | 1 条真实 `libero_goal` 样本；K=1/2/4；一次 backward；0 optimizer/cache；峰值 12.964 GiB | **允许进入 Phase D 小型 cache smoke**。仍无训练、ID/OOD 增益或 K 优劣结论 |
+| 阶段三：Future-to-Action Adapter | Phase A/B/C 完成；Phase D 小规模真实 cache gate 已通过 | 1 个 `libero_goal` task；32 base samples；K=1/2/4 共 96 entries、12 shards；paired/checksum/resume/leakage 全通过 | **允许进入 Phase E 100–500 step 单卡训练 smoke**。仍无收敛、ID/OOD 增益或 K 优劣结论 |
 
 因此，“阶段一已经完成”的准确说法是：**阶段一工程、正式全量计算、聚合与
 完整性审计均已完成；失败机制人工 taxonomy 尚未完成，但不阻塞主成功率结论。**
@@ -131,6 +131,7 @@ outcome JSONL 前使用 `frozen_before_source_outcomes`；现有 v2 则走更窄
 | 阶段二正式资源 | 20-step generation mean/p50/p95 `3354.66/3316.96/3564.12 ms`；full diagnostic `5816.77/5762.95/6271.52 ms`；峰值 `24841.09 MB` | Shadow 诊断成本；不是动作延迟或阶段三 K-step 在线成本 |
 | 阶段三 Phase B | 默认 Adapter `1,371,137` 参数；native future schema `[48,2,14,28]`；K1/K2/K4 paired cache、resume/checksum/mock training/checkpoint/online-no-cache tests 通过 | 只证明工程 contract；不是模型效果、真实延迟或显存结果 |
 | 阶段三 Phase C | 单条真实样本的 K1/K2/K4 分别为 `120.34/165.62/325.30 ms`；video-only parity max diff 0；zero-gate action bitwise equal；backbone gradient 0；执行峰值 `12.964 GiB` | 单卡真实工程可行性；latency 是单样本 telemetry，不是正式 P50/P95；不支持 OOD 增益 |
+| 阶段三 Phase D | 32 base samples、96 entries、12 shards；完整 split 37/5，cache 内 28/4；K1/K2/K4 mean `127.54/186.62/362.99 ms`；0.806 base sample/s；执行峰值 `12.677 GiB` | 真实离线 cache 工程门禁；sampling 不含 action denoising，不能作为在线总延迟或 OOD 效果 |
 
 20-step pilot 的 episode-weighted Clean→OOD 描述值为：latent L1
 `0.1512→0.2002`、cosine distance `0.1168→0.1942`、motion-direction cosine
@@ -151,6 +152,7 @@ OOD 一致性下降假设”，不能进入论文结论表。
 - 阶段三审计与设计：[thought3_upstream_audit.md](thought3_upstream_audit.md)、[thought3_design.md](thought3_design.md)
 - 阶段三 Phase B 验收：[thought3_phase_b_report.md](thought3_phase_b_report.md)
 - 阶段三 Phase C 验收：[thought3_phase_c_report.md](thought3_phase_c_report.md)
+- 阶段三 Phase D 验收：[thought3_phase_d_report.md](thought3_phase_d_report.md)
 - 阶段三数据/训练/评测：[thought3_data_protocol.md](thought3_data_protocol.md)、[thought3_training.md](thought3_training.md)、[thought3_evaluation.md](thought3_evaluation.md)
 - 阶段三分析 DRAFT 与限制：[thought3_analysis_protocol_DRAFT.md](thought3_analysis_protocol_DRAFT.md)、[thought3_limitations.md](thought3_limitations.md)
 - 阶段三旧版路线摘要：[thought3_adapter_plan.md](thought3_adapter_plan.md)
@@ -159,11 +161,12 @@ OOD 一致性下降假设”，不能进入论文结论表。
 
 ## 7. 当前优先级
 
-1. 阶段三执行 Gate D：只选 `libero_goal` 一个 task，按 episode 固定 90/10
-   split，生成约 32 条 K=1/2/4 cache，并验证 paired noise、shape、checksum、
-   resume、泄漏和吞吐。
-2. Gate D 通过后才执行 Phase E：先 A0/A1 单卡 100–500 step，确认 gate 打开后
-   非 gate Adapter 参数出现 finite nonzero gradient，再验证 loss/checkpoint resume。
+1. 阶段三执行 Gate E：先完成真实 training identity/action-target join 和按模块
+   gradient telemetry，再跑 A0/A1 单卡 100–500 step；确认第 1 step 打开 gate，
+   后续 projector/attention 等非 gate 参数出现 finite nonzero gradient。
+2. Gate E 同时验证 train/development loss、单卡显存、frozen-backbone hash、
+   Adapter-only checkpoint，以及 interrupted resume 与 uninterrupted 的最终
+   Adapter semantic hash 一致；Gate 通过前不扩 A2/A4。
 3. 在不按自动 metric/outcome 挑案例的前提下，冻结正式 human-review budget、
    seed 和每 job 至多一个 probe；至少两名 reviewer 独立标注并保留 agreement/
    adjudication。

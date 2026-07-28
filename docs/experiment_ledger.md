@@ -31,6 +31,7 @@
 | `P3-PHASE-A-v1` | 2026-07-27 | 3 / PLAN-AUDIT | `thought3_{upstream_audit,design,risk_register}.md` | 上游/shape/scheduler/injection/显存/隔离审计；用户确认 10 项默认值 | 允许进入 Phase B；无模型结果 |
 | `P3-PHASE-B-v1` | 2026-07-27 | 3 / TEST | `src/fastwam_ood_eval/thought3/`、`configs/thought3/`、Thought3 tests | 1.371M Adapter、paired cache、mock trainer、Adapter-only resume、counterfactual、online-no-cache 与旧 CLI 回归通过 | 只证明 CPU/mock 工程 contract；无真实 latent/训练/OOD 结论 |
 | `P3-PHASE-C-v1` | 2026-07-28 | 3 / SMOKE | `configs/thought3/phase_c_single_sample.yaml`；GPU 1；真实 `libero_goal` sample 0 | K1/K2/K4、upstream parity、zero-gate、1 backward、0 backbone grad、12.964 GiB peak；0 cache/optimizer step | Gate C 通过，允许小型真实 cache；不支持训练收敛、OOD 增益或 K 排序 |
+| `P3-PHASE-D-v1` | 2026-07-28 | 3 / SMOKE | commit `02a010e`；`phase_d_cache_smoke.yaml`；GPU 1；`libero_goal` task 0 | 32 base samples × K1/K2/K4 = 96 entries；12 shards；paired/checksum/resume/leakage 通过；0.806 sample/s；12.677 GiB execution peak | Gate D 通过，允许 100–500 step 单卡训练 smoke；不支持收敛、OOD 增益、K 排序或在线 latency |
 
 ### `P1-FORMAL-v1` 机器证据
 
@@ -294,6 +295,38 @@
   `f09670e9e5bd8bdb9ddd51653d71f7f5759c8f51cc3cb079a1c95993c5e648d2`。
 - 完整解释见 [thought3_phase_c_report.md](thought3_phase_c_report.md)。
 
+### `P3-PHASE-D-v1` 机器证据
+
+- Phase C 收口 commit
+  `f37a66bd43399bff637e2d2ffb1b9fd4103bd942`；Phase D 实现和运行 commit
+  `02a010eb63897a97c911fb5f68e0bb209fe654ec`。运行前 Phase C 三个冻结 SHA
+  全部匹配。
+- 数据只来自标准 `libero_goal` task 0
+  `open the middle drawer of the cabinet`。42 个 episode 先按 identity 分为
+  37 train / 5 development，再选 32 个不同 episode；cache 内为 28/4。
+- cache fingerprint
+  `63a70e1af38f68bc894fc11d03c84f212e6c6328a5051256c9d045741156d9c5`；
+  32 base samples、96 entries、12 safetensors shards、41 files、
+  7,687,316 bytes。
+- 所有 shard tensor shape 均为 latent `[8,48,2,14,28]` BF16、mask
+  `[8,2,14,28]` bool；96 metadata rows、32 base sample identity 全部通过。
+- 32/32 base sample 的 K1/K2/K4 共享 seed 与 initial-state hash；三个 K 的
+  latent hash 对每个 base sample 都不同。
+- no-op resume 为 built `0`、skipped `12/12`、`model_loaded=false`。临时副本
+  单字节损坏触发 checksum mismatch，正式 shard hash 未改变。
+- source audit 为 current camera frames `64`、future RGB `0`、actual future
+  read `false`、action target read `false`、ground-truth future `false`。
+- K1/K2/K4 的 32-sample sampling mean 为
+  `127.54/186.62/362.99 ms`；generation loop `39.70 s`，不含模型加载吞吐
+  `0.806 base sample/s`。模型加载 `888.44 s`，执行/加载峰值分别
+  `12.677/23.125 GiB`。
+- status/result/log SHA-256 分别为
+  `d302cd63d3fd18161775f92ac3aa9d18e84842ee97b3316fe0f427df2e819baa`、
+  `a636d649491ad9df67a1ea2cb91d8e9bf708784a410ba7b8304248f33ed1882d`、
+  `97cdb718877a2c58a0a11352102d874b4c1b670b38ed090e90d60f91e5412d84`。
+- optimizer 未创建、backward/optimizer step 为 0、训练未启动。完整解释见
+  [thought3_phase_d_report.md](thought3_phase_d_report.md)。
+
 ## 2. 失败尝试与解决记录
 
 | 日期/尝试 | 现象 | 根因 | 修复与证据 | 是否污染实验 |
@@ -346,6 +379,11 @@ Provenance 补充核对：Fast-WAM 和 LIBERO checkout clean；LIBERO-Plus
     仍保持同方向；这是同轨迹关联证据，不是 future 对 action 的因果依赖。
 15. 同一次 Phase 2 执行中 1,010/1,010 probe 的动作哈希保持不变；该 shadow
     诊断没有把 future 反馈给控制动作。
+16. Phase D 已证明同一官方 checkpoint 能在单卡、当前观测唯一输入的条件下，
+    为 32 个真实 training sample 生成可配对、可校验、可恢复的 K1/K2/K4
+    future latent cache。
+17. Phase D 的 12-shard cache 可检测单字节损坏并在 no-op resume 时避免模型
+    重载；这是 cache 工程可靠性证据，不是 Adapter 收敛或 OOD 效果证据。
 
 ### 尚未支持
 

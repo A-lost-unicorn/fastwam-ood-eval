@@ -1,6 +1,6 @@
 # Thought3 数据与 Future Cache 协议
 
-状态：Phase C 已冻结 `libero_goal` revision 并通过单样本真实门禁；真实 cache 尚未生成
+状态：Phase D 已生成并验证一个 task 的 32-sample 真实 cache；正式规模 cache 尚未生成
 更新时间：2026-07-28
 适用阶段：B–G
 
@@ -55,6 +55,12 @@ Adapter 输入。真实 action chunk 只作为 action flow-matching 的监督目
 
 其余三个标准 suite 尚未下载；这不阻塞只覆盖一个 `libero_goal` task 的 Phase D，
 但在 Phase F/G 扩 suite 前必须分别冻结 revision、archive hash 和 inventory。
+
+Phase D 实际 inventory 只覆盖 task 0：
+`open the middle drawer of the cabinet`。该 task 有 42 个 episode，完整 split 为
+37 train / 5 development；pilot cache 从中确定性选择 32 个不同 episode，
+其中 28 train / 4 development。权威 inventory 位于
+`outputs/thought3/phase_d_cache_smoke_v1/`。
 
 ## 3. Train/development split
 
@@ -193,8 +199,9 @@ outputs/thought3/cache/<run>/
 └── k4/
 ```
 
-默认每 shard 512 个样本。一个 shard 只能由一个 rank 写，rank 分配采用稳定
-index modulo world size。
+默认正式规模每 shard 512 个样本。Phase D 为了主动验证多 shard resume，
+显式使用 `shard_size=8`：每个 K 4 个 shard，共 12 个。一个 shard 只能由一个
+rank 写，rank 分配采用稳定 index modulo world size。
 
 提交顺序：
 
@@ -273,14 +280,46 @@ fastwam-ood thought3-validate-cache \
 重复执行 plan/build 时必须显式加 `--resume`。这些命令当前 `backend=mock`，
 不得把生成值当作真实 Video DiT latent。
 
-## 11. 进入真实 cache 的门槛
+## 11. Phase D 结果与正式扩展门槛
 
-- [ ] 标准 LIBERO dataset revision 与 inventory 冻结；
-- [ ] 真实 `[B,48,2,14,28]` bf16 tensor smoke；
-- [ ] K scheduler 与 upstream parity；
-- [ ] current slice 每 step 完全固定；
-- [ ] sampler 不读取 action 或真实 future；
-- [ ] 单卡峰值小于 43 GiB；
+- [x] 标准 LIBERO dataset revision 与 inventory 冻结；
+- [x] 真实 `[B,48,2,14,28]` bf16 tensor smoke；
+- [x] K scheduler 与 upstream parity；
+- [x] current slice 在 K=1/2/4 间完全固定；
+- [x] sampler 不读取 action 或真实 future；
+- [x] 单卡峰值小于 43 GiB；
+- [x] 32-sample 实际磁盘容量预检与写盘通过；
+- [x] 12-shard checksum、no-op resume 与主动损坏检测通过；
 - [ ] 一个 suite/task 的 online/cache tolerance 通过；
 - [ ] 三 rank shard union 完整且 intersection 为空；
-- [ ] 实际磁盘容量预检通过。
+- [ ] 正式规模数据量与磁盘预算冻结。
+
+前八项构成已经通过的 Gate D。后三项是扩展正式 cache/online evaluator 的后续
+门禁，不影响进入单卡 100–500 step Gate E。
+
+## 12. Phase D 实测 cache
+
+```text
+outputs/thought3/cache/phase_d_libero_goal_task0_v1/
+├── cache_plan_manifest.json
+├── cache_plan.jsonl
+├── split_manifest.json
+├── cache_manifest.json
+├── real_cache_build_report.json
+├── k1/  # 4 shards
+├── k2/  # 4 shards
+└── k4/  # 4 shards
+```
+
+实测为 32 base samples、96 entries、12 shards、41 files、7,687,316 bytes。
+全部 latent 为 BF16 `[48,2,14,28]`，全部 mask 为 bool `[2,14,28]`。
+cache fingerprint：
+
+```text
+63a70e1af38f68bc894fc11d03c84f212e6c6328a5051256c9d045741156d9c5
+```
+
+whole-cache validator 报告 `paired_k_valid=true`、
+`tensor_checksums_verified=true`、`uses_ground_truth_future=false`。
+完整结果和冻结 SHA 见
+[thought3_phase_d_report.md](thought3_phase_d_report.md)。

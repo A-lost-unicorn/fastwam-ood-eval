@@ -1,6 +1,6 @@
 # Thought3 训练与恢复手册
 
-状态：Phase C 单卡真实 backward 已通过；尚未启动真实 cache 或 Adapter 训练
+状态：Phase D 小规模真实 cache 已通过；尚未启动真实 Adapter 训练
 更新时间：2026-07-28
 
 ## 1. 当前能做什么
@@ -25,10 +25,20 @@ Phase C 已额外验证：
 - 单卡执行峰值 12.964 GiB、模型加载峰值 23.125 GiB；
 - optimizer 0 step、真实 cache 0 条。
 
+Phase D 已额外验证：
+
+- 一个 `libero_goal` task、32 个不同 episode 当前观测的真实 cache；
+- K=1/2/4 共 96 条 BF16 latent、12 个原子 safetensors shard；
+- episode 级 37/5 完整 split，pilot cache 内为 28/4；
+- paired seed/initial-state hash、shape、checksum、no-op resume 和主动损坏检测；
+- 64 张当前相机帧、0 future RGB、0 action target 的 source access 审计；
+- 0.806 base sample/s（不含模型加载），执行峰值 12.677 GiB；
+- optimizer 0 step、Adapter training 0 step。
+
 当前仍不能做：
 
 - 启动正式或长时间 Adapter 训练；
-- 在 Gate D 前生成全量真实 Video DiT cache；
+- 把 32-sample cache 当作完整训练集或论文数据；
 - 声称 mock loss 下降代表机器人控制有效；
 - 自动启动 3 GPU 长训练。
 
@@ -74,7 +84,7 @@ gate 初始为 0，因此 A0 wrapper 与同一 B0 backbone 在固定输入上的
 
 真实 Phase C 已确认整个 backbone `requires_grad=false`、backbone gradient
 count 为 0，并对 MoT 做 forward/backward 前后参数 hash。更细粒度的每个子模块
-hash 可在正式训练前继续扩充，但不阻塞小型 cache smoke。
+hash 必须在 Gate E 真实训练前扩充到训练前后可比的 frozen-backbone 锚点。
 
 ## 4. Phase B 可复现流程
 
@@ -207,21 +217,27 @@ Phase C 已按以下顺序完成：
 
 ## 10. Phase D 真实 cache smoke
 
-先限定一个 `libero_goal` task 与约 32 条样本：
+Gate D 已完成：
 
-- 在完整 episode 上固定 90/10 split；
-- 同一 base sample 的 K1/K2/K4 使用相同 seed 和 initial noise hash；
-- 每个 latent 为 BF16 `[48,2,14,28]`；
-- shard 原子提交，逐文件、逐 tensor、逐样本 checksum；
-- 用同一 config `--resume`，已提交 shard 必须全部验证后跳过；
-- manifest 明确 `uses_ground_truth_future=false`，且构建 API 不接收后续 RGB；
-- 记录模型加载、VAE/current encode、K sampling、写盘、validation 的吞吐与峰值显存。
+- task：`open the middle drawer of the cabinet`；
+- 完整 42 episodes 的 90/10 split 为 37 train / 5 development；
+- pilot 选入 32 个不同 episode，cache 内为 28 train / 4 development；
+- K1/K2/K4 共 96 条 BF16 `[48,2,14,28]` latent；
+- 12 个 shard、96 个 metadata row、7,687,316 bytes；
+- 32/32 base sample 的 paired seed 和 initial-noise hash 通过；
+- 12/12 shard 文件/tensor/逐样本 checksum 通过；
+- no-op resume 跳过 12/12 shard，且 `model_loaded=false`；
+- 临时副本单字节损坏被拒绝，正式 cache 未改变；
+- 只读取 64 张当前相机帧，future RGB/action target 均为 0；
+- generation loop 39.70 s，0.806 base sample/s（不含模型加载）；
+- 执行峰值 12.677 GiB，模型加载峰值 23.125 GiB。
 
-只有 Gate D 通过后才进入小训练。
+权威机器结果、吞吐口径、冻结 SHA 和复核命令见
+[thought3_phase_d_report.md](thought3_phase_d_report.md)。
 
 ## 11. Phase E 真实 smoke
 
-真实小训练先只做 A0/A1：
+Gate E 真实小训练先只做 A0/A1：
 
 - 一个 suite、少量 task；
 - 100–500 steps；
@@ -232,5 +248,15 @@ Phase C 已按以下顺序完成：
 - checkpoint selection 只看 development action loss；
 - 不看正式 OOD success。
 
-只有 loss/gate/gradient 可诊断、resume 一致、frozen 不变且单卡无 OOM，才扩到
-A2/A4 和三卡 DDP。
+zero-init gate 的梯度有明确两步门禁：
+
+1. 第 1 个 optimizer step 前，只有 gate 非零梯度是预期行为；
+2. gate 被更新为非零后，从下一个有效 step 开始，projector、Q/K/V/out
+   projection 等非 gate 参数必须出现 finite、nonzero gradient。
+
+只看“Adapter 总 grad norm 非零”不足以通过 Gate E，因为它可能仍完全来自 gate。
+训练日志必须按模块分别记录 gate 与非 gate grad norm，并至少保存首个
+`non_gate_grad_nonzero=true` 的 step。
+
+只有 loss/gate/分模块 gradient 可诊断、resume 一致、frozen hash 不变且单卡无
+OOM，才扩到 A2/A4。三卡 DDP 和正式 ID/OOD rollout 仍需后续独立门禁。

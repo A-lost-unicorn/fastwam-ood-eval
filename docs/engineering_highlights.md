@@ -4,12 +4,12 @@
 
 ## 1. 当前事实快照
 
-截至 2026-07-27：
+截至 2026-07-28：
 
 | 项目 | 状态 | 可用证据 |
 | --- | --- | --- |
 | 配置、planner、adapter、分片、resume、聚合 | 已实现 | `src/`、`configs/`、`tests/` |
-| 自动化测试 | 已通过 | `pytest -q`：175 passed；覆盖阶段一评测、PyTorch 2.6+ 安全边界、LIBERO-Plus 10,030 行路径审计、阶段二诊断、static calibration、label-blind packet、cohort ratification、formal analysis 与 freeze 门禁 |
+| 自动化测试 | 已通过 | `pytest -q`：248 passed、5 warnings；覆盖阶段一/二回归与 Thought3 Phase A–D 配置、cache、Adapter、resume、泄漏和真实 Gate 编排 |
 | Conda 环境与激活入口 | 已配置 | `scripts/create_env.sh`、`scripts/activate_env.sh` |
 | checkpoint/stats | 已下载并人工校验 | checkpoint SHA-256 `1000437c...a49579`；stats SHA-256 `30f81ad7...68638` |
 | FastWAM 公共运行时模型 | 已下载并逐文件校验 | `scripts/download_fastwam_runtime_models.sh`；T5、VAE、tokenizer 共约 11.9 GiB |
@@ -25,6 +25,8 @@
 | 阶段二标签盲审 | WORKFLOW PILOT 已通过 | 7 cases / 28 media；public/private hash 校验和全量解码通过；human labels 仍为 0/7 |
 | 阶段二 outcome-blind 抽样 | 五类 exact-ratification 已执行 | 200 Clean + 532 OOD 全部运行；不能追溯称为阶段一 outcome 前预注册，但在 Phase 2 future 指标前锁定原 job ID |
 | 阶段二 2B action-conditioned future | 严格阻塞 | release 配置为 `action_conditioned=false`，且不存在通过 provenance 门禁的匹配 checkpoint |
+| 阶段三 Phase C 单样本门禁 | SMOKE 已通过 | 真实 K1/K2/K4、upstream parity、zero gate、1 backward、0 backbone grad；执行峰值 12.964 GiB |
+| 阶段三 Phase D 真实 cache | SMOKE 已通过 | 32 samples、96 entries、12 shards；paired/checksum/resume/leakage 全通过；0.806 sample/s；0 optimizer step |
 
 ## 2. 可以对外说明的工程亮点
 
@@ -284,6 +286,28 @@
 - 边界：上述均为 Phase B `TEST`，没有加载官方 checkpoint 或 GPU，不能写成 OOD
   提升。真实 shape、loss parity、显存和成功率由 Phase C–G 逐级解锁。
 
+### 3.23 用当前观测构建可恢复的真实 K-step latent cache
+
+- 前置门禁：Phase C 在单张 4090 上加载官方 checkpoint，验证 video-only sampler
+  与上游 joint video path 逐元素一致、zero gate action bitwise equal、一次真实
+  backward 的 backbone gradient 为 0。
+- 数据隔离：Phase D 只用标准 `libero_goal` task 0 的 training demonstration；
+  42 个完整 episode 先做 37/5 split，再从 32 个不同 episode 各取一个当前帧。
+  source loader 每样本只请求一个 timestamp 的两路相机和当前 proprio。
+- 真实 cache：生成 32×K1/K2/K4 = 96 条 BF16
+  `[48,2,14,28]` latent，按 12 个 safetensors shard 原子提交；全部文件、tensor、
+  sample checksum 与 paired seed/initial-state hash 通过。
+- 恢复与损坏：同配置的第二次 build 跳过 12/12 shard，且没有重新加载模型；
+  `/tmp` 临时副本的单字节翻转被 checksum 拒绝，正式 cache 未变化。
+- 泄漏审计：共解码 64 张当前相机帧、0 future RGB，未读 action target、
+  actual future、success 或 termination；cache 明确
+  `source_kind=model_sampled_from_current`。
+- 资源：32-sample generation loop 39.70 s，吞吐 0.806 base sample/s（不含
+  888.44 s 冷加载）；K1/K2/K4 sampling mean 为
+  127.54/186.62/362.99 ms；执行/加载峰值为 12.677/23.125 GiB。
+- 边界：这是 `SMOKE` 级 cache 工程证据。没有 optimizer、训练、robot rollout
+  或成功率，不能声称未来提高 OOD，也不能把离线 sampling 当在线总延迟。
+
 ## 4. 简历表达素材
 
 ### 当前即可使用的版本
@@ -311,7 +335,11 @@
 - 设计 1.37M 参数 zero-gated Future-to-Action Adapter，并实现 K=1/2/4
   paired latent cache、原子 shard/resume/多级 checksum、Adapter-only
   deterministic resume、跨 task/episode 反事实置换和真实未来泄漏门禁；
-  当前证据等级为 CPU/mock TEST，不宣称 OOD 效果。
+  已在真实 Fast-WAM 上缓存 32×3 条 latent，12/12 shard 通过恢复与损坏审计，
+  不宣称训练收敛或 OOD 效果。
+- 在单张 RTX 4090 上从标准 LIBERO 当前观测生成 96 条真实 K-step future
+  latent，以 12 个原子 shard 落盘；实现 12/12 no-op resume 无模型重载、
+  单字节损坏检测和 0 future-RGB source audit，执行峰值 12.677 GiB。
 
 ### 可直接使用的量化表述
 
@@ -326,6 +354,11 @@
 > probe→episode→task 层级聚合、10,000 次 task-cluster bootstrap、首 probe
 > 敏感性和 4,040 媒体全量审计；测得 OOD future consistency distance 增加
 > 0.0316（95% CI 0.0254–0.0381），并明确限定为非因果关联。
+
+> 为 1.37M 参数 Future-to-Action Adapter 建立真实离线 future-latent 管线：
+> 在单张 RTX 4090 上从 32 个标准 LIBERO episode 生成 K=1/2/4 共 96 条 BF16
+> latent，以 12 个 safetensors shard 原子提交，并验证 paired noise、12/12
+> 无重载断点恢复、单字节损坏检测和 0 future-RGB 泄漏。
 
 在人工标注完成前，不要追加“归纳出 K 类失败模式”。可以写“保存并审计
 3,563 个失败视频”，但“reviewed/labelled”分母目前仍为 0。

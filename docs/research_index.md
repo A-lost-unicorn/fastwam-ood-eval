@@ -158,6 +158,8 @@ OOD 一致性下降假设”，不能进入论文结论表。
   [thought3_phase_e1_protocol.md](thought3_phase_e1_protocol.md)
 - 阶段三 Gate E.1 单样本诊断结果：
   [thought3_phase_e1_report.md](thought3_phase_e1_report.md)
+- 阶段三 Gate E.2 八样本 LR/尺度诊断预注册：
+  [thought3_phase_e2_protocol.md](thought3_phase_e2_protocol.md)
 - 阶段三数据/训练/评测：[thought3_data_protocol.md](thought3_data_protocol.md)、[thought3_training.md](thought3_training.md)、[thought3_evaluation.md](thought3_evaluation.md)
 - 阶段三分析 DRAFT 与限制：[thought3_analysis_protocol_DRAFT.md](thought3_analysis_protocol_DRAFT.md)、[thought3_limitations.md](thought3_limitations.md)
 - 阶段三旧版路线摘要：[thought3_adapter_plan.md](thought3_adapter_plan.md)

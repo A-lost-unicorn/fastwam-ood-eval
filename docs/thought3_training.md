@@ -295,3 +295,18 @@ Gate E.1 已在预注册 commit `30ffc93` 上执行并通过：
 Gate E.1 只关闭“图是否能 overfit”问题，没有关闭多样本稳定训练问题。下一步是
 先冻结 8-sample train-only LR/尺度诊断，再重跑完整 28/4 Gate E；A2/A4 仍锁定。
 详见 [thought3_phase_e1_report.md](thought3_phase_e1_report.md)。
+
+### 11.3 Gate E.2 预注册状态
+
+Gate E.2 代码只实现 A0/A1 的 8-sample train-only 工程诊断：
+
+- LR 网格固定为 `1e-4 / 3e-4 / 1e-3`；
+- 每条轨迹 200 step，共 1,200 optimizer step；
+- 每 sample 固定 noise/timestep；
+- 不读取 development/OOD/success outcome；
+- 同时门控 fixed loss 与实际 BF16 `delta/action-hidden`；
+- 多档通过时固定选择最小 LR；
+- 代码提交后不会自动启动真实训练。
+
+完整阈值、恢复规则、预计时间/磁盘和解释边界见
+[thought3_phase_e2_protocol.md](thought3_phase_e2_protocol.md)。

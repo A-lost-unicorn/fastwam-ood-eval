@@ -11,6 +11,7 @@ from __future__ import annotations
 import gc
 import hashlib
 import math
+import statistics
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -300,6 +301,17 @@ def _tensor_state_sha256(tensors: Mapping[str, Tensor]) -> str:
     )
 
 
+def _training_order_key(
+    base_sample_id: str,
+    *,
+    seed: int,
+) -> str:
+    return hashlib.sha256(
+        f"thought3-real-train-order-v1\0{seed}\0"
+        f"{base_sample_id}".encode("utf-8")
+    ).hexdigest()
+
+
 def prepare_real_training_data(
     cfg: Thought3Config,
     *,
@@ -307,20 +319,63 @@ def prepare_real_training_data(
     upstream_cfg: Any,
     device: str,
     progress: ProgressCallback | None = None,
+    train_only_limit: int | None = None,
 ) -> PreparedRealTrainingData:
-    """Join all Phase D K=1 identities to current-only LIBERO supervision."""
+    """Join Phase D K=1 identities to current-only LIBERO supervision.
+
+    Gate E/E.1 use the complete frozen 28/4 subset. Gate E.2 passes
+    ``train_only_limit=8`` so development action targets are never decoded
+    or loaded merely to discard them later.
+    """
 
     started = time.perf_counter()
     cache_report = validate_cache(cfg.cache.root)
     entries, plan = load_cache_plan(cfg.cache.root)
-    reference_entries = sorted(
+    all_reference_entries = sorted(
         (entry for entry in entries if entry.k == 1),
         key=lambda entry: entry.identity.base_sample_id,
     )
-    if len(reference_entries) != 32:
+    if len(all_reference_entries) != 32:
         raise RealTrainingError(
             "Gate E requires exactly 32 Phase D base samples"
         )
+    available_split_counts = {
+        split: sum(
+            entry.split == split for entry in all_reference_entries
+        )
+        for split in ("train", "development")
+    }
+    if available_split_counts != {"train": 28, "development": 4}:
+        raise RealTrainingError(
+            "Phase D reference entries must contain 28 train / "
+            f"4 development, got {available_split_counts}"
+        )
+    if train_only_limit is None:
+        reference_entries = all_reference_entries
+        expected_split_counts = {"train": 28, "development": 4}
+        selection_mode = "complete_phase_d_subset"
+    else:
+        if train_only_limit != 8:
+            raise RealTrainingError(
+                "real train-only preparation currently permits exactly "
+                "8 samples"
+            )
+        reference_entries = sorted(
+            (
+                entry
+                for entry in all_reference_entries
+                if entry.split == "train"
+            ),
+            key=lambda entry: _training_order_key(
+                entry.identity.base_sample_id,
+                seed=cfg.training.train_seed,
+            ),
+        )[:train_only_limit]
+        expected_split_counts = {
+            "train": train_only_limit,
+            "development": 0,
+        }
+        selection_mode = "ordered_train_only"
     if plan["cache_fingerprint"] != cache_report["cache_fingerprint"]:
         raise RealTrainingError("cache plan/validation fingerprint mismatch")
     reader = FutureCacheReader(
@@ -472,19 +527,21 @@ def prepare_real_training_data(
         split: sum(sample.split == split for sample in samples)
         for split in ("train", "development")
     }
-    if split_counts != {"train": 28, "development": 4}:
+    if split_counts != expected_split_counts:
         raise RealTrainingError(
-            f"Gate E expected selected split 28/4, got {split_counts}"
+            "real training selected split mismatch: "
+            f"{split_counts} != {expected_split_counts}"
         )
     source_telemetry = dict(source.telemetry)
+    selected_count = len(reference_entries)
     expected_source = {
-        "action_target_chunks_read": 32,
+        "action_target_chunks_read": selected_count,
         "action_target_read": True,
-        "action_target_rows_read": 1024,
+        "action_target_rows_read": selected_count * 32,
         "actual_future_read": False,
-        "current_camera_frames_decoded": 64,
+        "current_camera_frames_decoded": selected_count * 2,
         "future_rgb_frames_decoded": 0,
-        "state_rows_read": 32,
+        "state_rows_read": selected_count,
     }
     for key, expected in expected_source.items():
         if source_telemetry.get(key) != expected:
@@ -493,6 +550,7 @@ def prepare_real_training_data(
                 f"{source_telemetry.get(key)} != {expected}"
             )
     report = {
+        "available_split_counts": available_split_counts,
         "cache_fingerprint": cache_report["cache_fingerprint"],
         "current_decode_latency_ms": _summary(decode_latencies),
         "current_encode_latency_ms": _summary(encode_latencies),
@@ -512,8 +570,10 @@ def prepare_real_training_data(
                 for sample in samples
             }
         ),
+        "selection_mode": selection_mode,
         "split_counts": split_counts,
         "split_fingerprint": plan["split_fingerprint"],
+        "train_only_limit": train_only_limit,
     }
     return PreparedRealTrainingData(
         samples=tuple(samples),
@@ -554,10 +614,10 @@ def _ordered_samples(
 ) -> list[RealTrainingSample]:
     return sorted(
         samples,
-        key=lambda sample: hashlib.sha256(
-            f"thought3-real-train-order-v1\0{seed}\0"
-            f"{sample.base_sample_id}".encode("utf-8")
-        ).hexdigest(),
+        key=lambda sample: _training_order_key(
+            sample.base_sample_id,
+            seed=seed,
+        ),
     )
 
 
@@ -955,12 +1015,22 @@ def _checkpoint_manifest(
     global_step: int,
     sample_cursor: int,
     train_sample_count: int,
+    extra: Mapping[str, Any] | None = None,
 ) -> AdapterCheckpointManifest:
     trainable_names = tuple(
         f"adapter.{name}"
         for name, parameter in adapter.named_parameters()
         if parameter.requires_grad
     )
+    checkpoint_extra: dict[str, Any] = {
+        "action_loss": "official_fastwam_flow_matching_velocity_mse",
+        "backend": "fastwam",
+        "contains_backbone": False,
+        "future_source_kind": "model_sampled_from_current",
+        "gate_e_smoke": True,
+        "uses_ground_truth_future_input": False,
+    }
+    checkpoint_extra.update(dict(extra or {}))
     return AdapterCheckpointManifest(
         backbone_checkpoint_sha256=cfg.backbone.checkpoint_sha256,
         dataset_stats_sha256=cfg.backbone.dataset_stats_sha256,
@@ -979,14 +1049,7 @@ def _checkpoint_manifest(
         trainable_parameter_names=trainable_names,
         frozen_parameter_sha256=frozen_parameter_sha256,
         world_size=1,
-        extra={
-            "action_loss": "official_fastwam_flow_matching_velocity_mse",
-            "backend": "fastwam",
-            "contains_backbone": False,
-            "future_source_kind": "model_sampled_from_current",
-            "gate_e_smoke": True,
-            "uses_ground_truth_future_input": False,
-        },
+        extra=checkpoint_extra,
     )
 
 
@@ -2141,6 +2204,796 @@ def run_fixed_sample_overfit(
             {
                 "error": f"{type(exc).__name__}: {exc}",
                 "finished_at_unix_s": time.time(),
+                "status": "failed",
+                "variant": cfg.variant,
+            },
+        )
+        raise
+    finally:
+        injector.close()
+        del optimizer, adapter
+        torch.cuda.empty_cache()
+
+
+@torch.no_grad()
+def evaluate_fixed_subset_probe(
+    cfg: Thought3Config,
+    model: Any,
+    adapter: FutureToActionAdapter,
+    injector: ActionEncoderFutureInjector,
+    samples: Sequence[RealTrainingSample],
+    *,
+    device: str,
+) -> dict[str, Any]:
+    """Evaluate the same fixed noise/timestep objective for each train sample."""
+
+    if len(samples) != 8:
+        raise RealTrainingError(
+            "Gate E.2 fixed subset probe requires exactly 8 samples"
+        )
+    was_training = adapter.training
+    adapter.eval()
+    per_sample: list[dict[str, Any]] = []
+    try:
+        for sample in samples:
+            loss = _loss_for_real_sample(
+                cfg,
+                model,
+                adapter,
+                injector,
+                sample,
+                step=0,
+                device=device,
+            )
+            diagnostics = adapter.last_diagnostics
+            if diagnostics is None or diagnostics.action_hidden_norm <= 0:
+                raise RealTrainingError(
+                    "Gate E.2 fixed subset diagnostics are invalid"
+                )
+            value = float(loss.detach().cpu())
+            ratio = (
+                diagnostics.gated_delta_norm
+                / diagnostics.action_hidden_norm
+            )
+            if not math.isfinite(value) or not math.isfinite(ratio):
+                raise RealTrainingError(
+                    "Gate E.2 fixed subset probe is non-finite"
+                )
+            per_sample.append(
+                {
+                    "action_hidden_norm": (
+                        diagnostics.action_hidden_norm
+                    ),
+                    "action_loss": value,
+                    "attention_residual_norm": (
+                        diagnostics.attention_residual_norm
+                    ),
+                    "base_sample_id": sample.base_sample_id,
+                    "gated_delta_nonzero_fraction": (
+                        diagnostics.gated_delta_nonzero_fraction
+                    ),
+                    "gated_delta_norm": (
+                        diagnostics.gated_delta_norm
+                    ),
+                    "gated_delta_to_action_hidden_ratio": ratio,
+                }
+            )
+    finally:
+        adapter.train(was_training)
+    losses = [float(row["action_loss"]) for row in per_sample]
+    ratios = [
+        float(row["gated_delta_to_action_hidden_ratio"])
+        for row in per_sample
+    ]
+    return {
+        "fixed_action_flow_step": 0,
+        "gate_raw": float(adapter.gate.detach().float().cpu()),
+        "max_gated_delta_to_action_hidden_ratio": max(ratios),
+        "mean_action_loss": statistics.fmean(losses),
+        "median_gated_delta_to_action_hidden_ratio": (
+            statistics.median(ratios)
+        ),
+        "per_sample": per_sample,
+        "sample_count": len(per_sample),
+        "sample_ids": [
+            str(row["base_sample_id"]) for row in per_sample
+        ],
+        "uses_ground_truth_future_input": False,
+        "variant": cfg.variant,
+    }
+
+
+def fixed_subset_outcome(
+    initial_probe: Mapping[str, Any],
+    final_probe: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Compare two fixed-subset probes without consulting dev/OOD outcomes."""
+
+    initial_rows = {
+        str(row["base_sample_id"]): row
+        for row in initial_probe["per_sample"]
+    }
+    final_rows = {
+        str(row["base_sample_id"]): row
+        for row in final_probe["per_sample"]
+    }
+    if (
+        len(initial_rows) != 8
+        or set(initial_rows) != set(final_rows)
+        or list(initial_probe["sample_ids"])
+        != list(final_probe["sample_ids"])
+    ):
+        raise RealTrainingError(
+            "Gate E.2 initial/final fixed subset identities differ"
+        )
+    sample_rows: list[dict[str, Any]] = []
+    improved_or_equal = 0
+    catastrophic = 0
+    for base_sample_id in initial_probe["sample_ids"]:
+        initial_loss = float(
+            initial_rows[str(base_sample_id)]["action_loss"]
+        )
+        final_loss = float(
+            final_rows[str(base_sample_id)]["action_loss"]
+        )
+        if initial_loss <= 0:
+            raise RealTrainingError(
+                "Gate E.2 initial fixed action loss must be positive"
+            )
+        if final_loss <= initial_loss:
+            improved_or_equal += 1
+        if final_loss > initial_loss * 2.0:
+            catastrophic += 1
+        sample_rows.append(
+            {
+                "base_sample_id": str(base_sample_id),
+                "final_action_loss": final_loss,
+                "initial_action_loss": initial_loss,
+                "loss_ratio": final_loss / initial_loss,
+                "non_worsened": final_loss <= initial_loss,
+            }
+        )
+    initial_mean = float(initial_probe["mean_action_loss"])
+    final_mean = float(final_probe["mean_action_loss"])
+    recomputed_initial_mean = statistics.fmean(
+        float(row["action_loss"]) for row in initial_rows.values()
+    )
+    recomputed_final_mean = statistics.fmean(
+        float(row["action_loss"]) for row in final_rows.values()
+    )
+    final_ratios = [
+        float(row["gated_delta_to_action_hidden_ratio"])
+        for row in final_rows.values()
+    ]
+    if (
+        initial_mean != recomputed_initial_mean
+        or final_mean != recomputed_final_mean
+        or float(
+            final_probe[
+                "median_gated_delta_to_action_hidden_ratio"
+            ]
+        )
+        != statistics.median(final_ratios)
+        or float(
+            final_probe["max_gated_delta_to_action_hidden_ratio"]
+        )
+        != max(final_ratios)
+    ):
+        raise RealTrainingError(
+            "Gate E.2 fixed subset summary differs from per-sample rows"
+        )
+    if initial_mean <= 0:
+        raise RealTrainingError(
+            "Gate E.2 initial mean action loss must be positive"
+        )
+    return {
+        "catastrophic_sample_count": catastrophic,
+        "final_mean_action_loss": final_mean,
+        "initial_mean_action_loss": initial_mean,
+        "loss_reduction_fraction": (
+            (initial_mean - final_mean) / initial_mean
+        ),
+        "max_gated_delta_to_action_hidden_ratio": float(
+            final_probe["max_gated_delta_to_action_hidden_ratio"]
+        ),
+        "median_gated_delta_to_action_hidden_ratio": float(
+            final_probe["median_gated_delta_to_action_hidden_ratio"]
+        ),
+        "non_worsened_sample_count": improved_or_equal,
+        "per_sample": sample_rows,
+        "sample_count": 8,
+    }
+
+
+def run_fixed_subset_training(
+    cfg: Thought3Config,
+    *,
+    model: Any,
+    prepared: PreparedRealTrainingData,
+    frozen_parameter_sha256: str,
+    resume: bool,
+    device: str,
+    progress: ProgressCallback | None = None,
+) -> dict[str, Any]:
+    """Train A0/A1 on eight train samples with fixed per-sample objectives.
+
+    This Gate E.2 diagnostic deliberately avoids development and OOD outcomes.
+    It is restartable at 50-step checkpoints and records sample-equal fixed
+    loss plus the actual BF16 hidden-correction scale.
+    """
+
+    if (
+        cfg.runtime.backend != "fastwam"
+        or cfg.variant not in {"A0", "A1"}
+        or cfg.training.max_steps != 200
+        or cfg.training.microbatch_size != 1
+        or cfg.training.gradient_accumulation_steps != 1
+        or cfg.training.checkpoint_interval != 50
+        or device != "cuda:0"
+        or cfg.runtime.device != device
+    ):
+        raise RealTrainingError(
+            "fixed-subset diagnostic requires real A0/A1, cuda:0, "
+            "200 steps, batch 1, checkpoint 50"
+        )
+    output = ensure_thought3_output_path(cfg.experiment.output_dir)
+    status_path = output / "run_status.json"
+    metrics_path = output / "train_metrics.jsonl"
+    probe_path = output / "fixed_subset_metrics.jsonl"
+    state_path = output / "training_state.json"
+    manifest_path = output / "training_manifest.json"
+    checkpoints_root = output / "checkpoints"
+    if manifest_path.is_file() and resume:
+        existing = load_json(manifest_path)
+        if (
+            existing.get("status") == "complete"
+            and int(existing.get("completed_steps", -1))
+            == cfg.training.max_steps
+        ):
+            return existing
+    if output.exists() and not resume and any(output.iterdir()):
+        raise FileExistsError(
+            f"Gate E.2 track output exists: {output}"
+        )
+    output.mkdir(parents=True, exist_ok=True)
+    atomic_write_json(
+        status_path,
+        {
+            "learning_rate": cfg.training.learning_rate,
+            "started_at_unix_s": time.time(),
+            "status": "running",
+            "variant": cfg.variant,
+        },
+    )
+
+    all_train_samples = _ordered_samples(
+        (sample for sample in prepared.samples if sample.split == "train"),
+        seed=cfg.training.train_seed,
+    )
+    if (
+        len(all_train_samples) != 8
+        or len(prepared.samples) != 8
+        or any(
+            sample.split != "train" for sample in prepared.samples
+        )
+    ):
+        raise RealTrainingError(
+            "Gate E.2 requires exactly 8 source-filtered train samples"
+        )
+    samples = all_train_samples
+    sample_ids = [sample.base_sample_id for sample in samples]
+    adapter = build_real_adapter(cfg, device=device)
+    initial_adapter_sha256 = adapter_state_sha256(
+        adapter.state_dict()
+    )
+    optimizer = torch.optim.AdamW(
+        adapter.parameters(),
+        lr=cfg.training.learning_rate,
+        weight_decay=cfg.training.weight_decay,
+    )
+    optimizer_ids = {
+        id(parameter)
+        for group in optimizer.param_groups
+        for parameter in group["params"]
+    }
+    if optimizer_ids != {
+        id(parameter) for parameter in adapter.parameters()
+    }:
+        raise RealTrainingError(
+            "Gate E.2 optimizer contains non-Adapter parameters"
+        )
+    if any(parameter.requires_grad for parameter in model.parameters()):
+        raise RealTrainingError(
+            "Gate E.2 frozen Fast-WAM parameter became trainable"
+        )
+    injector = ActionEncoderFutureInjector(
+        model.action_expert.action_encoder,
+        adapter,
+    )
+    start_step = 0
+    sample_cursor = 0
+    latest = find_latest_checkpoint(checkpoints_root) if resume else None
+    if latest is not None:
+        loaded = load_adapter_checkpoint(
+            latest,
+            adapter=adapter,
+            optimizer=optimizer,
+            expected=_checkpoint_expected(
+                cfg,
+                prepared,
+                frozen_parameter_sha256=frozen_parameter_sha256,
+            ),
+        )
+        start_step = loaded.global_step
+        sample_cursor = loaded.sample_cursor
+        if sample_cursor != start_step:
+            raise RealTrainingError(
+                "Gate E.2 checkpoint sample cursor differs from step"
+            )
+    elif (
+        resume
+        and checkpoints_root.exists()
+        and any(checkpoints_root.iterdir())
+    ):
+        raise RealTrainingError(
+            "Gate E.2 resume requested without a valid checkpoint"
+        )
+    existing_metrics = _metric_rows_for_resume(
+        metrics_path,
+        start_step=start_step,
+    )
+
+    if state_path.is_file():
+        state = load_json(state_path)
+        if (
+            state["config_fingerprint"] != cfg.fingerprint
+            or state["frozen_parameter_sha256"]
+            != frozen_parameter_sha256
+            or state["initial_adapter_sha256"]
+            != initial_adapter_sha256
+            or list(state["sample_ids"]) != sample_ids
+        ):
+            raise RealTrainingError(
+                "Gate E.2 training-state provenance mismatch"
+            )
+        initial_probe = dict(state["initial_probe"])
+    else:
+        if start_step:
+            raise RealTrainingError(
+                "Gate E.2 checkpoint exists without initial state"
+            )
+        initial_probe = evaluate_fixed_subset_probe(
+            cfg,
+            model,
+            adapter,
+            injector,
+            samples,
+            device=device,
+        )
+        if (
+            float(
+                initial_probe[
+                    "max_gated_delta_to_action_hidden_ratio"
+                ]
+            )
+            != 0
+            or any(
+                float(row["gated_delta_nonzero_fraction"]) != 0
+                for row in initial_probe["per_sample"]
+            )
+        ):
+            raise RealTrainingError(
+                "Gate E.2 zero-gate initialization is not exact identity"
+            )
+        state = {
+            "cache_fingerprint": prepared.cache_fingerprint,
+            "config": cfg.to_dict(),
+            "config_fingerprint": cfg.fingerprint,
+            "fixed_action_flow_step": 0,
+            "frozen_parameter_sha256": frozen_parameter_sha256,
+            "initial_adapter_sha256": initial_adapter_sha256,
+            "initial_probe": initial_probe,
+            "sample_ids": sample_ids,
+            "split_fingerprint": prepared.split_fingerprint,
+            "uses_ground_truth_future_input": False,
+            "variant": cfg.variant,
+        }
+        atomic_write_json(state_path, state)
+
+    if probe_path.is_file():
+        probe_rows = load_jsonl(probe_path)
+        probe_steps = [int(row["global_step"]) for row in probe_rows]
+        if (
+            not probe_rows
+            or probe_steps[0] != 0
+            or probe_steps != sorted(set(probe_steps))
+            or list(probe_rows[0]["sample_ids"]) != sample_ids
+            or float(probe_rows[0]["mean_action_loss"])
+            != float(initial_probe["mean_action_loss"])
+        ):
+            raise RealTrainingError(
+                "Gate E.2 fixed subset history is invalid"
+            )
+        probe_rows = [
+            row
+            for row in probe_rows
+            if int(row["global_step"]) <= start_step
+        ]
+    else:
+        if start_step:
+            raise RealTrainingError(
+                "Gate E.2 checkpoint exists without fixed subset history"
+            )
+        probe_rows = [
+            {
+                **initial_probe,
+                "global_step": 0,
+                "learning_rate": cfg.training.learning_rate,
+            }
+        ]
+        atomic_write_jsonl(probe_path, probe_rows)
+    if start_step and all(
+        int(row["global_step"]) != start_step for row in probe_rows
+    ):
+        resumed_probe = evaluate_fixed_subset_probe(
+            cfg,
+            model,
+            adapter,
+            injector,
+            samples,
+            device=device,
+        )
+        probe_rows.append(
+            {
+                **resumed_probe,
+                "global_step": start_step,
+                "learning_rate": cfg.training.learning_rate,
+                "outcome_from_initial": fixed_subset_outcome(
+                    initial_probe,
+                    resumed_probe,
+                ),
+            }
+        )
+        atomic_write_jsonl(probe_path, probe_rows)
+
+    new_metrics: list[dict[str, Any]] = []
+    first_non_gate_step: int | None = None
+    first_projector_step: int | None = None
+    first_attention_step: int | None = None
+    for row in existing_metrics:
+        global_step = int(row["global_step"])
+        groups = row["gradient_groups"]
+        if (
+            first_non_gate_step is None
+            and int(
+                groups["non_gate"]["nonzero_element_count"]
+            )
+            > 0
+        ):
+            first_non_gate_step = global_step
+        if (
+            first_projector_step is None
+            and int(
+                groups["future_projector"]["nonzero_element_count"]
+            )
+            > 0
+        ):
+            first_projector_step = global_step
+        if (
+            first_attention_step is None
+            and int(
+                groups["attention"]["nonzero_element_count"]
+            )
+            > 0
+        ):
+            first_attention_step = global_step
+    started = time.perf_counter()
+    try:
+        for step in range(start_step, cfg.training.max_steps):
+            sample = samples[sample_cursor % len(samples)]
+            optimizer.zero_grad(set_to_none=True)
+            torch.cuda.synchronize(device)
+            torch.cuda.reset_peak_memory_stats(device)
+            step_started = time.perf_counter()
+            gate_before = float(adapter.gate.detach().float().cpu())
+            loss = _loss_for_real_sample(
+                cfg,
+                model,
+                adapter,
+                injector,
+                sample,
+                step=0,
+                device=device,
+            )
+            if not bool(torch.isfinite(loss).item()):
+                raise RealTrainingError(
+                    "Gate E.2 action loss is NaN/Inf"
+                )
+            loss.backward()
+            groups = adapter_gradient_groups(adapter)
+            if not all(bool(value["finite"]) for value in groups.values()):
+                raise RealTrainingError(
+                    "Gate E.2 Adapter gradient is non-finite"
+                )
+            global_step = step + 1
+            if global_step == 1 and (
+                float(groups["gate"]["l2"]) <= 0
+                or int(
+                    groups["non_gate"]["nonzero_element_count"]
+                )
+                != 0
+            ):
+                raise RealTrainingError(
+                    "Gate E.2 first-step zero-gate contract failed"
+                )
+            if (
+                first_non_gate_step is None
+                and int(
+                    groups["non_gate"]["nonzero_element_count"]
+                )
+                > 0
+            ):
+                first_non_gate_step = global_step
+            if (
+                first_projector_step is None
+                and int(
+                    groups["future_projector"][
+                        "nonzero_element_count"
+                    ]
+                )
+                > 0
+            ):
+                first_projector_step = global_step
+            if (
+                first_attention_step is None
+                and int(
+                    groups["attention"]["nonzero_element_count"]
+                )
+                > 0
+            ):
+                first_attention_step = global_step
+            backbone_grads = [
+                name
+                for name, parameter in model.named_parameters()
+                if parameter.grad is not None
+            ]
+            if backbone_grads:
+                raise RealTrainingError(
+                    "Gate E.2 frozen Fast-WAM received gradients: "
+                    f"{backbone_grads[:5]}"
+                )
+            diagnostics = adapter.last_diagnostics
+            if diagnostics is None or diagnostics.action_hidden_norm <= 0:
+                raise RealTrainingError(
+                    "Gate E.2 Adapter diagnostics are missing"
+                )
+            gate_gradient = float(
+                adapter.gate.grad.detach().float().cpu()
+            )
+            optimizer.step()
+            sample_cursor += 1
+            torch.cuda.synchronize(device)
+            gate_after = float(adapter.gate.detach().float().cpu())
+            row = {
+                "action_hidden_norm": diagnostics.action_hidden_norm,
+                "attention_residual_norm": (
+                    diagnostics.attention_residual_norm
+                ),
+                "base_sample_id": sample.base_sample_id,
+                "fixed_action_flow_step": 0,
+                "future_token_norm": diagnostics.future_token_norm,
+                "gate_gradient": gate_gradient,
+                "gate_gradient_sign": (
+                    1
+                    if gate_gradient > 0
+                    else -1
+                    if gate_gradient < 0
+                    else 0
+                ),
+                "gate_raw_after_step": gate_after,
+                "gate_raw_before_step": gate_before,
+                "gated_delta_nonzero_fraction": (
+                    diagnostics.gated_delta_nonzero_fraction
+                ),
+                "gated_delta_norm": diagnostics.gated_delta_norm,
+                "gated_delta_to_action_hidden_ratio": (
+                    diagnostics.gated_delta_norm
+                    / diagnostics.action_hidden_norm
+                ),
+                "global_step": global_step,
+                "gradient_groups": groups,
+                "learning_rate": cfg.training.learning_rate,
+                "loss": float(loss.detach().cpu()),
+                "nan_or_inf": False,
+                "peak_memory_mib": (
+                    int(torch.cuda.max_memory_allocated(device)) / 2**20
+                ),
+                "sample_cursor": sample_cursor,
+                "step_time_ms": (
+                    time.perf_counter() - step_started
+                )
+                * 1000.0,
+                "variant": cfg.variant,
+            }
+            new_metrics.append(row)
+            should_checkpoint = (
+                global_step % cfg.training.checkpoint_interval == 0
+                or global_step == cfg.training.max_steps
+            )
+            if should_checkpoint:
+                fixed_probe = evaluate_fixed_subset_probe(
+                    cfg,
+                    model,
+                    adapter,
+                    injector,
+                    samples,
+                    device=device,
+                )
+                outcome = fixed_subset_outcome(
+                    initial_probe,
+                    fixed_probe,
+                )
+                probe_rows.append(
+                    {
+                        **fixed_probe,
+                        "global_step": global_step,
+                        "learning_rate": cfg.training.learning_rate,
+                        "outcome_from_initial": outcome,
+                    }
+                )
+                atomic_write_jsonl(
+                    metrics_path,
+                    [*existing_metrics, *new_metrics],
+                )
+                atomic_write_jsonl(probe_path, probe_rows)
+                checkpoint = (
+                    checkpoints_root / f"step_{global_step:08d}"
+                )
+                save_adapter_checkpoint(
+                    checkpoint,
+                    adapter=adapter,
+                    optimizer=optimizer,
+                    manifest=_checkpoint_manifest(
+                        cfg,
+                        adapter,
+                        split_fingerprint=prepared.split_fingerprint,
+                        cache_fingerprint=prepared.cache_fingerprint,
+                        frozen_parameter_sha256=(
+                            frozen_parameter_sha256
+                        ),
+                        global_step=global_step,
+                        sample_cursor=sample_cursor,
+                        train_sample_count=len(samples),
+                        extra={
+                            "fixed_action_flow_step": 0,
+                            "gate_e2_eight_sample": True,
+                            "subset_sample_count": len(samples),
+                        },
+                    ),
+                )
+                if progress is not None:
+                    progress(
+                        "fixed_subset_checkpoint",
+                        {
+                            "loss_reduction_fraction": outcome[
+                                "loss_reduction_fraction"
+                            ],
+                            "max_delta_hidden_ratio": outcome[
+                                "max_gated_delta_to_action_hidden_ratio"
+                            ],
+                            "learning_rate": (
+                                cfg.training.learning_rate
+                            ),
+                            "mean_action_loss": fixed_probe[
+                                "mean_action_loss"
+                            ],
+                            "step": global_step,
+                            "variant": cfg.variant,
+                        },
+                    )
+            del loss
+            torch.cuda.empty_cache()
+
+        atomic_write_jsonl(
+            metrics_path,
+            [*existing_metrics, *new_metrics],
+        )
+        final_probe_rows = [
+            row
+            for row in probe_rows
+            if int(row["global_step"]) == cfg.training.max_steps
+        ]
+        if len(final_probe_rows) != 1:
+            raise RealTrainingError(
+                "Gate E.2 final fixed subset probe is missing/duplicated"
+            )
+        final_probe = final_probe_rows[0]
+        final_outcome = fixed_subset_outcome(
+            initial_probe,
+            final_probe,
+        )
+        latest_checkpoint = find_latest_checkpoint(checkpoints_root)
+        if latest_checkpoint is None:
+            raise RealTrainingError(
+                "Gate E.2 wrote no checkpoint"
+            )
+        roundtrip = _checkpoint_roundtrip(
+            cfg,
+            adapter,
+            optimizer,
+            latest_checkpoint,
+            prepared=prepared,
+            frozen_parameter_sha256=frozen_parameter_sha256,
+            device=device,
+        )
+        all_metrics = [*existing_metrics, *new_metrics]
+        result = {
+            "adapter_fingerprint": cfg.adapter_structural_fingerprint,
+            "checkpoint": str(latest_checkpoint),
+            "checkpoint_roundtrip": roundtrip,
+            "completed_steps": cfg.training.max_steps,
+            "config": cfg.to_dict(),
+            "config_fingerprint": cfg.fingerprint,
+            "device": device,
+            "final_gate_raw": float(
+                adapter.gate.detach().float().cpu()
+            ),
+            "final_probe": final_probe,
+            "first_attention_nonzero_gradient_step": (
+                first_attention_step
+            ),
+            "first_non_gate_nonzero_gradient_step": (
+                first_non_gate_step
+            ),
+            "first_projector_nonzero_gradient_step": (
+                first_projector_step
+            ),
+            "fixed_action_flow_step": 0,
+            "initial_adapter_sha256": initial_adapter_sha256,
+            "initial_probe": initial_probe,
+            "learning_rate": cfg.training.learning_rate,
+            "max_peak_memory_mib": max(
+                float(row["peak_memory_mib"]) for row in all_metrics
+            ),
+            "mean_step_time_ms": statistics.fmean(
+                float(row["step_time_ms"]) for row in all_metrics
+            ),
+            "metrics": str(metrics_path),
+            "optimizer_parameter_scope": "adapter_only",
+            "outcome": final_outcome,
+            "probe_metrics": str(probe_path),
+            "resumed_from_step": start_step,
+            "sample_count": len(samples),
+            "sample_ids": sample_ids,
+            "status": "complete",
+            "trainable_parameter_count": (
+                adapter.trainable_parameter_count
+            ),
+            "uses_development_outcomes": False,
+            "uses_ground_truth_future_input": False,
+            "uses_ood_or_success_outcomes": False,
+            "variant": cfg.variant,
+            "wall_s_this_invocation": time.perf_counter() - started,
+        }
+        atomic_write_json(manifest_path, result)
+        atomic_write_json(
+            status_path,
+            {
+                "completed_steps": cfg.training.max_steps,
+                "finished_at_unix_s": time.time(),
+                "learning_rate": cfg.training.learning_rate,
+                "status": "complete",
+                "variant": cfg.variant,
+            },
+        )
+        return result
+    except BaseException as exc:
+        atomic_write_json(
+            status_path,
+            {
+                "error": f"{type(exc).__name__}: {exc}",
+                "finished_at_unix_s": time.time(),
+                "learning_rate": cfg.training.learning_rate,
                 "status": "failed",
                 "variant": cfg.variant,
             },

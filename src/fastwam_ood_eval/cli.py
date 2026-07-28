@@ -412,6 +412,10 @@ def build_parser() -> argparse.ArgumentParser:
             "thought3-diagnose-real-overfit",
             "Run Gate E.1: fixed-sample real A0/A1 overfit diagnosis",
         ),
+        (
+            "thought3-diagnose-real-eight-sample",
+            "Run Gate E.2: eight-sample A0/A1 LR and scale diagnosis",
+        ),
         ("thought3-plan-cache", "Plan paired K=1/2/4 future cache shards"),
         ("thought3-build-cache", "Build this rank's future cache shards"),
         ("thought3-validate-cache", "Validate cache schema, pairing and checksums"),

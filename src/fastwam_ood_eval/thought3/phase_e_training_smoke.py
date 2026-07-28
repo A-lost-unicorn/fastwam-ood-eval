@@ -84,16 +84,22 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _progress(stage: str, **values: Any) -> None:
+def _progress(
+    stage: str,
+    values: Mapping[str, Any] | None = None,
+    **extra: Any,
+) -> None:
     import json
 
+    payload = dict(values or {})
+    payload.update(extra)
     print(
         json.dumps(
             {
                 "phase": "E",
                 "stage": stage,
                 "time": _utc_now(),
-                **values,
+                **payload,
             },
             ensure_ascii=False,
             sort_keys=True,

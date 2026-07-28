@@ -15,6 +15,7 @@ from fastwam_ood_eval.thought3.config import load_thought3_config
 from fastwam_ood_eval.thought3.phase_e_training_smoke import (
     _assert_phase_e_scope,
     _matched_recipe_payload,
+    _progress,
     _run_phase_e,
     _verify_phase_d_gate,
     derive_variant_config,
@@ -221,3 +222,13 @@ def test_phase_e_reads_split_fingerprint_from_frozen_gate_d_result(
         report["split_fingerprint"]
         == phase_e.PHASE_D_SPLIT_FINGERPRINT
     )
+
+
+def test_phase_e_progress_accepts_training_callback_contract(
+    capsys,
+) -> None:
+    _progress("checkpoint", {"step": 25}, variant="A1")
+    output = capsys.readouterr().out
+    assert '"stage": "checkpoint"' in output
+    assert '"step": 25' in output
+    assert '"variant": "A1"' in output

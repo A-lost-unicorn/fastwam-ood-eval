@@ -707,15 +707,15 @@ def _flow_inputs(
     )
 
 
-def _flow_timestep_scalar(
+def _flow_timestep_and_weight_scalars(
     model: Any,
     sample: RealTrainingSample,
     *,
     train_seed: int,
     step: int,
     device: str,
-) -> float:
-    """Recreate the deterministic action-flow timestep without model input."""
+) -> tuple[float, float]:
+    """Recreate deterministic action-flow timestep and official loss weight."""
 
     timestep = _sample_training_t_on_cpu(
         model.train_action_scheduler,
@@ -728,9 +728,17 @@ def _flow_timestep_scalar(
         device,
         model.torch_dtype,
     )
-    value = float(timestep.detach().float().cpu().reshape(()))
-    del timestep
-    return value
+    action_weight = model.train_action_scheduler.training_weight(
+        timestep
+    )
+    timestep_value = float(
+        timestep.detach().float().cpu().reshape(())
+    )
+    action_weight_value = float(
+        action_weight.detach().float().cpu().reshape(())
+    )
+    del action_weight, timestep
+    return timestep_value, action_weight_value
 
 
 def _loss_for_real_sample(
@@ -2366,6 +2374,7 @@ def aggregate_multiflow_probe_rows(
                 f"duplicate Gate E.3 multiflow objective: {key}"
             )
         values = (
+            float(row["action_weight"]),
             float(row["action_loss"]),
             float(row["action_hidden_norm"]),
             float(row["attention_residual_norm"]),
@@ -2379,13 +2388,17 @@ def aggregate_multiflow_probe_rows(
         if (
             any(not math.isfinite(value) for value in values)
             or values[0] < 0
-            or values[1] <= 0
+            or values[1] < 0
+            or values[2] <= 0
             or values[3] < 0
-            or values[3] > 1
             or values[4] < 0
+            or values[4] > 1
             or values[5] < 0
             or values[6] < 0
             or values[7] < 0
+            or values[8] < 0
+            or values[9] < 0
+            or (values[0] == 0 and values[1] != 0)
         ):
             raise RealTrainingError(
                 f"non-finite/invalid Gate E.3 multiflow row: {key}"
@@ -2420,6 +2433,7 @@ def aggregate_multiflow_probe_rows(
             {
                 "action_hidden_norm": mean("action_hidden_norm"),
                 "action_loss": mean("action_loss"),
+                "action_weight": mean("action_weight"),
                 "attention_residual_norm": mean(
                     "attention_residual_norm"
                 ),
@@ -2439,6 +2453,14 @@ def aggregate_multiflow_probe_rows(
                             "gated_delta_to_action_hidden_ratio"
                         ]
                     )
+                    for row in sample_rows
+                ),
+                "zero_action_loss_objective_count": sum(
+                    float(row["action_loss"]) == 0
+                    for row in sample_rows
+                ),
+                "zero_weight_objective_count": sum(
+                    float(row["action_weight"]) == 0
                     for row in sample_rows
                 ),
             }
@@ -2471,6 +2493,14 @@ def aggregate_multiflow_probe_rows(
         "sample_ids": list(normalized_ids),
         "uses_ground_truth_future_input": False,
         "variant": variant,
+        "zero_action_loss_objective_count": sum(
+            float(row["action_loss"]) == 0
+            for row in ordered_rows
+        ),
+        "zero_weight_objective_count": sum(
+            float(row["action_weight"]) == 0
+            for row in ordered_rows
+        ),
     }
 
 
@@ -2532,12 +2562,23 @@ def evaluate_multiflow_subset_probe(
                     diagnostics.gated_delta_norm
                     / diagnostics.action_hidden_norm
                 )
+                (
+                    timestep_value,
+                    action_weight_value,
+                ) = _flow_timestep_and_weight_scalars(
+                    model,
+                    sample,
+                    train_seed=cfg.training.train_seed,
+                    step=flow_step,
+                    device=device,
+                )
                 objective_rows.append(
                     {
                         "action_hidden_norm": (
                             diagnostics.action_hidden_norm
                         ),
                         "action_loss": loss_value,
+                        "action_weight": action_weight_value,
                         "attention_residual_norm": (
                             diagnostics.attention_residual_norm
                         ),
@@ -2559,13 +2600,7 @@ def evaluate_multiflow_subset_probe(
                             )
                             / 2**20
                         ),
-                        "timestep": _flow_timestep_scalar(
-                            model,
-                            sample,
-                            train_seed=cfg.training.train_seed,
-                            step=flow_step,
-                            device=device,
-                        ),
+                        "timestep": timestep_value,
                     }
                 )
                 del loss
@@ -2655,6 +2690,8 @@ def multiflow_subset_outcome(
             "sample_ids",
             "uses_ground_truth_future_input",
             "variant",
+            "zero_action_loss_objective_count",
+            "zero_weight_objective_count",
         )
         if any(
             probe[field] != recomputed[field]
@@ -2665,14 +2702,39 @@ def multiflow_subset_outcome(
             )
     outcome = fixed_subset_outcome(initial_probe, final_probe)
     objective_loss_ratios: list[float] = []
+    zero_initial_loss_objective_count = 0
+    zero_initial_loss_with_positive_weight_count = 0
+    positive_final_from_zero_initial_loss_count = 0
+    max_final_loss_from_zero_initial_loss = 0.0
     for key, initial_row in initial_objectives.items():
         initial_loss = float(initial_row["action_loss"])
         final_loss = float(final_objectives[key]["action_loss"])
-        if initial_loss <= 0:
+        initial_weight = float(initial_row["action_weight"])
+        final_weight = float(final_objectives[key]["action_weight"])
+        if (
+            float(initial_row["timestep"])
+            != float(final_objectives[key]["timestep"])
+            or initial_weight != final_weight
+        ):
             raise RealTrainingError(
-                "Gate E.3 initial objective loss must be positive"
+                "Gate E.3 initial/final objective flow inputs differ"
             )
+        if initial_loss == 0:
+            zero_initial_loss_objective_count += 1
+            if initial_weight > 0:
+                zero_initial_loss_with_positive_weight_count += 1
+            if final_loss > 0:
+                positive_final_from_zero_initial_loss_count += 1
+                max_final_loss_from_zero_initial_loss = max(
+                    max_final_loss_from_zero_initial_loss,
+                    final_loss,
+                )
+            continue
         objective_loss_ratios.append(final_loss / initial_loss)
+    if not objective_loss_ratios:
+        raise RealTrainingError(
+            "Gate E.3 has no positive initial objective loss"
+        )
     return {
         **outcome,
         "flow_objective_count": 40,
@@ -2683,6 +2745,22 @@ def multiflow_subset_outcome(
             ]
         ),
         "max_objective_loss_ratio": max(objective_loss_ratios),
+        "max_final_loss_from_zero_initial_loss": (
+            max_final_loss_from_zero_initial_loss
+        ),
+        "objective_loss_ratio_count": len(objective_loss_ratios),
+        "positive_final_from_zero_initial_loss_count": (
+            positive_final_from_zero_initial_loss_count
+        ),
+        "zero_initial_loss_objective_count": (
+            zero_initial_loss_objective_count
+        ),
+        "zero_initial_loss_with_positive_weight_count": (
+            zero_initial_loss_with_positive_weight_count
+        ),
+        "zero_weight_objective_count": int(
+            initial_probe["zero_weight_objective_count"]
+        ),
     }
 
 

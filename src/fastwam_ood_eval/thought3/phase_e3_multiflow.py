@@ -59,7 +59,7 @@ from fastwam_ood_eval.thought3.safety import (
 )
 
 
-PHASE_E3_SCHEMA = "thought3.phase_e3.multiflow.v1"
+PHASE_E3_SCHEMA = "thought3.phase_e3.multiflow.v2"
 PHASE_E3_FLOW_STEPS = (1, 2, 3, 4, 5)
 PHASE_E2_CONFIG = Path(
     "configs/thought3/phase_e2_eight_sample_diagnostic.yaml"
@@ -125,10 +125,13 @@ def _assert_phase_e3_scope(cfg: Thought3Config) -> None:
     """Reject any expansion beyond the preregistered held-out probe."""
 
     _assert_phase_e2_scope(cfg)
-    if cfg.experiment.name != "thought3_phase_e3_multiflow_diagnostic":
+    if (
+        cfg.experiment.name
+        != "thought3_phase_e3_multiflow_diagnostic_v2"
+    ):
         raise PhaseE3GateError("Gate E.3 experiment name changed")
     if cfg.experiment.output_dir != Path(
-        "outputs/thought3/phase_e3_multiflow_v1"
+        "outputs/thought3/phase_e3_multiflow_v2"
     ):
         raise PhaseE3GateError("Gate E.3 output directory changed")
 
@@ -243,11 +246,13 @@ def verify_frozen_phase_e2() -> dict[str, Any]:
 
 def _initial_action_signature(
     probe: Mapping[str, Any],
-) -> tuple[tuple[str, int, float, float], ...]:
+) -> tuple[tuple[str, int, float, float, float, float], ...]:
     return tuple(
         (
             str(row["base_sample_id"]),
             int(row["flow_step"]),
+            float(row["timestep"]),
+            float(row["action_weight"]),
             float(row["action_loss"]),
             float(row["gated_delta_norm"]),
         )
@@ -282,6 +287,7 @@ def _probe_checks(probe: Mapping[str, Any]) -> dict[str, bool]:
                 for field in (
                     "action_hidden_norm",
                     "action_loss",
+                    "action_weight",
                     "attention_residual_norm",
                     "gated_delta_nonzero_fraction",
                     "gated_delta_norm",
@@ -299,6 +305,18 @@ def _probe_checks(probe: Mapping[str, Any]) -> dict[str, bool]:
         "no_ground_truth_future": (
             probe.get("uses_ground_truth_future_input") is False
         ),
+        "zero_weight_count_consistent": (
+            int(probe["zero_weight_objective_count"])
+            == sum(
+                float(row["action_weight"]) == 0
+                for row in rows
+            )
+        ),
+        "zero_weight_loss_exact": all(
+            float(row["action_weight"]) != 0
+            or float(row["action_loss"]) == 0
+            for row in rows
+        ),
     }
 
 
@@ -311,9 +329,9 @@ def _run_phase_e3(cfg: Thought3Config) -> dict[str, Any]:
     )
 
     _assert_phase_e3_scope(cfg)
-    if os.environ.get("CONFIRM_THOUGHT3_PHASE_E3") != "YES":
+    if os.environ.get("CONFIRM_THOUGHT3_PHASE_E3_V2") != "YES":
         raise PhaseE3GateError(
-            "set CONFIRM_THOUGHT3_PHASE_E3=YES for real held-out probes"
+            "set CONFIRM_THOUGHT3_PHASE_E3_V2=YES for real held-out probes"
         )
     if not torch.cuda.is_available() or torch.cuda.device_count() != 1:
         raise PhaseE3GateError(
@@ -703,6 +721,10 @@ def _run_phase_e3(cfg: Thought3Config) -> dict[str, Any]:
             "selection_rule": (
                 "smallest learning rate eligible for both A0 and A1"
             ),
+            "zero_initial_objective_policy": (
+                "exclude only from non-gating per-objective loss-ratio "
+                "telemetry; retain in sample-equal official weighted loss"
+            ),
         },
         "schema_version": PHASE_E3_SCHEMA,
         "scope": {
@@ -739,6 +761,7 @@ def run_phase_e3_multiflow(
 ) -> dict[str, Any]:
     """Run Gate E.3 and preserve both passing and failed outcomes."""
 
+    _assert_phase_e3_scope(cfg)
     output = ensure_thought3_output_path(cfg.experiment.output_dir)
     result_path = output / "gate_e3_result.json"
     status_path = output / "run_status.json"
@@ -752,6 +775,13 @@ def run_phase_e3_multiflow(
             )
         raise FileExistsError(
             f"Gate E.3 result exists; pass --resume: {result_path}"
+        )
+    if status_path.is_file() or (
+        output / "pre_validation_result.json"
+    ).is_file():
+        raise PhaseE3GateError(
+            "existing incomplete/failed Gate E.3 evidence must be "
+            "preserved under its Run ID"
         )
     output.mkdir(parents=True, exist_ok=True)
     atomic_write_json(

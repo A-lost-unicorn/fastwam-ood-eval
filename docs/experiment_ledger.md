@@ -37,7 +37,8 @@
 | `P3-PHASE-E-v3` | 2026-07-28 | 3 / FAILED-SMOKE | commit `dc77bd2`；固定 4-sample train probe | A0 两条 100-step 轨迹完全重放；fixed train probe `0.0015776→0.0015993`，未下降，停止于 A0 | Gate E 未通过；进入单样本 overfit/优化诊断，不扩 A2/A4 |
 | `P3-PHASE-E1-v1` | 2026-07-28 | 3 / ENGINEERING DIAGNOSTIC | prereg commit `30ffc93`；GPU 1；单 train sample、固定 noise/timestep；A0/A1 各 200 step | A0 loss `0.0358901→0.0025362`（−92.93%）；A1 `→0.0001490`（−99.58%）；first non-gate step=2；frozen SHA before=after | Gate E.1 通过，只证明单目标可拟合；发现 BF16 delta/action-hidden 为 A0 1.91×、A1 0.70×；Gate E、A2/A4、OOD 仍锁定 |
 | `P3-PHASE-E2-v1` | 2026-07-28 | 3 / FAILED ENGINEERING DIAGNOSTIC | prereg commit `e104328`；8 train samples；A0/A1 × LR `1e-4/3e-4/1e-3`；六轨迹共 1,200 step | 六轨迹 execution/pairing/frozen/checkpoint/memory 全通过；无共同 eligible LR；A1 mean reduction 为 24.19%/40.01%/−13.97%，但 non-worsened 仅 4/8、4/8、0/8 | Gate E.2 按预注册 6/8 门槛失败；不得回改阈值或扩 A2/A4；单固定 flow draw 的初始 loss 跨度 94.28× |
-| `P3-PHASE-E3-v1` | 待运行 | 3 / PREREGISTERED PLAN | 只读 E.2 六个 step-200 checkpoint；每 sample 使用 held-out `flow_step=1..5`；共 320 forward、0 optimizer/backward | 保持原 LR/门槛/权重不变，以 5-draw sample mean 诊断 E.2 per-sample 稳定性是否被单次 flow draw 混淆 | 代码提交后等待用户显式确认；不重新训练，不读 development/OOD/success，不修改 E.2 工件 |
+| `P3-PHASE-E3-v1` | 2026-07-28 | 3 / INVALID ENGINEERING RUN | commit `330fe15`；config fingerprint `f2313eec...5652`；GPU 1；只读 E.2 checkpoint | model/data/A0/A1 initial probe 完成；A0/A1 mean loss 均为 `0.005565503754223755`；一个 `t=1000` objective 的官方 weight/loss 为 0；非门控 ratio 汇总抛错；frozen SHA 前后相同 | 未生成 `gate_e3_result.json`，无 Gate pass/fail 或 LR 结论；v1 工件按 SHA 冻结，不得覆盖 |
+| `P3-PHASE-E3-v2` | 待运行 | 3 / PREREGISTERED PLAN | 新 schema/config/output；原 8 samples、6 checkpoints、flow `1..5`、LR 与门槛不变；320 forward、0 optimizer/backward | 显式记录 action weight；零权重 loss 保留在主统计，只从未定义的非门控 objective ratio 排除 | 等待新的用户显式确认；不得复用 v1 部分结果、训练、读取 development/OOD/success 或修改 E.2/v1 工件 |
 
 ### `P1-FORMAL-v1` 机器证据
 
@@ -376,6 +377,7 @@
 | 2026-07-28 / Phase E v1 preflight | split fingerprint lookup 与 progress callback 接口报错 | orchestration 误读 validator 字段；callback 签名与 trainer contract 不同 | commits `9b51179`、`2b42964`；257 tests 通过 | 否；均在 optimizer step 0 前停止 |
 | 2026-07-28 / Phase E v1 A0 replay | resumed/uninterrupted 最终 Adapter SHA 不同 | CUDA backward reduction 从 step 2 产生极小非确定性 | v2 固定 cuBLAS/deterministic/math-SDP；两步 preflight 和 100-step replay SHA 完全一致 | 否；v1 独立目录保留为 invalid diagnosis |
 | 2026-07-28 / Phase E v2/v3 loss gates | A1 development 未下降；固定 A0 train probe 也未下降 | 当前 100-step zero-gated 配方没有表现出稳定 loss 改善；不是 gradient 断链 | 总 Gate 保持 failed；下一步做单样本 fixed-noise overfit 和注入尺度诊断 | 否；没有 OOD/rollout，未扩 A2/A4 |
+| 2026-07-28 / Gate E.3 v1 | A0/A1 initial probe 后，在首个 final checkpoint outcome 汇总报 `initial objective loss must be positive` | 一个 held-out draw 经 BF16 得到 `timestep=1000`；官方 scheduler weight 精确为 0，官方加权 loss 合法为 0；v1 非门控 `final/initial` ratio 错误假定严格正分母 | 冻结 v1 四个工件和 frozen-backbone SHA；v2 新 Run ID 显式记录 weight，零 loss 保留在 sample mean，只排除未定义 ratio；新增端点回归测试 | 否；0 optimizer/backward/rollout，frozen SHA 前后相同；但 v1 无 Gate 结论 |
 
 冷启动观测：2-step smoke 中 Wan 组件装载约 `336–433 s`；20-step OOD
 三进程观测到约 `604.37 s`，Clean 单进程为 `521.74 s`。这不是单次 future
@@ -440,7 +442,8 @@ Provenance 补充核对：Fast-WAM 和 LIBERO checkout clean；LIBERO-Plus
 6. 20-step shadow RGB 生成成本是否等于阶段三 cached latent 或在线 Adapter
    成本；阶段三必须单独计时。
 7. 当前 Adapter 配方是否有稳定、可诊断的 loss 改善。v3 fixed train probe
-   未下降，Gate E 整体未通过；A2/A4 和任何阶段三成功率仍被锁定。
+   未下降，Gate E 整体未通过；E.3 v1 是无效工程运行，须等待 v2；A2/A4 和
+   任何阶段三成功率仍被锁定。
 
 ## 4. 待填论文主表
 

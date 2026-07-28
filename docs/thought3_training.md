@@ -324,6 +324,13 @@ E.2 optimizer 的 `flow_step=1..5` 上完成 320 个 action-loss forward：
 - 再执行 E.2 原有 mean reduction、6/8、catastrophic 和 hidden-scale 门槛；
 - LR 网格和 smallest-eligible 规则不变；
 - 0 optimizer step、0 backward、0 development/OOD/success/rollout；
-- 真实运行仍需用户显式确认。
+- v1 在官方 `timestep=1000, training_weight=0` 的合法零 loss 上触发了
+  非门控 objective ratio 的实现错误，未产生 Gate 结论；
+- v2 使用独立 schema/config/output，零权重 objective 仍进入 sample mean 和原
+  门槛，只从未定义的非门控 `final/initial` ratio 遥测中排除；
+- v2 真实运行仍需用户重新显式确认。
 
-详见 [thought3_phase_e3_protocol.md](thought3_phase_e3_protocol.md)。
+历史 v1、失败报告与 v2 预注册分别见
+[thought3_phase_e3_protocol.md](thought3_phase_e3_protocol.md)、
+[thought3_phase_e3_v1_failure_report.md](thought3_phase_e3_v1_failure_report.md)、
+[thought3_phase_e3_v2_protocol.md](thought3_phase_e3_v2_protocol.md)。

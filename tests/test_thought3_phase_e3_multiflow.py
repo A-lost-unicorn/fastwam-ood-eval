@@ -11,8 +11,10 @@ from fastwam_ood_eval.thought3.phase_e2_eight_sample import (
 from fastwam_ood_eval.thought3.phase_e3_multiflow import (
     PHASE_E2_FROZEN_ARTIFACTS,
     PHASE_E3_FLOW_STEPS,
+    PHASE_E3_SCHEMA,
     _assert_phase_e3_scope,
     _run_phase_e3,
+    run_phase_e3_multiflow,
 )
 from fastwam_ood_eval.thought3.real_training import (
     aggregate_multiflow_probe_rows,
@@ -33,6 +35,7 @@ def _rows(
         {
             "action_hidden_norm": 10.0,
             "action_loss": sample_losses[sample_index],
+            "action_weight": 1.0,
             "attention_residual_norm": 2.0,
             "base_sample_id": base_sample_id,
             "flow_step": flow_step,
@@ -60,6 +63,7 @@ def _probe(sample_losses: list[float], ratio: float) -> dict:
 
 
 def test_phase_e3_protocol_is_heldout_and_scope_is_frozen() -> None:
+    assert PHASE_E3_SCHEMA == "thought3.phase_e3.multiflow.v2"
     assert PHASE_E3_FLOW_STEPS == (1, 2, 3, 4, 5)
     assert 0 not in PHASE_E3_FLOW_STEPS
     assert PHASE_E2_FROZEN_ARTIFACTS == {
@@ -77,9 +81,33 @@ def test_phase_e3_protocol_is_heldout_and_scope_is_frozen() -> None:
         ),
     }
     cfg = load_thought3_config(
-        "configs/thought3/phase_e3_multiflow_diagnostic.yaml"
+        "configs/thought3/phase_e3_multiflow_diagnostic_v2.yaml"
     )
     _assert_phase_e3_scope(cfg)
+    legacy_cfg = load_thought3_config(
+        "configs/thought3/phase_e3_multiflow_diagnostic.yaml"
+    )
+    with pytest.raises(RuntimeError, match="experiment name changed"):
+        _assert_phase_e3_scope(legacy_cfg)
+
+
+def test_phase_e3_legacy_config_is_rejected_before_output_write(
+    monkeypatch,
+) -> None:
+    legacy_cfg = load_thought3_config(
+        "configs/thought3/phase_e3_multiflow_diagnostic.yaml"
+    )
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("legacy Gate E.3 attempted an output write")
+
+    monkeypatch.setattr(
+        "fastwam_ood_eval.thought3.phase_e3_multiflow."
+        "atomic_write_json",
+        forbidden,
+    )
+    with pytest.raises(RuntimeError, match="experiment name changed"):
+        run_phase_e3_multiflow(legacy_cfg)
 
 
 def test_multiflow_aggregation_and_frozen_gate() -> None:
@@ -99,6 +127,52 @@ def test_multiflow_aggregation_and_frozen_gate() -> None:
     corrupted["mean_action_loss"] = 0.5
     with pytest.raises(RuntimeError, match="differs from objective rows"):
         multiflow_subset_outcome(initial, corrupted)
+
+
+def test_multiflow_allows_official_zero_weight_endpoint() -> None:
+    initial_rows = _rows(sample_losses=[1.0] * 8, ratio=0.0)
+    final_rows = _rows(sample_losses=[0.8] * 8, ratio=0.4)
+    for rows in (initial_rows, final_rows):
+        endpoint = rows[-1]
+        endpoint["action_loss"] = 0.0
+        endpoint["action_weight"] = 0.0
+        endpoint["timestep"] = 1000.0
+    initial = aggregate_multiflow_probe_rows(
+        initial_rows,
+        sample_ids=SAMPLE_IDS,
+        flow_steps=PHASE_E3_FLOW_STEPS,
+        variant="A1",
+    )
+    final = aggregate_multiflow_probe_rows(
+        final_rows,
+        sample_ids=SAMPLE_IDS,
+        flow_steps=PHASE_E3_FLOW_STEPS,
+        variant="A1",
+    )
+
+    outcome = multiflow_subset_outcome(initial, final)
+
+    assert initial["zero_weight_objective_count"] == 1
+    assert initial["zero_action_loss_objective_count"] == 1
+    assert outcome["objective_loss_ratio_count"] == 39
+    assert outcome["zero_initial_loss_objective_count"] == 1
+    assert outcome["zero_weight_objective_count"] == 1
+    assert (
+        outcome["positive_final_from_zero_initial_loss_count"] == 0
+    )
+    assert outcome["max_objective_loss_ratio"] == pytest.approx(0.8)
+
+
+def test_multiflow_rejects_nonzero_loss_at_zero_weight() -> None:
+    rows = _rows(sample_losses=[1.0] * 8, ratio=0.0)
+    rows[-1]["action_weight"] = 0.0
+    with pytest.raises(RuntimeError, match="invalid"):
+        aggregate_multiflow_probe_rows(
+            rows,
+            sample_ids=SAMPLE_IDS,
+            flow_steps=PHASE_E3_FLOW_STEPS,
+            variant="A1",
+        )
 
 
 def test_multiflow_grid_rejects_missing_or_duplicate_objectives() -> None:
@@ -123,9 +197,12 @@ def test_phase_e3_refuses_without_confirmation_before_model_load(
     monkeypatch,
 ) -> None:
     cfg = load_thought3_config(
-        "configs/thought3/phase_e3_multiflow_diagnostic.yaml"
+        "configs/thought3/phase_e3_multiflow_diagnostic_v2.yaml"
     )
-    monkeypatch.delenv("CONFIRM_THOUGHT3_PHASE_E3", raising=False)
+    monkeypatch.delenv(
+        "CONFIRM_THOUGHT3_PHASE_E3_V2",
+        raising=False,
+    )
 
     def forbidden(*args, **kwargs):
         raise AssertionError("Gate E.3 loaded Fast-WAM before confirmation")
@@ -135,7 +212,10 @@ def test_phase_e3_refuses_without_confirmation_before_model_load(
         "_load_upstream_model",
         forbidden,
     )
-    with pytest.raises(RuntimeError, match="CONFIRM_THOUGHT3_PHASE_E3"):
+    with pytest.raises(
+        RuntimeError,
+        match="CONFIRM_THOUGHT3_PHASE_E3_V2",
+    ):
         _run_phase_e3(cfg)
 
 

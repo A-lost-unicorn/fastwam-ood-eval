@@ -72,7 +72,8 @@
 | R47 | 旧 CLI 因 Thought3 import/参数变化而改变 | 中 | Critical | old CLI regression、dry-run | additive lazy import；旧命令输出/计划 fixture 不变 | B | Controlled |
 | R48 | LIBERO-Plus 既有 `.downloads/` 被误归因或写入 | 低 | Medium | upstream status snapshot | 记录为审计前既有；Thought3 path guard 禁止写 third_party | A–G | Controlled |
 | R49 | 单样本通过但 residual/hidden correction 尺度过大，导致多样本不稳定 | 高 | High | residual、gate、实际 BF16 delta/action-hidden | E.1 发现 A0 1.91×、A1 0.70×；E.2 六轨迹尺度门槛均通过，最大 sample ratio 0.537，但总 Gate 因跨样本 loss 门槛失败 | E | Controlled |
-| R50 | 每 sample 只绑定一个 fixed action-flow draw，使 sample stability 被 timestep/noise 混淆 | 高 | High | initial loss/timestep、multi-flow held-out probe | E.2 initial loss max/min 94.28×，loss–BF16-timestep `r=-0.93466`；E.3 固定使用未训练的 flow step 1..5，先 sample 内平均再做 6/8 门槛 | E | Open |
+| R50 | 每 sample 只绑定一个 fixed action-flow draw，使 sample stability 被 timestep/noise 混淆 | 高 | High | initial loss/timestep、multi-flow held-out probe | E.2 initial loss max/min 94.28×，loss–BF16-timestep `r=-0.93466`；E.3 v2 固定使用未训练的 flow step 1..5，先 sample 内平均再做 6/8 门槛 | E | Open |
+| R51 | 官方 scheduler 零权重端点使逐 objective `final/initial` ratio 出现零分母 | 中 | Medium | action weight、timestep、zero-loss count、v1 traceback | v1 证据冻结且不作 Gate 结论；v2 保留零 loss 于主统计，只排除未定义的非门控 ratio，并以新 Run ID 全量重跑 | E | Controlled |
 
 ## 3. 最高优先级风险详解
 
@@ -321,7 +322,8 @@ frozen hash 缺口；但发现实际 hidden correction 达 A0 1.91×、A1 0.70×
 | R13 多样本是否实际使用 future | 通过 Gate E 后做 same-checkpoint correct/null/shuffle counterfactual |
 | R28 正式 cache 容量 | 扩大样本前重新执行 inventory、容量估算和 free-space gate |
 | R49 hidden correction 尺度 | E.2 六轨迹尺度门槛已通过；完整 28/4 Gate E 仍须复核 |
-| R50 单 fixed flow draw 混淆 | 运行预注册 E.3 held-out flow step 1..5 probe |
+| R50 单 fixed flow draw 混淆 | 运行预注册 E.3 v2 held-out flow step 1..5 probe |
+| R51 零权重 objective ratio | v2 单测已覆盖；真实 E.3 v2 输出须记录 weight/count 且完成全部 320 probes |
 | 3-rank cache 完整性 | 正式分布式 cache 的 union/intersection/cardinality 证明 |
 | Gate E 多样本优化 | 稳定配方下重新跑 28/4 fixed train/development gate |
 

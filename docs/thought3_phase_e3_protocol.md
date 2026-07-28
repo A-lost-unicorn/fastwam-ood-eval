@@ -1,7 +1,14 @@
 # Thought3 Gate E.3：Held-out Multi-flow 稳定性诊断协议
 
-状态：`PREREGISTERED DRAFT / NOT RUN`
+状态：`HISTORICAL V1 / INVALID ENGINEERING RUN`
 证据等级：`ENGINEERING DIAGNOSTIC / NOT MODEL EFFECT`
+
+> 2026-07-28：v1 已运行，但在官方 scheduler 的合法
+> `timestep=1000, training_weight=0` objective 上触发非门控 loss-ratio
+> 实现错误，未生成 `gate_e3_result.json`。本文件保留 v1 预注册内容；失败证据见
+> [thought3_phase_e3_v1_failure_report.md](thought3_phase_e3_v1_failure_report.md)，
+> 修复后的新 Run ID 协议见
+> [thought3_phase_e3_v2_protocol.md](thought3_phase_e3_v2_protocol.md)。
 
 ## 1. 为什么需要 E.3
 

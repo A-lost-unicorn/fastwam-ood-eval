@@ -25,7 +25,7 @@
 | 阶段二正式抽样 | outcome-blind planner、anchor、exact-ratification 与 formal gate 已实现 | 200 Clean + 532 OOD 已 exact-ratify 并全部运行 | **完成**。只认证 Phase 2 future 指标前 job ID 不变；不冒充阶段一 outcome 前 preregistration |
 | 阶段二统计协议 | episode→task 分层、task bootstrap、首 probe/outcome gate 已实现 | 10,000 次 suite-stratified task bootstrap；730/732 outcome match | **post-run analysis 完成，非 preregistered confirmatory**。DRAFT 未在正式指标前冻结；人工 endpoint 待完成 |
 | 阶段二 B：action-conditioned future consistency | 严格门禁、schema、runner、测试已实现 | CPU/mock 与门禁测试通过 | **阻塞**。官方 release 为 `action_conditioned=false`，且没有可信匹配 checkpoint |
-| 阶段三：Future-to-Action Adapter | Phase A/B/C/D 完成；E/E.1/E.2 真实诊断已执行，Gate E 仍未通过 | E.1 单样本可 overfit；E.2 六条 200-step 轨迹工程检查全通过，但三个 LR 都没有达到 A0/A1 共同 6/8 sample 稳定门槛 | **阻塞在 Gate E.3 held-out multi-flow 诊断**。不得扩 A2/A4 或启动 ID/OOD；无 future 增益或 K 优劣结论 |
+| 阶段三：Future-to-Action Adapter | Phase A/B/C/D 完成；E/E.1/E.2 真实诊断已执行，Gate E 仍未通过 | E.1 单样本可 overfit；E.2 六条 200-step 轨迹完整但无共同 eligible LR；E.3 v1 因官方零权重端点的非门控 ratio bug 成为无效运行，冻结 backbone SHA 不变 | **等待 Gate E.3 v2 held-out multi-flow 诊断**。v2 只修复零分母遥测并使用新 Run ID；不得扩 A2/A4 或启动 ID/OOD |
 
 因此，“阶段一已经完成”的准确说法是：**阶段一工程、正式全量计算、聚合与
 完整性审计均已完成；失败机制人工 taxonomy 尚未完成，但不阻塞主成功率结论。**
@@ -165,6 +165,10 @@ OOD 一致性下降假设”，不能进入论文结论表。
   [thought3_phase_e2_report.md](thought3_phase_e2_report.md)
 - 阶段三 Gate E.3 held-out multi-flow 预注册：
   [thought3_phase_e3_protocol.md](thought3_phase_e3_protocol.md)
+- 阶段三 Gate E.3 v1 无效运行报告：
+  [thought3_phase_e3_v1_failure_report.md](thought3_phase_e3_v1_failure_report.md)
+- 阶段三 Gate E.3 v2 修复版预注册：
+  [thought3_phase_e3_v2_protocol.md](thought3_phase_e3_v2_protocol.md)
 - 阶段三数据/训练/评测：[thought3_data_protocol.md](thought3_data_protocol.md)、[thought3_training.md](thought3_training.md)、[thought3_evaluation.md](thought3_evaluation.md)
 - 阶段三分析 DRAFT 与限制：[thought3_analysis_protocol_DRAFT.md](thought3_analysis_protocol_DRAFT.md)、[thought3_limitations.md](thought3_limitations.md)
 - 阶段三旧版路线摘要：[thought3_adapter_plan.md](thought3_adapter_plan.md)
@@ -176,14 +180,18 @@ OOD 一致性下降假设”，不能进入论文结论表。
 1. Gate E.2 已按预注册规则失败：六条轨迹工程上完整，但没有 A0/A1 共同达到
    mean reduction、6/8 non-worsened 与尺度联合门槛；不得事后放宽为 4/8。
 2. 只读根因分析显示 E.2 单固定 flow draw 的 initial loss 跨度为 94.28×，
-   且与 BF16 timestep 的相关为 `−0.93466`。下一步是 E.3：只在 E.2 frozen
-   checkpoint 上评估 held-out `flow_step=1..5`，不重新训练。
-3. 只有 E.3 给出稳定候选 LR，并在新的完整 28/4 Gate E 中通过 train/dev、
+   且与 BF16 timestep 的相关为 `−0.93466`。E.3 v1 在合法
+   `timestep=1000, training_weight=0` objective 上触发非门控 ratio bug，未产生
+   Gate 结论；冻结参数 SHA 前后相同，v1 输出已冻结。
+3. 下一步是 E.3 v2：只在 E.2 frozen checkpoint 上重新评估 held-out
+   `flow_step=1..5`，不重新训练；零权重 objective 保留在主统计，仅从未定义的
+   ratio 遥测中排除。
+4. 只有 E.3 v2 给出稳定候选 LR，并在新的完整 28/4 Gate E 中通过 train/dev、
    resume、frozen 与尺度门槛后，才允许实现和训练 A2/A4。
-4. 在不按自动 metric/outcome 挑案例的前提下，冻结正式 human-review budget、
+5. 在不按自动 metric/outcome 挑案例的前提下，冻结正式 human-review budget、
    seed 和每 job 至多一个 probe；至少两名 reviewer 独立标注并保留 agreement/
    adjudication。
-5. 人工 endpoint 只回答 goal progress、physical plausibility、局部 action
+6. 人工 endpoint 只回答 goal progress、physical plausibility、局部 action
    execution 和 future–actual agreement；不把它升级成 future-to-action 因果。
-6. 阶段三 OOD 结果不用于边训练边选择 K，
+7. 阶段三 OOD 结果不用于边训练边选择 K，
    Phase F 后先冻结分析协议再解锁正式 cohort。

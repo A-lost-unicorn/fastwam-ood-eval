@@ -55,6 +55,9 @@ def test_adapter_supports_variable_tokens_and_latent_mask():
     assert output.shape == action.shape
     assert diagnostics.projected_grid == (3, 4, 5)
     assert 0 < diagnostics.valid_token_fraction < 1
+    assert diagnostics.action_hidden_norm > 0
+    assert diagnostics.gated_delta_norm == 0
+    assert diagnostics.gated_delta_nonzero_fraction == 0
 
 
 @pytest.mark.parametrize(

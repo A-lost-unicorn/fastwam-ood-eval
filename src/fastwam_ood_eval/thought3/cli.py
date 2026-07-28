@@ -405,6 +405,12 @@ def dispatch(args: Any) -> int:
         )
 
         result = run_phase_e_training_smoke(cfg, resume=args.resume)
+    elif args.command == "thought3-diagnose-real-overfit":
+        from fastwam_ood_eval.thought3.phase_e1_overfit import (
+            run_phase_e1_overfit,
+        )
+
+        result = run_phase_e1_overfit(cfg, resume=args.resume)
     elif args.command == "thought3-plan-cache":
         from fastwam_ood_eval.thought3.cache_planner import write_cache_plan
 

@@ -782,11 +782,16 @@ def adapter_gradient_groups(
     result: dict[str, dict[str, Any]] = {}
     for group, names in groups.items():
         squared = 0.0
+        parameter_squared = 0.0
         nonzero = 0
         tensor_count = 0
         missing = 0
         finite = True
         for name in names:
+            parameter_value = named[name].detach().float()
+            parameter_squared += float(
+                parameter_value.square().sum().cpu()
+            )
             gradient = named[name].grad
             if gradient is None:
                 missing += 1
@@ -796,11 +801,19 @@ def adapter_gradient_groups(
             finite = finite and bool(torch.isfinite(value).all().item())
             squared += float(value.square().sum().cpu())
             nonzero += int(torch.count_nonzero(value).item())
+        gradient_l2 = math.sqrt(squared)
+        parameter_l2 = math.sqrt(parameter_squared)
         result[group] = {
             "finite": finite,
-            "l2": math.sqrt(squared),
+            "gradient_to_parameter_l2_ratio": (
+                gradient_l2 / parameter_l2
+                if parameter_l2 > 0
+                else None
+            ),
+            "l2": gradient_l2,
             "missing_tensor_count": missing,
             "nonzero_element_count": nonzero,
+            "parameter_l2": parameter_l2,
             "parameter_tensor_count": len(names),
             "present_gradient_tensor_count": tensor_count,
         }
@@ -1699,6 +1712,428 @@ def run_real_variant_training(
                 "variant": cfg.variant,
             },
         )
+        return result
+    except BaseException as exc:
+        atomic_write_json(
+            status_path,
+            {
+                "error": f"{type(exc).__name__}: {exc}",
+                "finished_at_unix_s": time.time(),
+                "status": "failed",
+                "variant": cfg.variant,
+            },
+        )
+        raise
+    finally:
+        injector.close()
+        del optimizer, adapter
+        torch.cuda.empty_cache()
+
+
+def run_fixed_sample_overfit(
+    cfg: Thought3Config,
+    *,
+    model: Any,
+    prepared: PreparedRealTrainingData,
+    frozen_parameter_sha256: str,
+    resume: bool,
+    device: str,
+    progress: ProgressCallback | None = None,
+) -> dict[str, Any]:
+    """Overfit one real sample at one fixed action noise/timestep.
+
+    This is a diagnostic, not a model-selection or generalization result.  It
+    deliberately removes sample/noise variation to determine whether the
+    Adapter injection and optimizer can reduce one exact official Fast-WAM
+    flow-matching objective.
+    """
+
+    if (
+        cfg.runtime.backend != "fastwam"
+        or cfg.variant not in {"A0", "A1"}
+        or cfg.training.max_steps != 200
+        or cfg.training.microbatch_size != 1
+        or cfg.training.gradient_accumulation_steps != 1
+        or device != "cuda:0"
+        or cfg.runtime.device != device
+    ):
+        raise RealTrainingError(
+            "fixed-sample diagnostic requires real A0/A1, cuda:0, 200 steps"
+        )
+    output = ensure_thought3_output_path(cfg.experiment.output_dir)
+    status_path = output / "run_status.json"
+    metrics_path = output / "overfit_metrics.jsonl"
+    state_path = output / "overfit_state.json"
+    manifest_path = output / "overfit_manifest.json"
+    checkpoints_root = output / "checkpoints"
+    if manifest_path.is_file() and resume:
+        existing = load_json(manifest_path)
+        if (
+            existing.get("status") == "complete"
+            and int(existing.get("completed_steps", -1))
+            == cfg.training.max_steps
+        ):
+            return existing
+    if output.exists() and not resume and any(output.iterdir()):
+        raise FileExistsError(
+            f"overfit diagnostic output exists: {output}"
+        )
+    output.mkdir(parents=True, exist_ok=True)
+    atomic_write_json(
+        status_path,
+        {
+            "started_at_unix_s": time.time(),
+            "status": "running",
+            "variant": cfg.variant,
+        },
+    )
+
+    samples = _ordered_samples(
+        (sample for sample in prepared.samples if sample.split == "train"),
+        seed=cfg.training.train_seed,
+    )
+    if len(samples) != 28:
+        raise RealTrainingError(
+            "fixed-sample diagnostic requires 28 training samples"
+        )
+    sample = samples[0]
+    fixed_flow_step = 0
+    adapter = build_real_adapter(cfg, device=device)
+    initial_adapter_sha256 = adapter_state_sha256(adapter.state_dict())
+    optimizer = torch.optim.AdamW(
+        adapter.parameters(),
+        lr=cfg.training.learning_rate,
+        weight_decay=cfg.training.weight_decay,
+    )
+    if {
+        id(parameter)
+        for group in optimizer.param_groups
+        for parameter in group["params"]
+    } != {id(parameter) for parameter in adapter.parameters()}:
+        raise RealTrainingError(
+            "overfit optimizer contains non-Adapter parameters"
+        )
+    if any(parameter.requires_grad for parameter in model.parameters()):
+        raise RealTrainingError(
+            "frozen Fast-WAM parameter became trainable"
+        )
+    injector = ActionEncoderFutureInjector(
+        model.action_expert.action_encoder,
+        adapter,
+    )
+    start_step = 0
+    latest = find_latest_checkpoint(checkpoints_root) if resume else None
+    if latest is not None:
+        loaded = load_adapter_checkpoint(
+            latest,
+            adapter=adapter,
+            optimizer=optimizer,
+            expected=_checkpoint_expected(
+                cfg,
+                prepared,
+                frozen_parameter_sha256=frozen_parameter_sha256,
+            ),
+        )
+        start_step = loaded.global_step
+    elif resume and checkpoints_root.exists() and any(checkpoints_root.iterdir()):
+        raise RealTrainingError(
+            "overfit resume requested without a valid checkpoint"
+        )
+    existing_metrics = _metric_rows_for_resume(
+        metrics_path,
+        start_step=start_step,
+    )
+    if state_path.is_file():
+        state = load_json(state_path)
+        if (
+            state["base_sample_id"] != sample.base_sample_id
+            or state["config_fingerprint"] != cfg.fingerprint
+            or state["frozen_parameter_sha256"]
+            != frozen_parameter_sha256
+            or state["initial_adapter_sha256"]
+            != initial_adapter_sha256
+        ):
+            raise RealTrainingError(
+                "overfit diagnostic state provenance mismatch"
+            )
+        initial_loss = float(state["initial_action_loss"])
+    else:
+        if start_step:
+            raise RealTrainingError(
+                "overfit checkpoint exists without initial state"
+            )
+        with torch.no_grad():
+            initial_tensor = _loss_for_real_sample(
+                cfg,
+                model,
+                adapter,
+                injector,
+                sample,
+                step=fixed_flow_step,
+                device=device,
+            )
+        initial_loss = float(initial_tensor.detach().cpu())
+        diagnostics = adapter.last_diagnostics
+        if (
+            diagnostics is None
+            or diagnostics.gated_delta_norm != 0
+            or diagnostics.gated_delta_nonzero_fraction != 0
+        ):
+            raise RealTrainingError(
+                "zero-gate overfit initialization is not exact identity"
+            )
+        state = {
+            "base_sample_id": sample.base_sample_id,
+            "config": cfg.to_dict(),
+            "config_fingerprint": cfg.fingerprint,
+            "fixed_action_flow_step": fixed_flow_step,
+            "frozen_parameter_sha256": frozen_parameter_sha256,
+            "initial_action_loss": initial_loss,
+            "initial_adapter_sha256": initial_adapter_sha256,
+            "uses_ground_truth_future_input": False,
+            "variant": cfg.variant,
+        }
+        atomic_write_json(state_path, state)
+        del initial_tensor
+
+    rows: list[dict[str, Any]] = []
+    started = time.perf_counter()
+    first_non_gate_step: int | None = None
+    for row in existing_metrics:
+        if (
+            first_non_gate_step is None
+            and int(
+                row["gradient_groups"]["non_gate"][
+                    "nonzero_element_count"
+                ]
+            )
+            > 0
+        ):
+            first_non_gate_step = int(row["global_step"])
+    try:
+        for step in range(start_step, cfg.training.max_steps):
+            optimizer.zero_grad(set_to_none=True)
+            torch.cuda.synchronize(device)
+            torch.cuda.reset_peak_memory_stats(device)
+            step_started = time.perf_counter()
+            gate_before = float(adapter.gate.detach().cpu())
+            loss = _loss_for_real_sample(
+                cfg,
+                model,
+                adapter,
+                injector,
+                sample,
+                step=fixed_flow_step,
+                device=device,
+            )
+            loss.backward()
+            groups = adapter_gradient_groups(adapter)
+            if not all(bool(value["finite"]) for value in groups.values()):
+                raise RealTrainingError(
+                    "overfit diagnostic gradient is non-finite"
+                )
+            global_step = step + 1
+            if global_step == 1 and (
+                float(groups["gate"]["l2"]) <= 0
+                or int(groups["non_gate"]["nonzero_element_count"]) != 0
+            ):
+                raise RealTrainingError(
+                    "overfit first-step zero-gate contract failed"
+                )
+            if (
+                first_non_gate_step is None
+                and int(
+                    groups["non_gate"]["nonzero_element_count"]
+                )
+                > 0
+            ):
+                first_non_gate_step = global_step
+            backbone_grads = [
+                name
+                for name, parameter in model.named_parameters()
+                if parameter.grad is not None
+            ]
+            if backbone_grads:
+                raise RealTrainingError(
+                    f"overfit backbone received gradients: {backbone_grads[:5]}"
+                )
+            diagnostics = adapter.last_diagnostics
+            if diagnostics is None:
+                raise RealTrainingError(
+                    "overfit Adapter diagnostics are missing"
+                )
+            optimizer.step()
+            torch.cuda.synchronize(device)
+            row = {
+                "action_hidden_norm": diagnostics.action_hidden_norm,
+                "attention_residual_norm": (
+                    diagnostics.attention_residual_norm
+                ),
+                "base_sample_id": sample.base_sample_id,
+                "fixed_action_flow_step": fixed_flow_step,
+                "future_token_norm": diagnostics.future_token_norm,
+                "gate_raw_after_step": float(
+                    adapter.gate.detach().cpu()
+                ),
+                "gate_raw_before_step": gate_before,
+                "gated_delta_nonzero_fraction": (
+                    diagnostics.gated_delta_nonzero_fraction
+                ),
+                "gated_delta_norm": diagnostics.gated_delta_norm,
+                "global_step": global_step,
+                "gate_gradient": float(
+                    adapter.gate.grad.detach().float().cpu()
+                ),
+                "gate_gradient_sign": (
+                    1
+                    if float(adapter.gate.grad.detach().float().cpu()) > 0
+                    else -1
+                    if float(adapter.gate.grad.detach().float().cpu()) < 0
+                    else 0
+                ),
+                "gradient_groups": groups,
+                "loss": float(loss.detach().cpu()),
+                "nan_or_inf": False,
+                "peak_memory_mib": (
+                    int(torch.cuda.max_memory_allocated(device)) / 2**20
+                ),
+                "step_time_ms": (
+                    time.perf_counter() - step_started
+                )
+                * 1000.0,
+                "variant": cfg.variant,
+            }
+            rows.append(row)
+            should_checkpoint = (
+                global_step % cfg.training.checkpoint_interval == 0
+                or global_step == cfg.training.max_steps
+            )
+            if should_checkpoint:
+                atomic_write_jsonl(
+                    metrics_path,
+                    [*existing_metrics, *rows],
+                )
+                checkpoint = checkpoints_root / f"step_{global_step:08d}"
+                save_adapter_checkpoint(
+                    checkpoint,
+                    adapter=adapter,
+                    optimizer=optimizer,
+                    manifest=_checkpoint_manifest(
+                        cfg,
+                        adapter,
+                        split_fingerprint=prepared.split_fingerprint,
+                        cache_fingerprint=prepared.cache_fingerprint,
+                        frozen_parameter_sha256=frozen_parameter_sha256,
+                        global_step=global_step,
+                        sample_cursor=global_step,
+                        train_sample_count=1,
+                    ),
+                )
+                if progress is not None:
+                    progress(
+                        "overfit_checkpoint",
+                        {
+                            "gate": row["gate_raw_after_step"],
+                            "loss": row["loss"],
+                            "step": global_step,
+                            "variant": cfg.variant,
+                        },
+                    )
+            del loss
+            torch.cuda.empty_cache()
+
+        atomic_write_jsonl(
+            metrics_path,
+            [*existing_metrics, *rows],
+        )
+        with torch.no_grad():
+            final_tensor = _loss_for_real_sample(
+                cfg,
+                model,
+                adapter,
+                injector,
+                sample,
+                step=fixed_flow_step,
+                device=device,
+            )
+        final_loss = float(final_tensor.detach().cpu())
+        final_diagnostics = adapter.last_diagnostics
+        if final_diagnostics is None:
+            raise RealTrainingError(
+                "overfit final diagnostics are missing"
+            )
+        latest_checkpoint = find_latest_checkpoint(checkpoints_root)
+        if latest_checkpoint is None:
+            raise RealTrainingError(
+                "overfit diagnostic wrote no checkpoint"
+            )
+        roundtrip = _checkpoint_roundtrip(
+            cfg,
+            adapter,
+            optimizer,
+            latest_checkpoint,
+            prepared=prepared,
+            frozen_parameter_sha256=frozen_parameter_sha256,
+            device=device,
+        )
+        all_metrics = [*existing_metrics, *rows]
+        result = {
+            "base_sample_id": sample.base_sample_id,
+            "checkpoint": str(latest_checkpoint),
+            "checkpoint_roundtrip": roundtrip,
+            "completed_steps": cfg.training.max_steps,
+            "config": cfg.to_dict(),
+            "config_fingerprint": cfg.fingerprint,
+            "device": device,
+            "final_action_loss": final_loss,
+            "final_gated_delta_nonzero_fraction": (
+                final_diagnostics.gated_delta_nonzero_fraction
+            ),
+            "final_gated_delta_norm": (
+                final_diagnostics.gated_delta_norm
+            ),
+            "first_non_gate_nonzero_gradient_step": (
+                first_non_gate_step
+            ),
+            "fixed_action_flow_step": fixed_flow_step,
+            "future_input_kind": (
+                "zero_null_latent"
+                if cfg.variant == "A0"
+                else "phase_d_k1_cached_latent"
+            ),
+            "initial_adapter_sha256": initial_adapter_sha256,
+            "initial_action_loss": initial_loss,
+            "loss_reduction_fraction": (
+                (initial_loss - final_loss) / initial_loss
+            ),
+            "max_peak_memory_mib": max(
+                float(row["peak_memory_mib"]) for row in all_metrics
+            ),
+            "mean_step_time_ms": sum(
+                float(row["step_time_ms"]) for row in all_metrics
+            )
+            / len(all_metrics),
+            "metrics": str(metrics_path),
+            "optimizer_parameter_scope": "adapter_only",
+            "resumed_from_step": start_step,
+            "status": "complete",
+            "final_gate_raw": float(adapter.gate.detach().float().cpu()),
+            "trainable_parameter_count": adapter.trainable_parameter_count,
+            "uses_ground_truth_future_input": False,
+            "variant": cfg.variant,
+            "wall_s_this_invocation": time.perf_counter() - started,
+        }
+        atomic_write_json(manifest_path, result)
+        atomic_write_json(
+            status_path,
+            {
+                "completed_steps": cfg.training.max_steps,
+                "finished_at_unix_s": time.time(),
+                "status": "complete",
+                "variant": cfg.variant,
+            },
+        )
+        del final_tensor
         return result
     except BaseException as exc:
         atomic_write_json(

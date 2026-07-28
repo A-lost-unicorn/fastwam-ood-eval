@@ -60,8 +60,11 @@ class FutureAdapterSpec:
 class FutureAdapterDiagnostics:
     gate_raw: float
     gate_scale: float
+    action_hidden_norm: float
     future_token_norm: float
     attention_residual_norm: float
+    gated_delta_norm: float
+    gated_delta_nonzero_fraction: float
     valid_token_fraction: float
     projected_grid: tuple[int, int, int]
 
@@ -322,17 +325,35 @@ class FutureToActionAdapter(nn.Module):
         residual = self.output_projection(attended).to(action_hidden.dtype)
         gate_scale = torch.tanh(self.gate).to(action_hidden.dtype)
         output = action_hidden + gate_scale * residual
+        gated_delta = output - action_hidden
 
         diagnostics: FutureAdapterDiagnostics | None = None
         if return_diagnostics or self.capture_diagnostics:
             diagnostics = FutureAdapterDiagnostics(
                 gate_raw=float(self.gate.detach().float().cpu()),
                 gate_scale=float(torch.tanh(self.gate.detach()).float().cpu()),
+                action_hidden_norm=float(
+                    action_hidden.detach()
+                    .float()
+                    .norm(dim=-1)
+                    .mean()
+                    .cpu()
+                ),
                 future_token_norm=float(
                     tokens.detach().float().norm(dim=-1).mean().cpu()
                 ),
                 attention_residual_norm=float(
                     residual.detach().float().norm(dim=-1).mean().cpu()
+                ),
+                gated_delta_norm=float(
+                    gated_delta.detach()
+                    .float()
+                    .norm(dim=-1)
+                    .mean()
+                    .cpu()
+                ),
+                gated_delta_nonzero_fraction=float(
+                    (gated_delta.detach() != 0).float().mean().cpu()
                 ),
                 valid_token_fraction=float(valid.detach().float().mean().cpu()),
                 projected_grid=projected_grid,

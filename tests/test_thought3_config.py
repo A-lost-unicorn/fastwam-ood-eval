@@ -13,9 +13,10 @@ from thought3_test_utils import write_thought3_config
 
 def test_all_committed_thought3_configs_validate():
     paths = sorted(Path("configs/thought3").glob("*.yaml"))
-    assert len(paths) == 14
+    assert len(paths) == 15
     assert Path("configs/thought3/phase_c_single_sample.yaml") in paths
     assert Path("configs/thought3/phase_d_cache_smoke.yaml") in paths
+    assert Path("configs/thought3/phase_e_training_smoke.yaml") in paths
     for path in paths:
         cfg = load_thought3_config(path)
         assert cfg.schema_version == "thought3.config.v1"

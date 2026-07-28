@@ -404,6 +404,10 @@ def build_parser() -> argparse.ArgumentParser:
             "thought3-cache-real-smoke",
             "Run Gate D: one task and 32 paired K=1/2/4 cache samples",
         ),
+        (
+            "thought3-train-real-smoke",
+            "Run Gate E: real A0/A1 100-step Adapter training",
+        ),
         ("thought3-plan-cache", "Plan paired K=1/2/4 future cache shards"),
         ("thought3-build-cache", "Build this rank's future cache shards"),
         ("thought3-validate-cache", "Validate cache schema, pairing and checksums"),

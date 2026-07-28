@@ -38,7 +38,8 @@
 | `P3-PHASE-E1-v1` | 2026-07-28 | 3 / ENGINEERING DIAGNOSTIC | prereg commit `30ffc93`；GPU 1；单 train sample、固定 noise/timestep；A0/A1 各 200 step | A0 loss `0.0358901→0.0025362`（−92.93%）；A1 `→0.0001490`（−99.58%）；first non-gate step=2；frozen SHA before=after | Gate E.1 通过，只证明单目标可拟合；发现 BF16 delta/action-hidden 为 A0 1.91×、A1 0.70×；Gate E、A2/A4、OOD 仍锁定 |
 | `P3-PHASE-E2-v1` | 2026-07-28 | 3 / FAILED ENGINEERING DIAGNOSTIC | prereg commit `e104328`；8 train samples；A0/A1 × LR `1e-4/3e-4/1e-3`；六轨迹共 1,200 step | 六轨迹 execution/pairing/frozen/checkpoint/memory 全通过；无共同 eligible LR；A1 mean reduction 为 24.19%/40.01%/−13.97%，但 non-worsened 仅 4/8、4/8、0/8 | Gate E.2 按预注册 6/8 门槛失败；不得回改阈值或扩 A2/A4；单固定 flow draw 的初始 loss 跨度 94.28× |
 | `P3-PHASE-E3-v1` | 2026-07-28 | 3 / INVALID ENGINEERING RUN | commit `330fe15`；config fingerprint `f2313eec...5652`；GPU 1；只读 E.2 checkpoint | model/data/A0/A1 initial probe 完成；A0/A1 mean loss 均为 `0.005565503754223755`；一个 `t=1000` objective 的官方 weight/loss 为 0；非门控 ratio 汇总抛错；frozen SHA 前后相同 | 未生成 `gate_e3_result.json`，无 Gate pass/fail 或 LR 结论；v1 工件按 SHA 冻结，不得覆盖 |
-| `P3-PHASE-E3-v2` | 待运行 | 3 / PREREGISTERED PLAN | 新 schema/config/output；原 8 samples、6 checkpoints、flow `1..5`、LR 与门槛不变；320 forward、0 optimizer/backward | 显式记录 action weight；零权重 loss 保留在主统计，只从未定义的非门控 objective ratio 排除 | 等待新的用户显式确认；不得复用 v1 部分结果、训练、读取 development/OOD/success 或修改 E.2/v1 工件 |
+| `P3-PHASE-E3-v2` | 2026-07-28 | 3 / FAILED ENGINEERING DIAGNOSTIC | prereg commit `139742f`；8 samples、6 E.2 checkpoints、held-out flow `1..5`；320 forward、0 optimizer/backward | 全部 execution/provenance/zero-weight checks 通过；A0 最好下降 1.35%/2-of-8，A1 最好下降 0.025%/2-of-8；三个 LR 均不 eligible | 有效负 Gate；E.2 的 fixed-flow 降幅未迁移到 held-out flow；不能解释为 future 无效，不扩 A2/A4/Phase F |
+| `P3-PHASE-E4-v1` | 待运行 | 3 / PREREGISTERED PLAN | 8 samples；A0/A1 × 原 LR grid；每次 optimizer visit 使用唯一 paired slot `10001..10200`；held-out probe 仍为 `1..5` | 只改变 train-flow diversification；200 step/track、1,200 total；step 0/200 共 480 probe forwards；门槛不变 | 等待用户显式确认；不读 development/OOD/success，不扩 A2/A4，不按中间 checkpoint 选模 |
 
 ### `P1-FORMAL-v1` 机器证据
 
@@ -427,6 +428,10 @@ Provenance 补充核对：Fast-WAM 和 LIBERO checkout clean；LIBERO-Plus
     projector/attention 等非 gate 参数会获得 finite、nonzero gradient。
 19. 在确定性 CUDA 协议下，A0/A1 的 50→100 resume 与独立 0→100 训练最终
     Adapter semantic SHA 完全一致；该结论只覆盖工程恢复，不代表模型有效。
+20. Gate E.3 v2 的 320/320 held-out multi-flow forward 已证明：E.2 当前
+    fixed-flow checkpoint 的 loss 改善没有达到跨 flow 的 `10% + 6/8` 稳定门槛；
+    六条 hidden-scale/catastrophic/provenance 检查均通过。该结论只否定当前训练
+    配方已足够稳定，不否定 future latent。
 
 ### 尚未支持
 
@@ -441,9 +446,9 @@ Provenance 补充核对：Fast-WAM 和 LIBERO checkout clean；LIBERO-Plus
    formal future 指标生成前没有冻结。
 6. 20-step shadow RGB 生成成本是否等于阶段三 cached latent 或在线 Adapter
    成本；阶段三必须单独计时。
-7. 当前 Adapter 配方是否有稳定、可诊断的 loss 改善。v3 fixed train probe
-   未下降，Gate E 整体未通过；E.3 v1 是无效工程运行，须等待 v2；A2/A4 和
-   任何阶段三成功率仍被锁定。
+7. 多样化 action-flow 训练后 Adapter 是否能形成稳定、可诊断的 loss 改善。
+   E.3 v2 已有效失败，说明现有 fixed-flow 配方不具备 held-out flow 稳定性；
+   A2/A4 和任何阶段三成功率仍被锁定。
 
 ## 4. 待填论文主表
 

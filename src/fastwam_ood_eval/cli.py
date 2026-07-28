@@ -420,6 +420,10 @@ def build_parser() -> argparse.ArgumentParser:
             "thought3-diagnose-heldout-multiflow",
             "Run Gate E.3: held-out multi-flow probes of Gate E.2 checkpoints",
         ),
+        (
+            "thought3-diagnose-diversified-flow",
+            "Run Gate E.4: paired diversified-flow A0/A1 training",
+        ),
         ("thought3-plan-cache", "Plan paired K=1/2/4 future cache shards"),
         ("thought3-build-cache", "Build this rank's future cache shards"),
         ("thought3-validate-cache", "Validate cache schema, pairing and checksums"),

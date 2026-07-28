@@ -328,9 +328,39 @@ E.2 optimizer 的 `flow_step=1..5` 上完成 320 个 action-loss forward：
   非门控 objective ratio 的实现错误，未产生 Gate 结论；
 - v2 使用独立 schema/config/output，零权重 objective 仍进入 sample mean 和原
   门槛，只从未定义的非门控 `final/initial` ratio 遥测中排除；
-- v2 真实运行仍需用户重新显式确认。
+- v2 已完成 320/320 forward，全部执行检查通过，但 A0/A1 在三个 LR 下均未达到
+  `10% mean reduction + 6/8 non-worsened`，Gate 有效失败；
+- E.2 的 fixed-flow 改善未迁移到 held-out flow，因此当前训练配方不能进入
+  A2/A4 或 Phase F。
 
 历史 v1、失败报告与 v2 预注册分别见
 [thought3_phase_e3_protocol.md](thought3_phase_e3_protocol.md)、
 [thought3_phase_e3_v1_failure_report.md](thought3_phase_e3_v1_failure_report.md)、
-[thought3_phase_e3_v2_protocol.md](thought3_phase_e3_v2_protocol.md)。
+[thought3_phase_e3_v2_protocol.md](thought3_phase_e3_v2_protocol.md)、
+[thought3_phase_e3_v2_report.md](thought3_phase_e3_v2_report.md)。
+
+### 11.5 Gate E.4 paired diversified train-flow 诊断
+
+E.3 之后唯一允许改变的训练变量是 action-flow objective：
+
+```text
+E.2：每条 sample 的所有 optimizer visit 都使用 flow_step=0
+E.4：每次 visit 使用不同、确定性、A0/A1 配对的 train flow slot
+```
+
+E.4 必须保持：
+
+- 同一 8 条 train sample 和 round-robin；
+- A0/A1 × `1e-4/3e-4/1e-3`；
+- 200 step、AdamW、weight decay、Adapter 和初始化；
+- 官方 weighted velocity MSE；
+- held-out probe `flow_step=1..5`；
+- `10% + 6/8`、catastrophic 与 hidden-scale 门槛；
+- 0 development/OOD/success/rollout/future RGB。
+
+train flow slot 必须与 probe slot 不相交，并在每 step 保存 timestep、official
+weight、noise/slot identity 和合法 zero-weight 计数。E.4 是序贯工程诊断，不是
+future 模型效应实验；真实运行仍需独立 Run ID 和用户显式确认。
+
+冻结细节见
+[thought3_phase_e4_protocol.md](thought3_phase_e4_protocol.md)。

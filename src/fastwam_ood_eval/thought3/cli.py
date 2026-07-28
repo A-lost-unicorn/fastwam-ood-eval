@@ -423,6 +423,15 @@ def dispatch(args: Any) -> int:
         )
 
         result = run_phase_e3_multiflow(cfg, resume=args.resume)
+    elif args.command == "thought3-diagnose-diversified-flow":
+        from fastwam_ood_eval.thought3.phase_e4_diversified_flow import (
+            run_phase_e4_diversified_flow,
+        )
+
+        result = run_phase_e4_diversified_flow(
+            cfg,
+            resume=args.resume,
+        )
     elif args.command == "thought3-plan-cache":
         from fastwam_ood_eval.thought3.cache_planner import write_cache_plan
 

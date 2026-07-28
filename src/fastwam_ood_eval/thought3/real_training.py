@@ -70,6 +70,8 @@ class RealTrainingError(RuntimeError):
 
 
 ProgressCallback = Callable[[str, Mapping[str, Any]], None]
+DIVERSIFIED_TRAIN_FLOW_SLOT_OFFSET = 10_000
+DIVERSIFIED_HELDOUT_FLOW_STEPS = (1, 2, 3, 4, 5)
 
 
 @dataclass(frozen=True)
@@ -112,6 +114,40 @@ def _stable_seed(*values: object) -> int:
         "\0".join(str(value) for value in values).encode("utf-8")
     ).digest()
     return int.from_bytes(digest[:8], "big") & ((1 << 63) - 1)
+
+
+def _flow_objective_identity(
+    *,
+    base_sample_id: str,
+    train_seed: int,
+    flow_step: int,
+) -> dict[str, Any]:
+    """Return the two deterministic RNG seeds for one action-flow objective."""
+
+    noise_seed = _stable_seed(
+        "thought3-real-action-noise-v1",
+        train_seed,
+        flow_step,
+        base_sample_id,
+    )
+    timestep_seed = _stable_seed(
+        "thought3-real-action-time-v1",
+        train_seed,
+        flow_step,
+        base_sample_id,
+    )
+    digest = hashlib.sha256(
+        (
+            f"{base_sample_id}\0{train_seed}\0{flow_step}\0"
+            f"{noise_seed}\0{timestep_seed}"
+        ).encode("utf-8")
+    ).hexdigest()
+    return {
+        "action_noise_seed": noise_seed,
+        "action_timestep_seed": timestep_seed,
+        "flow_objective_sha256": digest,
+        "flow_step": flow_step,
+    }
 
 
 def _summary(values: Sequence[float]) -> dict[str, float | int | None]:
@@ -662,13 +698,13 @@ def _flow_inputs(
         device=device,
         dtype=model.torch_dtype,
     )
+    identity = _flow_objective_identity(
+        base_sample_id=sample.base_sample_id,
+        train_seed=train_seed,
+        flow_step=step,
+    )
     generator = torch.Generator(device="cpu").manual_seed(
-        _stable_seed(
-            "thought3-real-action-noise-v1",
-            train_seed,
-            step,
-            sample.base_sample_id,
-        )
+        int(identity["action_noise_seed"])
     )
     noise = torch.randn(
         tuple(target_action.shape),
@@ -678,12 +714,7 @@ def _flow_inputs(
     ).to(device=device, dtype=model.torch_dtype)
     timestep = _sample_training_t_on_cpu(
         model.train_action_scheduler,
-        _stable_seed(
-            "thought3-real-action-time-v1",
-            train_seed,
-            step,
-            sample.base_sample_id,
-        ),
+        int(identity["action_timestep_seed"]),
         device,
         model.torch_dtype,
     )
@@ -719,11 +750,12 @@ def _flow_timestep_and_weight_scalars(
 
     timestep = _sample_training_t_on_cpu(
         model.train_action_scheduler,
-        _stable_seed(
-            "thought3-real-action-time-v1",
-            train_seed,
-            step,
-            sample.base_sample_id,
+        int(
+            _flow_objective_identity(
+                base_sample_id=sample.base_sample_id,
+                train_seed=train_seed,
+                flow_step=step,
+            )["action_timestep_seed"]
         ),
         device,
         model.torch_dtype,
@@ -3441,6 +3473,679 @@ def run_fixed_subset_training(
             status_path,
             {
                 "completed_steps": cfg.training.max_steps,
+                "finished_at_unix_s": time.time(),
+                "learning_rate": cfg.training.learning_rate,
+                "status": "complete",
+                "variant": cfg.variant,
+            },
+        )
+        return result
+    except BaseException as exc:
+        atomic_write_json(
+            status_path,
+            {
+                "error": f"{type(exc).__name__}: {exc}",
+                "finished_at_unix_s": time.time(),
+                "learning_rate": cfg.training.learning_rate,
+                "status": "failed",
+                "variant": cfg.variant,
+            },
+        )
+        raise
+    finally:
+        injector.close()
+        del optimizer, adapter
+        torch.cuda.empty_cache()
+
+
+def diversified_training_flow_slot(global_step: int) -> int:
+    """Map Gate E.4 optimizer steps to unique slots outside probes 0..5."""
+
+    if global_step < 1 or global_step > 200:
+        raise RealTrainingError(
+            "Gate E.4 global step must be in the frozen range 1..200"
+        )
+    return DIVERSIFIED_TRAIN_FLOW_SLOT_OFFSET + global_step
+
+
+def diversified_flow_schedule_sha256(
+    rows: Sequence[Mapping[str, Any]],
+) -> str:
+    """Hash the ordered sample/noise/timestep schedule used by Gate E.4."""
+
+    payload: list[str] = []
+    for expected_step, row in enumerate(rows, start=1):
+        global_step = int(row["global_step"])
+        flow_slot = int(row["training_flow_slot"])
+        if (
+            global_step != expected_step
+            or flow_slot
+            != diversified_training_flow_slot(global_step)
+        ):
+            raise RealTrainingError(
+                "Gate E.4 diversified flow schedule is not contiguous"
+            )
+        payload.append(
+            "\0".join(
+                (
+                    str(global_step),
+                    str(row["base_sample_id"]),
+                    str(flow_slot),
+                    str(int(row["action_noise_seed"])),
+                    str(int(row["action_timestep_seed"])),
+                    str(row["flow_objective_sha256"]),
+                    repr(float(row["timestep"])),
+                    repr(float(row["action_weight"])),
+                )
+            )
+        )
+    return hashlib.sha256("\n".join(payload).encode("utf-8")).hexdigest()
+
+
+def run_diversified_flow_training(
+    cfg: Thought3Config,
+    *,
+    model: Any,
+    prepared: PreparedRealTrainingData,
+    frozen_parameter_sha256: str,
+    resume: bool,
+    device: str,
+    progress: ProgressCallback | None = None,
+) -> dict[str, Any]:
+    """Train Gate E.4 with one deterministic, unique flow slot per visit."""
+
+    if (
+        cfg.runtime.backend != "fastwam"
+        or cfg.variant not in {"A0", "A1"}
+        or cfg.training.max_steps != 200
+        or cfg.training.microbatch_size != 1
+        or cfg.training.gradient_accumulation_steps != 1
+        or cfg.training.checkpoint_interval != 50
+        or device != "cuda:0"
+        or cfg.runtime.device != device
+    ):
+        raise RealTrainingError(
+            "Gate E.4 requires real A0/A1, cuda:0, 200 steps, "
+            "batch 1, checkpoint 50"
+        )
+    output = ensure_thought3_output_path(cfg.experiment.output_dir)
+    status_path = output / "run_status.json"
+    metrics_path = output / "train_metrics.jsonl"
+    probe_path = output / "heldout_multiflow_metrics.jsonl"
+    state_path = output / "training_state.json"
+    manifest_path = output / "training_manifest.json"
+    checkpoints_root = output / "checkpoints"
+    if manifest_path.is_file() and resume:
+        existing = load_json(manifest_path)
+        if (
+            existing.get("status") == "complete"
+            and int(existing.get("completed_steps", -1)) == 200
+        ):
+            return existing
+    if output.exists() and not resume and any(output.iterdir()):
+        raise FileExistsError(
+            f"Gate E.4 track output exists: {output}"
+        )
+    output.mkdir(parents=True, exist_ok=True)
+    atomic_write_json(
+        status_path,
+        {
+            "learning_rate": cfg.training.learning_rate,
+            "started_at_unix_s": time.time(),
+            "status": "running",
+            "variant": cfg.variant,
+        },
+    )
+
+    samples = _ordered_samples(
+        (sample for sample in prepared.samples if sample.split == "train"),
+        seed=cfg.training.train_seed,
+    )
+    if (
+        len(samples) != 8
+        or len(prepared.samples) != 8
+        or any(sample.split != "train" for sample in prepared.samples)
+    ):
+        raise RealTrainingError(
+            "Gate E.4 requires exactly 8 source-filtered train samples"
+        )
+    sample_ids = [sample.base_sample_id for sample in samples]
+    adapter = build_real_adapter(cfg, device=device)
+    initial_adapter_sha256 = adapter_state_sha256(
+        adapter.state_dict()
+    )
+    optimizer = torch.optim.AdamW(
+        adapter.parameters(),
+        lr=cfg.training.learning_rate,
+        weight_decay=cfg.training.weight_decay,
+    )
+    optimizer_ids = {
+        id(parameter)
+        for group in optimizer.param_groups
+        for parameter in group["params"]
+    }
+    if optimizer_ids != {
+        id(parameter) for parameter in adapter.parameters()
+    }:
+        raise RealTrainingError(
+            "Gate E.4 optimizer contains non-Adapter parameters"
+        )
+    if any(parameter.requires_grad for parameter in model.parameters()):
+        raise RealTrainingError(
+            "Gate E.4 frozen Fast-WAM parameter became trainable"
+        )
+    injector = ActionEncoderFutureInjector(
+        model.action_expert.action_encoder,
+        adapter,
+    )
+    start_step = 0
+    sample_cursor = 0
+    latest = find_latest_checkpoint(checkpoints_root) if resume else None
+    if latest is not None:
+        loaded = load_adapter_checkpoint(
+            latest,
+            adapter=adapter,
+            optimizer=optimizer,
+            expected=_checkpoint_expected(
+                cfg,
+                prepared,
+                frozen_parameter_sha256=frozen_parameter_sha256,
+            ),
+        )
+        start_step = loaded.global_step
+        sample_cursor = loaded.sample_cursor
+        if sample_cursor != start_step:
+            raise RealTrainingError(
+                "Gate E.4 checkpoint sample cursor differs from step"
+            )
+    elif (
+        resume
+        and checkpoints_root.exists()
+        and any(checkpoints_root.iterdir())
+    ):
+        raise RealTrainingError(
+            "Gate E.4 resume requested without a valid checkpoint"
+        )
+    existing_metrics = _metric_rows_for_resume(
+        metrics_path,
+        start_step=start_step,
+    )
+
+    if state_path.is_file():
+        state = load_json(state_path)
+        if (
+            state["config_fingerprint"] != cfg.fingerprint
+            or state["frozen_parameter_sha256"]
+            != frozen_parameter_sha256
+            or state["initial_adapter_sha256"]
+            != initial_adapter_sha256
+            or list(state["sample_ids"]) != sample_ids
+            or int(state["training_flow_slot_offset"])
+            != DIVERSIFIED_TRAIN_FLOW_SLOT_OFFSET
+            or list(state["heldout_flow_steps"])
+            != list(DIVERSIFIED_HELDOUT_FLOW_STEPS)
+        ):
+            raise RealTrainingError(
+                "Gate E.4 training-state provenance mismatch"
+            )
+        initial_probe = dict(state["initial_probe"])
+    else:
+        if start_step:
+            raise RealTrainingError(
+                "Gate E.4 checkpoint exists without initial state"
+            )
+        initial_probe = evaluate_multiflow_subset_probe(
+            cfg,
+            model,
+            adapter,
+            injector,
+            samples,
+            flow_steps=DIVERSIFIED_HELDOUT_FLOW_STEPS,
+            device=device,
+        )
+        if (
+            float(
+                initial_probe[
+                    "max_gated_delta_to_action_hidden_ratio"
+                ]
+            )
+            != 0
+            or any(
+                float(row["gated_delta_nonzero_fraction"]) != 0
+                for row in initial_probe["per_objective"]
+            )
+        ):
+            raise RealTrainingError(
+                "Gate E.4 zero-gate initialization is not exact identity"
+            )
+        state = {
+            "cache_fingerprint": prepared.cache_fingerprint,
+            "config": cfg.to_dict(),
+            "config_fingerprint": cfg.fingerprint,
+            "frozen_parameter_sha256": frozen_parameter_sha256,
+            "heldout_flow_steps": list(
+                DIVERSIFIED_HELDOUT_FLOW_STEPS
+            ),
+            "initial_adapter_sha256": initial_adapter_sha256,
+            "initial_probe": initial_probe,
+            "sample_ids": sample_ids,
+            "split_fingerprint": prepared.split_fingerprint,
+            "training_flow_slot_offset": (
+                DIVERSIFIED_TRAIN_FLOW_SLOT_OFFSET
+            ),
+            "uses_ground_truth_future_input": False,
+            "variant": cfg.variant,
+        }
+        atomic_write_json(state_path, state)
+
+    if probe_path.is_file():
+        probe_rows = load_jsonl(probe_path)
+        if (
+            not probe_rows
+            or int(probe_rows[0]["global_step"]) != 0
+            or list(probe_rows[0]["sample_ids"]) != sample_ids
+            or float(probe_rows[0]["mean_action_loss"])
+            != float(initial_probe["mean_action_loss"])
+            or [int(row["global_step"]) for row in probe_rows]
+            not in ([0], [0, 200])
+        ):
+            raise RealTrainingError(
+                "Gate E.4 held-out probe history is invalid"
+            )
+        if start_step < 200 and len(probe_rows) != 1:
+            raise RealTrainingError(
+                "Gate E.4 final probe precedes final checkpoint"
+            )
+    else:
+        if start_step:
+            raise RealTrainingError(
+                "Gate E.4 checkpoint exists without initial probe"
+            )
+        probe_rows = [
+            {
+                **initial_probe,
+                "global_step": 0,
+                "learning_rate": cfg.training.learning_rate,
+            }
+        ]
+        atomic_write_jsonl(probe_path, probe_rows)
+
+    new_metrics: list[dict[str, Any]] = []
+    first_non_gate_step: int | None = None
+    first_projector_step: int | None = None
+    first_attention_step: int | None = None
+    for row in existing_metrics:
+        global_step = int(row["global_step"])
+        groups = row["gradient_groups"]
+        if (
+            first_non_gate_step is None
+            and int(groups["non_gate"]["nonzero_element_count"]) > 0
+        ):
+            first_non_gate_step = global_step
+        if (
+            first_projector_step is None
+            and int(
+                groups["future_projector"]["nonzero_element_count"]
+            )
+            > 0
+        ):
+            first_projector_step = global_step
+        if (
+            first_attention_step is None
+            and int(groups["attention"]["nonzero_element_count"]) > 0
+        ):
+            first_attention_step = global_step
+
+    started = time.perf_counter()
+    try:
+        for step in range(start_step, cfg.training.max_steps):
+            global_step = step + 1
+            sample = samples[sample_cursor % len(samples)]
+            flow_slot = diversified_training_flow_slot(global_step)
+            identity = _flow_objective_identity(
+                base_sample_id=sample.base_sample_id,
+                train_seed=cfg.training.train_seed,
+                flow_step=flow_slot,
+            )
+            timestep, action_weight = (
+                _flow_timestep_and_weight_scalars(
+                    model,
+                    sample,
+                    train_seed=cfg.training.train_seed,
+                    step=flow_slot,
+                    device=device,
+                )
+            )
+            if global_step <= 2 and action_weight <= 0:
+                raise RealTrainingError(
+                    "Gate E.4 first two frozen flow slots must "
+                    "have positive official weight"
+                )
+            optimizer.zero_grad(set_to_none=True)
+            torch.cuda.synchronize(device)
+            torch.cuda.reset_peak_memory_stats(device)
+            step_started = time.perf_counter()
+            gate_before = float(
+                adapter.gate.detach().float().cpu()
+            )
+            loss = _loss_for_real_sample(
+                cfg,
+                model,
+                adapter,
+                injector,
+                sample,
+                step=flow_slot,
+                device=device,
+            )
+            if not bool(torch.isfinite(loss).item()):
+                raise RealTrainingError(
+                    "Gate E.4 action loss is NaN/Inf"
+                )
+            loss.backward()
+            groups = adapter_gradient_groups(adapter)
+            if not all(bool(value["finite"]) for value in groups.values()):
+                raise RealTrainingError(
+                    "Gate E.4 Adapter gradient is non-finite"
+                )
+            if global_step == 1 and (
+                float(groups["gate"]["l2"]) <= 0
+                or int(
+                    groups["non_gate"]["nonzero_element_count"]
+                )
+                != 0
+            ):
+                raise RealTrainingError(
+                    "Gate E.4 first-step zero-gate contract failed"
+                )
+            if (
+                first_non_gate_step is None
+                and int(
+                    groups["non_gate"]["nonzero_element_count"]
+                )
+                > 0
+            ):
+                first_non_gate_step = global_step
+            if (
+                first_projector_step is None
+                and int(
+                    groups["future_projector"][
+                        "nonzero_element_count"
+                    ]
+                )
+                > 0
+            ):
+                first_projector_step = global_step
+            if (
+                first_attention_step is None
+                and int(
+                    groups["attention"]["nonzero_element_count"]
+                )
+                > 0
+            ):
+                first_attention_step = global_step
+            backbone_grads = [
+                name
+                for name, parameter in model.named_parameters()
+                if parameter.grad is not None
+            ]
+            if backbone_grads:
+                raise RealTrainingError(
+                    "Gate E.4 frozen Fast-WAM received gradients: "
+                    f"{backbone_grads[:5]}"
+                )
+            diagnostics = adapter.last_diagnostics
+            if diagnostics is None or diagnostics.action_hidden_norm <= 0:
+                raise RealTrainingError(
+                    "Gate E.4 Adapter diagnostics are missing"
+                )
+            gate_gradient = float(
+                adapter.gate.grad.detach().float().cpu()
+            )
+            optimizer.step()
+            sample_cursor += 1
+            torch.cuda.synchronize(device)
+            gate_after = float(
+                adapter.gate.detach().float().cpu()
+            )
+            row = {
+                **identity,
+                "action_hidden_norm": diagnostics.action_hidden_norm,
+                "action_weight": action_weight,
+                "attention_residual_norm": (
+                    diagnostics.attention_residual_norm
+                ),
+                "base_sample_id": sample.base_sample_id,
+                "future_token_norm": diagnostics.future_token_norm,
+                "gate_gradient": gate_gradient,
+                "gate_gradient_sign": (
+                    1
+                    if gate_gradient > 0
+                    else -1
+                    if gate_gradient < 0
+                    else 0
+                ),
+                "gate_raw_after_step": gate_after,
+                "gate_raw_before_step": gate_before,
+                "gated_delta_nonzero_fraction": (
+                    diagnostics.gated_delta_nonzero_fraction
+                ),
+                "gated_delta_norm": diagnostics.gated_delta_norm,
+                "gated_delta_to_action_hidden_ratio": (
+                    diagnostics.gated_delta_norm
+                    / diagnostics.action_hidden_norm
+                ),
+                "global_step": global_step,
+                "gradient_groups": groups,
+                "learning_rate": cfg.training.learning_rate,
+                "loss": float(loss.detach().float().cpu()),
+                "nan_or_inf": False,
+                "peak_memory_mib": (
+                    int(torch.cuda.max_memory_allocated(device))
+                    / 2**20
+                ),
+                "sample_cursor": sample_cursor,
+                "step_time_ms": (
+                    time.perf_counter() - step_started
+                )
+                * 1000.0,
+                "timestep": timestep,
+                "training_flow_slot": flow_slot,
+                "variant": cfg.variant,
+                "zero_weight_objective": action_weight == 0,
+            }
+            if action_weight == 0 and float(row["loss"]) != 0:
+                raise RealTrainingError(
+                    "Gate E.4 zero-weight objective has nonzero loss"
+                )
+            new_metrics.append(row)
+            should_checkpoint = (
+                global_step % cfg.training.checkpoint_interval == 0
+                or global_step == cfg.training.max_steps
+            )
+            if should_checkpoint:
+                committed_metrics = [
+                    *existing_metrics,
+                    *new_metrics,
+                ]
+                atomic_write_jsonl(metrics_path, committed_metrics)
+                checkpoint = (
+                    checkpoints_root / f"step_{global_step:08d}"
+                )
+                save_adapter_checkpoint(
+                    checkpoint,
+                    adapter=adapter,
+                    optimizer=optimizer,
+                    manifest=_checkpoint_manifest(
+                        cfg,
+                        adapter,
+                        split_fingerprint=prepared.split_fingerprint,
+                        cache_fingerprint=prepared.cache_fingerprint,
+                        frozen_parameter_sha256=(
+                            frozen_parameter_sha256
+                        ),
+                        global_step=global_step,
+                        sample_cursor=sample_cursor,
+                        train_sample_count=len(samples),
+                        extra={
+                            "gate_e4_diversified_flow": True,
+                            "heldout_flow_steps": list(
+                                DIVERSIFIED_HELDOUT_FLOW_STEPS
+                            ),
+                            "subset_sample_count": len(samples),
+                            "train_flow_schedule_sha256": (
+                                diversified_flow_schedule_sha256(
+                                    committed_metrics
+                                )
+                            ),
+                            "training_flow_slot_offset": (
+                                DIVERSIFIED_TRAIN_FLOW_SLOT_OFFSET
+                            ),
+                        },
+                    ),
+                )
+                if progress is not None:
+                    progress(
+                        "diversified_flow_checkpoint",
+                        {
+                            "learning_rate": (
+                                cfg.training.learning_rate
+                            ),
+                            "step": global_step,
+                            "training_flow_slot": flow_slot,
+                            "variant": cfg.variant,
+                            "zero_weight_steps": sum(
+                                bool(value["zero_weight_objective"])
+                                for value in committed_metrics
+                            ),
+                        },
+                    )
+            del loss
+            torch.cuda.empty_cache()
+
+        atomic_write_jsonl(
+            metrics_path,
+            [*existing_metrics, *new_metrics],
+        )
+        all_metrics = [*existing_metrics, *new_metrics]
+        if len(all_metrics) != 200:
+            raise RealTrainingError(
+                "Gate E.4 did not commit exactly 200 metrics"
+            )
+        final_probe_rows = [
+            row
+            for row in probe_rows
+            if int(row["global_step"]) == 200
+        ]
+        if final_probe_rows:
+            if len(final_probe_rows) != 1:
+                raise RealTrainingError(
+                    "Gate E.4 final probe is duplicated"
+                )
+            final_probe = final_probe_rows[0]
+        else:
+            final_probe = evaluate_multiflow_subset_probe(
+                cfg,
+                model,
+                adapter,
+                injector,
+                samples,
+                flow_steps=DIVERSIFIED_HELDOUT_FLOW_STEPS,
+                device=device,
+            )
+            final_probe = {
+                **final_probe,
+                "global_step": 200,
+                "learning_rate": cfg.training.learning_rate,
+            }
+            probe_rows.append(final_probe)
+            atomic_write_jsonl(probe_path, probe_rows)
+        final_outcome = multiflow_subset_outcome(
+            initial_probe,
+            final_probe,
+        )
+        latest_checkpoint = find_latest_checkpoint(checkpoints_root)
+        if latest_checkpoint is None:
+            raise RealTrainingError(
+                "Gate E.4 wrote no checkpoint"
+            )
+        roundtrip = _checkpoint_roundtrip(
+            cfg,
+            adapter,
+            optimizer,
+            latest_checkpoint,
+            prepared=prepared,
+            frozen_parameter_sha256=frozen_parameter_sha256,
+            device=device,
+        )
+        schedule_sha256 = diversified_flow_schedule_sha256(
+            all_metrics
+        )
+        result = {
+            "adapter_fingerprint": cfg.adapter_structural_fingerprint,
+            "checkpoint": str(latest_checkpoint),
+            "checkpoint_roundtrip": roundtrip,
+            "completed_steps": 200,
+            "config": cfg.to_dict(),
+            "config_fingerprint": cfg.fingerprint,
+            "device": device,
+            "final_gate_raw": float(
+                adapter.gate.detach().float().cpu()
+            ),
+            "final_probe": final_probe,
+            "first_attention_nonzero_gradient_step": (
+                first_attention_step
+            ),
+            "first_non_gate_nonzero_gradient_step": (
+                first_non_gate_step
+            ),
+            "first_projector_nonzero_gradient_step": (
+                first_projector_step
+            ),
+            "heldout_flow_steps": list(
+                DIVERSIFIED_HELDOUT_FLOW_STEPS
+            ),
+            "initial_adapter_sha256": initial_adapter_sha256,
+            "initial_probe": initial_probe,
+            "learning_rate": cfg.training.learning_rate,
+            "max_peak_memory_mib": max(
+                float(row["peak_memory_mib"])
+                for row in all_metrics
+            ),
+            "mean_step_time_ms": statistics.fmean(
+                float(row["step_time_ms"]) for row in all_metrics
+            ),
+            "metrics": str(metrics_path),
+            "optimizer_parameter_scope": "adapter_only",
+            "outcome": final_outcome,
+            "probe_metrics": str(probe_path),
+            "resumed_from_step": start_step,
+            "sample_count": len(samples),
+            "sample_ids": sample_ids,
+            "status": "complete",
+            "train_flow_schedule_sha256": schedule_sha256,
+            "train_flow_slot_end": diversified_training_flow_slot(200),
+            "train_flow_slot_start": diversified_training_flow_slot(1),
+            "trainable_parameter_count": (
+                adapter.trainable_parameter_count
+            ),
+            "training_flow_slot_offset": (
+                DIVERSIFIED_TRAIN_FLOW_SLOT_OFFSET
+            ),
+            "uses_development_outcomes": False,
+            "uses_ground_truth_future_input": False,
+            "uses_ood_or_success_outcomes": False,
+            "variant": cfg.variant,
+            "wall_s_this_invocation": time.perf_counter() - started,
+            "zero_weight_step_count": sum(
+                bool(row["zero_weight_objective"])
+                for row in all_metrics
+            ),
+        }
+        atomic_write_json(manifest_path, result)
+        atomic_write_json(
+            status_path,
+            {
+                "completed_steps": 200,
                 "finished_at_unix_s": time.time(),
                 "learning_rate": cfg.training.learning_rate,
                 "status": "complete",

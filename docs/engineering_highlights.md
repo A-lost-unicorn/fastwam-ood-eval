@@ -9,7 +9,7 @@
 | 项目 | 状态 | 可用证据 |
 | --- | --- | --- |
 | 配置、planner、adapter、分片、resume、聚合 | 已实现 | `src/`、`configs/`、`tests/` |
-| 自动化测试 | 已通过 | `pytest -q`：248 passed、5 warnings；覆盖阶段一/二回归与 Thought3 Phase A–D 配置、cache、Adapter、resume、泄漏和真实 Gate 编排 |
+| 自动化测试 | 已通过 | `pytest -q`：290 passed、5 warnings；覆盖阶段一/二回归与 Thought3 配置、cache、Adapter、resume、泄漏和真实 Gate 编排 |
 | Conda 环境与激活入口 | 已配置 | `scripts/create_env.sh`、`scripts/activate_env.sh` |
 | checkpoint/stats | 已下载并人工校验 | checkpoint SHA-256 `1000437c...a49579`；stats SHA-256 `30f81ad7...68638` |
 | FastWAM 公共运行时模型 | 已下载并逐文件校验 | `scripts/download_fastwam_runtime_models.sh`；T5、VAE、tokenizer 共约 11.9 GiB |
@@ -28,6 +28,7 @@
 | 阶段三 Phase C 单样本门禁 | SMOKE 已通过 | 真实 K1/K2/K4、upstream parity、zero gate、1 backward、0 backbone grad；执行峰值 12.964 GiB |
 | 阶段三 Phase D 真实 cache | SMOKE 已通过 | 32 samples、96 entries、12 shards；paired/checksum/resume/leakage 全通过；0.806 sample/s；0 optimizer step |
 | 阶段三 Gate E.2 多样本诊断 | FAILED-GATE，工程轨迹完整 | A0/A1 × 三 LR 共 1,200 step；梯度/resume/checkpoint/frozen SHA/13.0 GiB 全通过；无共同 6/8 stable LR，保留负结果并定位单-flow confound |
+| 阶段三 Gate E.3 held-out flow | FAILED-GATE，320/320 probe 完整 | 执行/provenance/zero-weight checks 全通过；E.2 A1 fixed-flow 的 24.19%/40.01% 降幅在 held-out flow 变为 0.025%/−1.31%，阻止不稳定配方进入 OOD |
 
 ## 2. 可以对外说明的工程亮点
 
@@ -326,6 +327,23 @@
   保持 failed。该结果阻止了“梯度可传播”被错误升级成“训练有效”或“OOD
   有提升”，并将下一步收缩到单样本 fixed-noise overfit 诊断。
 
+### 3.25 用 held-out action-flow 识别固定目标拟合
+
+- 问题：8-sample Gate E.2 的 optimizer 与 probe 都把每条 sample 固定到同一个
+  action noise/timestep；少数高-loss objective 的下降可能伪装成稳定训练收益。
+- 方案：冻结六个 checkpoint，在从未进入 optimizer 的
+  `flow_step=1..5` 上做 320 个 forward；先在 sample 内跨 flow 平均，再应用原
+  `10% mean reduction + 6/8 non-worsened` 门槛。
+- 工程纠错：官方 scheduler 在 BF16 `timestep=1000` 的 weight 合法为 0；v1
+  非门控 ratio 遥测因零分母失效后，使用新 Run ID 显式记录 weight，并保留零
+  objective 于主统计。v2 的 8/8 零权重 rows 全部 exact-zero loss。
+- 证据：六条 probe 的 finite、pairing、hidden-scale、catastrophic、memory 和
+  frozen SHA 检查全通过，但 A0 最好仅下降 1.35%/2-of-8，A1 最好仅
+  0.025%/2-of-8；三个 LR 均未通过。
+- 决策：不把 fixed-flow 训练降幅写成 future 收益；冻结下一单变量诊断为每次
+  optimizer visit 使用唯一、A0/A1 配对且与 held-out probe 不重叠的 flow slot，
+  不放宽门槛、不扩 A2/A4、不启动 OOD。
+
 ## 4. 简历表达素材
 
 ### 当前即可使用的版本
@@ -369,6 +387,9 @@
 - 将 fp32 residual、scalar gate 与实际 BF16 hidden delta 分层遥测，发现单样本
   overfit 时 A0/A1 correction 达原 hidden norm 的 1.91×/0.70×；据此拒绝直接
   扩 K，把下一门禁收缩为 8-sample train-only 的 loss/尺度联合诊断。
+- 为 Adapter 训练建立 320-objective held-out action-flow 门禁，识别出
+  fixed-flow train loss 改善没有跨 noise/timestep 泛化；在全部执行与冻结检查
+  通过的情况下仍保留负结果，并用该证据阻止不稳定 checkpoint 进入 OOD rollout。
 
 ### 可直接使用的量化表述
 

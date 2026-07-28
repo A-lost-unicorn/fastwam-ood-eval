@@ -1,7 +1,11 @@
 # Thought3 Gate E.3 v2：Held-out Multi-flow 修复版协议
 
-状态：`PREREGISTERED / NOT RUN`
+状态：`EXECUTED / VALID FAILED GATE`
 证据等级：`ENGINEERING DIAGNOSTIC / NOT MODEL EFFECT`
+
+> 2026-07-28：v2 已完整执行 320/320 forward；实现与审计检查全部通过，但没有
+> A0/A1 共同 eligible LR，故 Gate E.3 有效失败。结果、边界与冻结工件见
+> [thought3_phase_e3_v2_report.md](thought3_phase_e3_v2_report.md)。
 
 ## 1. 目的与边界
 

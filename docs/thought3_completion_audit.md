@@ -16,7 +16,8 @@
 Phase A/B/C/D        completed
 Gate E/E.2           failed overall
 Gate E.3 v1          invalid telemetry run; no gate conclusion
-Gate E.3 v2          zero-weight fix preregistered, not run
+Gate E.3 v2          valid failed gate; 320/320 probes complete
+Gate E.4             diversified train-flow diagnostic pending
 full 28/4 Gate E     not passed
 A2/A4 real training  not started
 Phase F real pilot   not started
@@ -95,7 +96,8 @@ Phase D cache 只能用于训练；不得把它接入 Phase F/G 在线 policy。
 | E.1 | passed | A0/A1 单固定目标可 overfit；不是泛化 |
 | E.2 | failed | 六轨迹完整；无共同 LR 达到 6/8 稳定门槛 |
 | E.3 v1 | invalid run | 官方 `t=1000` 零权重 objective 触发非门控 ratio 实现错误；冻结 SHA 不变，未生成 gate result |
-| E.3 v2 | not run | 新 Run ID 只修复零分母遥测，原样本/门槛/checkpoint 不变 |
+| E.3 v2 | valid failed gate | 320/320 probe 与全部执行检查通过；三个 LR 均未达到 A0/A1 共同 `10% + 6/8` |
+| E.4 | pending | 只把 optimizer objective 从固定 flow 改为 paired diversified train-flow slots；不得运行前改其他变量 |
 | full E | not passed | 仍缺新的 28 train / 4 development 完整闭环 |
 
 在 full E 通过前：
@@ -157,7 +159,7 @@ CPU/mock；`thought3-counterfactual` 在 Fast-WAM backend 上仍返回
 ## 9. 完成最终 Goal 的依赖链
 
 ```text
-run Gate E.3 v2
+run Gate E.4 diversified-flow training diagnostic
   ↓
 if pass: freeze candidate LR
   ↓
@@ -178,16 +180,18 @@ aggregate, bootstrap, failure taxonomy, latency/memory Pareto
 paper/resume conclusions with evidence levels
 ```
 
-若 E.3 v2 或 full E 失败，应继续报告负结果并设计单变量工程诊断，不能跳过 A0、
+若 E.4 或 full E 失败，应继续报告负结果并设计单变量工程诊断，不能跳过 A0、
 shuffle、在线 no-cache 或统计冻结要求。
 
 ## 10. 当前最近一步
 
-最近可执行门禁是 Gate E.3 v2。v1 的源码 commit 为
-`330fe15e5bfcc6a42710fd6564125ec5fc49d66e`，但该次运行没有 Gate 结论；原始
-输出已按 SHA 冻结。v2 使用独立 config/schema/output，只修复官方零权重端点下
-未定义的 objective ratio 遥测。
+Gate E.3 v2 已完整运行并有效失败。A0 held-out mean loss 最好只下降 `1.35%`
+且 2/8 sample 不变差；A1 最好只下降 `0.025%` 且 2/8 不变差。全部
+hidden-scale、catastrophic、pairing、provenance 和 frozen SHA 检查通过。
 
-v2 仍只读 Gate E.2 checkpoint，做 320 个 held-out forward，0
-optimizer/backward。真实运行等待新的用户显式确认，详见
-[thought3_phase_e3_v2_protocol.md](thought3_phase_e3_v2_protocol.md)。
+最近允许设计的门禁是 Gate E.4：保持 8 samples、LR grid、200 step、Adapter、
+cache、loss、held-out probe 和 `10% + 6/8` 门槛不变，只让 optimizer 每次 sample
+访问使用不同且 A0/A1 配对的 train flow slot。真实运行仍须新的用户显式确认。
+E.3 结果见
+[thought3_phase_e3_v2_report.md](thought3_phase_e3_v2_report.md)，E.4 冻结协议见
+[thought3_phase_e4_protocol.md](thought3_phase_e4_protocol.md)。

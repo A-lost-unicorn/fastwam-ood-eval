@@ -260,3 +260,22 @@ zero-init gate 的梯度有明确两步门禁：
 
 只有 loss/gate/分模块 gradient 可诊断、resume 一致、frozen hash 不变且单卡无
 OOM，才扩到 A2/A4。三卡 DDP 和正式 ID/OOD rollout 仍需后续独立门禁。
+
+### 11.1 2026-07-28 实际状态
+
+Gate E 已真实执行，但总门禁未通过：
+
+- A0/A1 各完成 resumed 50→100 和独立 uninterrupted 0→100；
+- 第 1 step 只有 gate 非零 gradient，第 2 step 起
+  projector/attention/non-gate gradient finite 且非零；
+- 强制确定性 CUDA 后，两组 resumed/uninterrupted 最终 Adapter semantic
+  SHA 分别完全一致；
+- A0/A1 development-only checkpoint selection、Adapter-only checkpoint
+  round-trip 和单卡显存通过；
+- v2 A1 development 未低于初始化；v3 A0 fixed train probe 也未低于
+  初始化，因此 `loss 有可诊断下降` 未通过；
+- Gate 在训练后 frozen hash 之前 fail-closed，`frozen before==after` 尚未闭环。
+
+当前先进入单样本 fixed-noise overfit 和注入/优化尺度诊断，不扩 A2/A4。权威数值、
+失败尝试 SHA 与边界见
+[thought3_phase_e_report.md](thought3_phase_e_report.md)。

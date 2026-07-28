@@ -32,6 +32,9 @@
 | `P3-PHASE-B-v1` | 2026-07-27 | 3 / TEST | `src/fastwam_ood_eval/thought3/`、`configs/thought3/`、Thought3 tests | 1.371M Adapter、paired cache、mock trainer、Adapter-only resume、counterfactual、online-no-cache 与旧 CLI 回归通过 | 只证明 CPU/mock 工程 contract；无真实 latent/训练/OOD 结论 |
 | `P3-PHASE-C-v1` | 2026-07-28 | 3 / SMOKE | `configs/thought3/phase_c_single_sample.yaml`；GPU 1；真实 `libero_goal` sample 0 | K1/K2/K4、upstream parity、zero-gate、1 backward、0 backbone grad、12.964 GiB peak；0 cache/optimizer step | Gate C 通过，允许小型真实 cache；不支持训练收敛、OOD 增益或 K 排序 |
 | `P3-PHASE-D-v1` | 2026-07-28 | 3 / SMOKE | commit `02a010e`；`phase_d_cache_smoke.yaml`；GPU 1；`libero_goal` task 0 | 32 base samples × K1/K2/K4 = 96 entries；12 shards；paired/checksum/resume/leakage 通过；0.806 sample/s；12.677 GiB execution peak | Gate D 通过，允许 100–500 step 单卡训练 smoke；不支持收敛、OOD 增益、K 排序或在线 latency |
+| `P3-PHASE-E-v1` | 2026-07-28 | 3 / FAILED-SMOKE | commits `eb5ec8a..2b42964`；GPU 1 | A0 resumed/uninterrupted 各 100 step；默认 CUDA backward 从 step 2 出现微小非确定性，最终 semantic SHA 不同 | invalid diagnosis；促成确定性 CUDA gate，不得用于模型结果 |
+| `P3-PHASE-E-v2` | 2026-07-28 | 3 / FAILED-SMOKE | commit `c4fcadb`；A0/A1；确定性 CUDA | 两组各 50→100 + uninterrupted 100；第 2 step 非 gate grad；最终 SHA 完全一致；A1 development 未低于初始 | 工程恢复/梯度子门禁通过；总 Gate 拒绝，无 future 效果结论 |
+| `P3-PHASE-E-v3` | 2026-07-28 | 3 / FAILED-SMOKE | commit `dc77bd2`；固定 4-sample train probe | A0 两条 100-step 轨迹完全重放；fixed train probe `0.0015776→0.0015993`，未下降，停止于 A0 | Gate E 未通过；进入单样本 overfit/优化诊断，不扩 A2/A4 |
 
 ### `P1-FORMAL-v1` 机器证据
 
@@ -327,6 +330,34 @@
 - optimizer 未创建、backward/optimizer step 为 0、训练未启动。完整解释见
   [thought3_phase_d_report.md](thought3_phase_d_report.md)。
 
+### `P3-PHASE-E-v1/v2/v3` 机器证据
+
+- 数据仍为 Phase D 的 32 个 base sample；训练 join 为 28 train / 4
+  development、1024 行 action target、64 张当前相机帧、0 future RGB。
+- A0/A1 初始化 Adapter semantic SHA 都是
+  `77974a49c3d14fac142322244cc3613dccf0a329a25faa6e7053d99345ae627f`，
+  trainable 参数都为 1,371,137。
+- 第 1 step 只有 gate 非零 gradient；第 2 step 的 projector、attention 和
+  non-gate 路径均出现 finite、nonzero gradient。
+- v1 发现默认 CUDA backward 存在微小非确定性；v2 固定 cuBLAS workspace、
+  deterministic algorithms、math SDP 并关闭 TF32/Flash SDP 后，两次独立
+  2-step 重放逐位一致。
+- v2 A0/A1 的 resumed 50→100 与 uninterrupted 0→100 最终 semantic SHA
+  分别为 `67d0735f...ae00`、`f327127e...a8fb1`，每组内部完全相同。
+- v2 A0 development `0.0184834→0.0183179`；A1
+  `0.0184834→0.0185307`。v3 A0 fixed train probe
+  `0.0015776→0.0015993`，未下降，故总 Gate fail-closed。
+- model load / optimizer step peak 为 23,679.51 / 13,273.17 MiB；确定性
+  step mean 约 662–666 ms。
+- v2 status/log SHA 为
+  `0631de121b683d0c78a2154476c2768d5a33ef1ae87f28c856716f95845fd56f` /
+  `73f227a7db560521261e5985424383194d421b14bb277f9c30d0a76583cb29c1`；
+  v3 为
+  `ab19301eeaf572b6750389f4de0862d1641669da3b8c02089e3fa7ea6b65bc53` /
+  `248fde0261029083ee5bcbca4e91ccd7ede96bb981eb2e56498f19421c679678`。
+- Gate 在 frozen-after hash 前停止，因此该项仍未闭环。完整失败边界与下一步见
+  [thought3_phase_e_report.md](thought3_phase_e_report.md)。
+
 ## 2. 失败尝试与解决记录
 
 | 日期/尝试 | 现象 | 根因 | 修复与证据 | 是否污染实验 |
@@ -339,6 +370,9 @@
 | 2026-07-23 / static calibration v1 协议复核 | 99% 分位数已固定，但 source manifest 未写插值方法；线性小样本分位数会低于观测最大 null | 把正式方法锁为保守 `higher`，增加自动 freeze check；协议 hash 变化时 dry-run/real 均拒绝复用旧目录 | v1 raw energy 不变，聚合只给 candidate；v2/FORMAL 必须新目录 | 否；没有改写 raw calibration 或 diagnostic JSONL |
 | 2026-07-23 / outcome-blind cohort draft v1 | 随机 Clean 子集没有保证包含 OOD 共用的 episode index 0，削弱预先配对 | v1 只按 selection hash 抽样，没有 anchor 约束 | 新增 `anchor_episode_indices`，v2 每个 Clean task 固定 index 0；v1 目录只保留审计并标为 superseded | 否；只有 manifest 草案，未执行 episode、未读取 outcome |
 | 2026-07-24 / 三卡 full 启动前预检 | runner 立即返回，`nvidia-smi` 报 NVML driver/library mismatch | 内核仍加载 580.159.03，用户态 NVML/DKMS 已升级到 580.173.02；原脚本在 command substitution 中被 `set -e` 静默截断 | 显式捕获并打印 `nvidia-smi -i` 错误，重启加载 580.173.02；commit `575ba8f` 后正式运行完成 | 否；模型未加载、无 rollout/result |
+| 2026-07-28 / Phase E v1 preflight | split fingerprint lookup 与 progress callback 接口报错 | orchestration 误读 validator 字段；callback 签名与 trainer contract 不同 | commits `9b51179`、`2b42964`；257 tests 通过 | 否；均在 optimizer step 0 前停止 |
+| 2026-07-28 / Phase E v1 A0 replay | resumed/uninterrupted 最终 Adapter SHA 不同 | CUDA backward reduction 从 step 2 产生极小非确定性 | v2 固定 cuBLAS/deterministic/math-SDP；两步 preflight 和 100-step replay SHA 完全一致 | 否；v1 独立目录保留为 invalid diagnosis |
+| 2026-07-28 / Phase E v2/v3 loss gates | A1 development 未下降；固定 A0 train probe 也未下降 | 当前 100-step zero-gated 配方没有表现出稳定 loss 改善；不是 gradient 断链 | 总 Gate 保持 failed；下一步做单样本 fixed-noise overfit 和注入尺度诊断 | 否；没有 OOD/rollout，未扩 A2/A4 |
 
 冷启动观测：2-step smoke 中 Wan 组件装载约 `336–433 s`；20-step OOD
 三进程观测到约 `604.37 s`，Clean 单进程为 `521.74 s`。这不是单次 future
@@ -384,6 +418,10 @@ Provenance 补充核对：Fast-WAM 和 LIBERO checkout clean；LIBERO-Plus
     future latent cache。
 17. Phase D 的 12-shard cache 可检测单字节损坏并在 no-op resume 时避免模型
     重载；这是 cache 工程可靠性证据，不是 Adapter 收敛或 OOD 效果证据。
+18. Phase E 真实训练证明 zero gate 第 1 step 后，第 2 step 的
+    projector/attention 等非 gate 参数会获得 finite、nonzero gradient。
+19. 在确定性 CUDA 协议下，A0/A1 的 50→100 resume 与独立 0→100 训练最终
+    Adapter semantic SHA 完全一致；该结论只覆盖工程恢复，不代表模型有效。
 
 ### 尚未支持
 
@@ -398,6 +436,8 @@ Provenance 补充核对：Fast-WAM 和 LIBERO checkout clean；LIBERO-Plus
    formal future 指标生成前没有冻结。
 6. 20-step shadow RGB 生成成本是否等于阶段三 cached latent 或在线 Adapter
    成本；阶段三必须单独计时。
+7. 当前 Adapter 配方是否有稳定、可诊断的 loss 改善。v3 fixed train probe
+   未下降，Gate E 整体未通过；A2/A4 和任何阶段三成功率仍被锁定。
 
 ## 4. 待填论文主表
 

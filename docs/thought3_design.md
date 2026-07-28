@@ -1,6 +1,7 @@
 # Thought3 设计：Partial-Future Adapter
 
-状态：Phase A 设计已于 2026-07-27 确认；Phase B CPU/mock 已实现，真实模型仍未加载
+状态：Phase A–D 已通过；Phase E 真实 A0/A1 小训练已执行但 loss/frozen 闭环未通过，
+当前阻塞在 Gate E.1 优化诊断
 科学问题：显式读取低成本 future latent，能否改善 Fast-WAM 的 OOD 控制，而收益不是由
 额外参数、重新训练或错误对照造成？
 

@@ -237,13 +237,19 @@ Phase B closure：全量回归、冻结哈希和最终测试分母见
 
 ### Gate E：训练
 
-- [ ] A0/A1 100–500 steps；
-- [ ] loss/gate/grad finite；
+- [x] A0/A1 100–500 steps；
+- [x] loss/gate/grad finite；
 - [ ] loss 有可诊断下降；
-- [ ] uninterrupted/resumed 一致；
-- [ ] dev-only checkpoint selection；
+- [x] uninterrupted/resumed 一致；
+- [x] dev-only checkpoint selection；
 - [ ] 无 frozen 变化；
-- [ ] 单卡无 OOM。
+- [x] 单卡无 OOM。
+
+2026-07-28 状态：v2 已完成 A0/A1 各 100-step resumed/uninterrupted；
+第 2 step 非 gate gradient、semantic SHA、checkpoint selection 和显存通过。
+v3 fixed train probe 未低于初始化，且 fail-fast 发生在 frozen-after hash
+之前，因此 Gate E 总体仍未通过。详见
+[thought3_phase_e_report.md](thought3_phase_e_report.md)。
 
 ### Gate F：技术 pilot
 

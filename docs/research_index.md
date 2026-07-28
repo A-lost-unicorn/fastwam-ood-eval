@@ -25,7 +25,7 @@
 | 阶段二正式抽样 | outcome-blind planner、anchor、exact-ratification 与 formal gate 已实现 | 200 Clean + 532 OOD 已 exact-ratify 并全部运行 | **完成**。只认证 Phase 2 future 指标前 job ID 不变；不冒充阶段一 outcome 前 preregistration |
 | 阶段二统计协议 | episode→task 分层、task bootstrap、首 probe/outcome gate 已实现 | 10,000 次 suite-stratified task bootstrap；730/732 outcome match | **post-run analysis 完成，非 preregistered confirmatory**。DRAFT 未在正式指标前冻结；人工 endpoint 待完成 |
 | 阶段二 B：action-conditioned future consistency | 严格门禁、schema、runner、测试已实现 | CPU/mock 与门禁测试通过 | **阻塞**。官方 release 为 `action_conditioned=false`，且没有可信匹配 checkpoint |
-| 阶段三：Future-to-Action Adapter | Phase A/B/C 完成；Phase D 小规模真实 cache gate 已通过 | 1 个 `libero_goal` task；32 base samples；K=1/2/4 共 96 entries、12 shards；paired/checksum/resume/leakage 全通过 | **允许进入 Phase E 100–500 step 单卡训练 smoke**。仍无收敛、ID/OOD 增益或 K 优劣结论 |
+| 阶段三：Future-to-Action Adapter | Phase A/B/C/D 完成；Phase E 真实小训练已执行但总 Gate 未通过 | A0/A1 各完成 resumed/uninterrupted 100 step；第 2 step 非 gate 梯度、Adapter-only resume、确定性 SHA、单卡显存通过；固定 loss probe 未稳定下降 | **阻塞在 Gate E.1 优化诊断**。不得扩 A2/A4 或启动 ID/OOD；无 future 增益或 K 优劣结论 |
 
 因此，“阶段一已经完成”的准确说法是：**阶段一工程、正式全量计算、聚合与
 完整性审计均已完成；失败机制人工 taxonomy 尚未完成，但不阻塞主成功率结论。**
@@ -153,6 +153,7 @@ OOD 一致性下降假设”，不能进入论文结论表。
 - 阶段三 Phase B 验收：[thought3_phase_b_report.md](thought3_phase_b_report.md)
 - 阶段三 Phase C 验收：[thought3_phase_c_report.md](thought3_phase_c_report.md)
 - 阶段三 Phase D 验收：[thought3_phase_d_report.md](thought3_phase_d_report.md)
+- 阶段三 Phase E 验收/失败诊断：[thought3_phase_e_report.md](thought3_phase_e_report.md)
 - 阶段三数据/训练/评测：[thought3_data_protocol.md](thought3_data_protocol.md)、[thought3_training.md](thought3_training.md)、[thought3_evaluation.md](thought3_evaluation.md)
 - 阶段三分析 DRAFT 与限制：[thought3_analysis_protocol_DRAFT.md](thought3_analysis_protocol_DRAFT.md)、[thought3_limitations.md](thought3_limitations.md)
 - 阶段三旧版路线摘要：[thought3_adapter_plan.md](thought3_adapter_plan.md)
@@ -161,12 +162,13 @@ OOD 一致性下降假设”，不能进入论文结论表。
 
 ## 7. 当前优先级
 
-1. 阶段三执行 Gate E：先完成真实 training identity/action-target join 和按模块
-   gradient telemetry，再跑 A0/A1 单卡 100–500 step；确认第 1 step 打开 gate，
-   后续 projector/attention 等非 gate 参数出现 finite nonzero gradient。
-2. Gate E 同时验证 train/development loss、单卡显存、frozen-backbone hash、
-   Adapter-only checkpoint，以及 interrupted resume 与 uninterrupted 的最终
-   Adapter semantic hash 一致；Gate 通过前不扩 A2/A4。
+1. 阶段三执行 Gate E.1：用单条、固定 noise/timestep 的标准 LIBERO train
+   sample 做 A0/A1 overfit 诊断，记录 gate/residual/BF16 hidden delta 和分模块
+   gradient-to-parameter ratio；不读取 OOD outcome。
+2. 当前 Gate E 已确认第 1 step 只打开 gate、第 2 step 起 projector/attention
+   获得 finite nonzero gradient，且 interrupted/uninterrupted Adapter SHA
+   完全一致；但固定 loss probe 未下降。修复该优化门禁并补 frozen hash after
+   前，不扩 A2/A4。
 3. 在不按自动 metric/outcome 挑案例的前提下，冻结正式 human-review budget、
    seed 和每 job 至多一个 probe；至少两名 reviewer 独立标注并保留 agreement/
    adjudication。

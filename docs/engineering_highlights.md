@@ -308,6 +308,23 @@
 - 边界：这是 `SMOKE` 级 cache 工程证据。没有 optimizer、训练、robot rollout
   或成功率，不能声称未来提高 OOD，也不能把离线 sampling 当在线总延迟。
 
+### 3.24 让 zero-gated 真实训练可诊断、可确定性恢复
+
+- 问题：zero-init gate 的第 1 step 只允许 gate 获得非零梯度；只记录 Adapter
+  总 grad norm 会掩盖 projector/attention 永远为零的断链。同时默认 CUDA
+  backward 的极小 reduction 差异会使独立重放最终权重 hash 不同。
+- 方案：对 gate、future projector、position/norm、Q/K/V/out attention 和全部
+  non-gate 参数分别记录 finite/nonzero/L2；强制 cuBLAS workspace、PyTorch
+  deterministic algorithms、math SDP，并关闭 TF32/Flash SDP。
+- 证据：A0/A1 第 1 step non-gate nonzero 均为 0，第 2 step 分别达到
+  1,321,983 / 1,371,102；两组 50→100 resume 与独立 0→100 的最终 Adapter
+  semantic SHA 完全一致。
+- 资源：1,371,137 个 trainable 参数，模型/训练峰值约 23.12/12.96 GiB，
+  deterministic step mean 约 0.66 s。
+- 负面门禁：A1 development 和 v3 A0 fixed train probe 未稳定改善，总 Gate
+  保持 failed。该结果阻止了“梯度可传播”被错误升级成“训练有效”或“OOD
+  有提升”，并将下一步收缩到单样本 fixed-noise overfit 诊断。
+
 ## 4. 简历表达素材
 
 ### 当前即可使用的版本
@@ -340,6 +357,10 @@
 - 在单张 RTX 4090 上从标准 LIBERO 当前观测生成 96 条真实 K-step future
   latent，以 12 个原子 shard 落盘；实现 12/12 no-op resume 无模型重载、
   单字节损坏检测和 0 future-RGB source audit，执行峰值 12.677 GiB。
+- 为真实 zero-gated Adapter 训练实现按模块梯度遥测与确定性 CUDA 重放；
+  验证 gate 更新后的第 2 step 有百万级 non-gate 元素获得梯度，A0/A1 的
+  checkpoint-resume 与 uninterrupted 最终权重 SHA 完全一致，并用 loss
+  fail-closed 门禁阻止未收敛配方进入 OOD 评测。
 
 ### 可直接使用的量化表述
 

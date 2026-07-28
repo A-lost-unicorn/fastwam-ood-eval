@@ -29,10 +29,11 @@ fi
 export CUDA_VISIBLE_DEVICES="${physical_gpu_id}"
 export THOUGHT3_PHYSICAL_GPU_ID="${physical_gpu_id}"
 export HF_DATASETS_CACHE="${THOUGHT3_HF_DATASETS_CACHE:-/tmp/thought3_phase_e_hf_cache}"
+export CUBLAS_WORKSPACE_CONFIG="${CUBLAS_WORKSPACE_CONFIG:-:4096:8}"
 export TOKENIZERS_PARALLELISM=false
 export PYTHONPATH="${project_root}/src:${project_root}/third_party/FastWAM:${project_root}/third_party/FastWAM/experiments/libero${PYTHONPATH:+:${PYTHONPATH}}"
 
-log_dir="${project_root}/outputs/thought3/phase_e_training_smoke_v1/logs"
+log_dir="${project_root}/outputs/thought3/phase_e_training_smoke_v2/logs"
 mkdir -p "${log_dir}"
 log_path="${log_dir}/phase_e.log"
 

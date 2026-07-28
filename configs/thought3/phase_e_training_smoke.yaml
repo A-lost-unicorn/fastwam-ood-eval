@@ -2,7 +2,7 @@ schema_version: thought3.config.v1
 variant: A1
 experiment:
   name: thought3_phase_e_training_smoke
-  output_dir: outputs/thought3/phase_e_training_smoke_v1
+  output_dir: outputs/thought3/phase_e_training_smoke_v2
   seed: 3407
 runtime:
   backend: fastwam

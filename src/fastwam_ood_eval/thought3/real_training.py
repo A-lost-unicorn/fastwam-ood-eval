@@ -807,6 +807,101 @@ def adapter_gradient_groups(
     return result
 
 
+def probe_two_step_determinism(
+    cfg: Thought3Config,
+    *,
+    model: Any,
+    prepared: PreparedRealTrainingData,
+    device: str,
+) -> dict[str, Any]:
+    """Run two in-memory optimizer steps for an exact CUDA replay preflight."""
+
+    train_samples = _ordered_samples(
+        (sample for sample in prepared.samples if sample.split == "train"),
+        seed=cfg.training.train_seed,
+    )
+    if len(train_samples) != 28:
+        raise RealTrainingError(
+            "two-step determinism probe requires 28 training samples"
+        )
+    adapter = build_real_adapter(cfg, device=device)
+    initial_sha256 = adapter_state_sha256(adapter.state_dict())
+    optimizer = torch.optim.AdamW(
+        adapter.parameters(),
+        lr=cfg.training.learning_rate,
+        weight_decay=cfg.training.weight_decay,
+    )
+    injector = ActionEncoderFutureInjector(
+        model.action_expert.action_encoder,
+        adapter,
+    )
+    rows: list[dict[str, Any]] = []
+    try:
+        for step in range(2):
+            optimizer.zero_grad(set_to_none=True)
+            loss = _loss_for_real_sample(
+                cfg,
+                model,
+                adapter,
+                injector,
+                train_samples[step],
+                step=step,
+                device=device,
+            )
+            loss.backward()
+            groups = adapter_gradient_groups(adapter)
+            if not all(bool(value["finite"]) for value in groups.values()):
+                raise RealTrainingError(
+                    "determinism probe produced a non-finite gradient"
+                )
+            if step == 0 and (
+                float(groups["gate"]["l2"]) <= 0
+                or int(groups["non_gate"]["nonzero_element_count"]) != 0
+            ):
+                raise RealTrainingError(
+                    "determinism probe failed first-step zero-gate contract"
+                )
+            if step == 1 and (
+                int(
+                    groups["future_projector"][
+                        "nonzero_element_count"
+                    ]
+                )
+                <= 0
+                or int(
+                    groups["attention"]["nonzero_element_count"]
+                )
+                <= 0
+            ):
+                raise RealTrainingError(
+                    "determinism probe failed second-step gradient contract"
+                )
+            optimizer.step()
+            torch.cuda.synchronize(device)
+            rows.append(
+                {
+                    "gate": float(adapter.gate.detach().cpu()),
+                    "gradient_groups": groups,
+                    "loss": float(loss.detach().cpu()),
+                    "step": step + 1,
+                }
+            )
+            del loss
+        return {
+            "final_adapter_sha256": adapter_state_sha256(
+                adapter.state_dict()
+            ),
+            "initial_adapter_sha256": initial_sha256,
+            "optimizer_steps": 2,
+            "rows": rows,
+            "variant": cfg.variant,
+        }
+    finally:
+        injector.close()
+        del optimizer, adapter
+        torch.cuda.empty_cache()
+
+
 @torch.no_grad()
 def evaluate_real_action_loss(
     cfg: Thought3Config,

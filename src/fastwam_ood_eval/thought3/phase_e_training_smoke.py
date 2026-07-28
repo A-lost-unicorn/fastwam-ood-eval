@@ -33,6 +33,7 @@ from fastwam_ood_eval.thought3.phase_c_smoke import _load_upstream_model
 from fastwam_ood_eval.thought3.real_training import (
     PreparedRealTrainingData,
     prepare_real_training_data,
+    probe_two_step_determinism,
     run_real_variant_training,
 )
 from fastwam_ood_eval.thought3.safety import ensure_thought3_output_path
@@ -540,10 +541,19 @@ def _run_phase_e(
         raise PhaseEGateError(
             "Phase E requires exactly one CUDA-visible GPU"
         )
+    if os.environ.get("CUBLAS_WORKSPACE_CONFIG") != ":4096:8":
+        raise PhaseEGateError(
+            "Phase E requires CUBLAS_WORKSPACE_CONFIG=:4096:8"
+        )
     torch.cuda.set_device("cuda:0")
-    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.use_deterministic_algorithms(True)
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
+    torch.backends.cuda.enable_flash_sdp(False)
+    torch.backends.cuda.enable_mem_efficient_sdp(False)
+    torch.backends.cuda.enable_math_sdp(True)
     np.random.seed(cfg.experiment.seed)
     torch.manual_seed(cfg.experiment.seed)
     torch.cuda.manual_seed_all(cfg.experiment.seed)
@@ -590,6 +600,31 @@ def _run_phase_e(
         iter(model.named_parameters())
     )
     _progress("frozen_hash_before", sha256=frozen_before)
+    determinism_preflight: dict[str, Any] = {}
+    for variant in ("A0", "A1"):
+        probe_cfg = variants[variant]["resumed"]
+        first_probe = probe_two_step_determinism(
+            probe_cfg,
+            model=model,
+            prepared=prepared,
+            device="cuda:0",
+        )
+        second_probe = probe_two_step_determinism(
+            probe_cfg,
+            model=model,
+            prepared=prepared,
+            device="cuda:0",
+        )
+        if first_probe != second_probe:
+            raise PhaseEGateError(
+                f"{variant} two-step deterministic replay differs"
+            )
+        determinism_preflight[variant] = first_probe
+        _progress(
+            "determinism_preflight_passed",
+            adapter_sha256=first_probe["final_adapter_sha256"],
+            variant=variant,
+        )
     results: dict[str, dict[str, Mapping[str, Any]]] = {}
     validations: dict[str, dict[str, Mapping[str, Any]]] = {}
     for variant in ("A0", "A1"):
@@ -677,8 +712,15 @@ def _run_phase_e(
         "determinism": {
             "a0_resumed_equals_uninterrupted": True,
             "a1_resumed_equals_uninterrupted": True,
+            "cublas_workspace_config": ":4096:8",
             "cudnn_benchmark": False,
             "cudnn_deterministic": True,
+            "deterministic_algorithms": True,
+            "flash_sdp": False,
+            "math_sdp": True,
+            "mem_efficient_sdp": False,
+            "preflight": determinism_preflight,
+            "tf32": False,
         },
         "frozen_parameter_sha256_after": frozen_after,
         "frozen_parameter_sha256_before": frozen_before,
@@ -703,6 +745,7 @@ def _run_phase_e(
             "long_training_started": False,
             "ood_evaluation_started": False,
             "primary_optimizer_steps": 200,
+            "replay_preflight_optimizer_steps": 8,
             "reference_optimizer_steps": 200,
             "rollout_started": False,
             "single_gpu": True,

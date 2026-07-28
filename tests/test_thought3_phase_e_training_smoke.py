@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
+import fastwam_ood_eval.thought3.phase_e_training_smoke as phase_e
 from fastwam_ood_eval.thought3.adapter import (
     FutureAdapterSpec,
     FutureToActionAdapter,
@@ -15,6 +16,7 @@ from fastwam_ood_eval.thought3.phase_e_training_smoke import (
     _assert_phase_e_scope,
     _matched_recipe_payload,
     _run_phase_e,
+    _verify_phase_d_gate,
     derive_variant_config,
 )
 from fastwam_ood_eval.thought3.real_training import (
@@ -179,3 +181,43 @@ def test_phase_e_refuses_without_confirmation_before_model_load(
     )
     with pytest.raises(RuntimeError, match="CONFIRM_THOUGHT3_PHASE_E"):
         _run_phase_e(cfg, resume=False)
+
+
+def test_phase_e_reads_split_fingerprint_from_frozen_gate_d_result(
+    monkeypatch,
+) -> None:
+    cfg = load_thought3_config(
+        "configs/thought3/phase_e_training_smoke.yaml"
+    )
+    monkeypatch.setattr(phase_e, "PHASE_D_FROZEN", {})
+    monkeypatch.setattr(
+        phase_e,
+        "load_json",
+        lambda path: (
+            {"gate_d_passed": True}
+            if str(path).endswith("run_status.json")
+            else {
+                "gate_d_passed": True,
+                "plan": {
+                    "split_fingerprint": (
+                        phase_e.PHASE_D_SPLIT_FINGERPRINT
+                    )
+                },
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        phase_e,
+        "validate_cache",
+        lambda root: {
+            "cache_fingerprint": phase_e.PHASE_D_CACHE_FINGERPRINT,
+            "entry_count": 96,
+            "shard_count": 12,
+            "uses_ground_truth_future": False,
+        },
+    )
+    report = _verify_phase_d_gate(cfg)
+    assert (
+        report["split_fingerprint"]
+        == phase_e.PHASE_D_SPLIT_FINGERPRINT
+    )

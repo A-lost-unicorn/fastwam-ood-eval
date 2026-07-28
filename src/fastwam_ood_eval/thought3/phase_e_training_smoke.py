@@ -183,9 +183,12 @@ def _verify_phase_d_gate(cfg: Thought3Config) -> dict[str, Any]:
     ):
         raise PhaseEGateError("frozen Phase D gate does not report pass")
     cache = validate_cache(cfg.cache.root)
+    split_fingerprint = result.get("plan", {}).get(
+        "split_fingerprint"
+    )
     if (
         cache.get("cache_fingerprint") != PHASE_D_CACHE_FINGERPRINT
-        or cache.get("split_fingerprint") != PHASE_D_SPLIT_FINGERPRINT
+        or split_fingerprint != PHASE_D_SPLIT_FINGERPRINT
         or int(cache.get("entry_count", -1)) != 96
         or int(cache.get("shard_count", -1)) != 12
         or cache.get("uses_ground_truth_future") is not False
@@ -196,7 +199,7 @@ def _verify_phase_d_gate(cfg: Thought3Config) -> dict[str, Any]:
         "cache_fingerprint": cache["cache_fingerprint"],
         "entry_count": cache["entry_count"],
         "shard_count": cache["shard_count"],
-        "split_fingerprint": cache["split_fingerprint"],
+        "split_fingerprint": split_fingerprint,
     }
 
 

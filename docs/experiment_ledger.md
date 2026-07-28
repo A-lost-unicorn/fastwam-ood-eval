@@ -35,6 +35,7 @@
 | `P3-PHASE-E-v1` | 2026-07-28 | 3 / FAILED-SMOKE | commits `eb5ec8a..2b42964`；GPU 1 | A0 resumed/uninterrupted 各 100 step；默认 CUDA backward 从 step 2 出现微小非确定性，最终 semantic SHA 不同 | invalid diagnosis；促成确定性 CUDA gate，不得用于模型结果 |
 | `P3-PHASE-E-v2` | 2026-07-28 | 3 / FAILED-SMOKE | commit `c4fcadb`；A0/A1；确定性 CUDA | 两组各 50→100 + uninterrupted 100；第 2 step 非 gate grad；最终 SHA 完全一致；A1 development 未低于初始 | 工程恢复/梯度子门禁通过；总 Gate 拒绝，无 future 效果结论 |
 | `P3-PHASE-E-v3` | 2026-07-28 | 3 / FAILED-SMOKE | commit `dc77bd2`；固定 4-sample train probe | A0 两条 100-step 轨迹完全重放；fixed train probe `0.0015776→0.0015993`，未下降，停止于 A0 | Gate E 未通过；进入单样本 overfit/优化诊断，不扩 A2/A4 |
+| `P3-PHASE-E1-v1` | 2026-07-28 | 3 / ENGINEERING DIAGNOSTIC | prereg commit `30ffc93`；GPU 1；单 train sample、固定 noise/timestep；A0/A1 各 200 step | A0 loss `0.0358901→0.0025362`（−92.93%）；A1 `→0.0001490`（−99.58%）；first non-gate step=2；frozen SHA before=after | Gate E.1 通过，只证明单目标可拟合；发现 BF16 delta/action-hidden 为 A0 1.91×、A1 0.70×；Gate E、A2/A4、OOD 仍锁定 |
 
 ### `P1-FORMAL-v1` 机器证据
 

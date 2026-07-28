@@ -156,6 +156,8 @@ OOD 一致性下降假设”，不能进入论文结论表。
 - 阶段三 Phase E 验收/失败诊断：[thought3_phase_e_report.md](thought3_phase_e_report.md)
 - 阶段三 Gate E.1 单样本诊断预注册：
   [thought3_phase_e1_protocol.md](thought3_phase_e1_protocol.md)
+- 阶段三 Gate E.1 单样本诊断结果：
+  [thought3_phase_e1_report.md](thought3_phase_e1_report.md)
 - 阶段三数据/训练/评测：[thought3_data_protocol.md](thought3_data_protocol.md)、[thought3_training.md](thought3_training.md)、[thought3_evaluation.md](thought3_evaluation.md)
 - 阶段三分析 DRAFT 与限制：[thought3_analysis_protocol_DRAFT.md](thought3_analysis_protocol_DRAFT.md)、[thought3_limitations.md](thought3_limitations.md)
 - 阶段三旧版路线摘要：[thought3_adapter_plan.md](thought3_adapter_plan.md)
@@ -164,17 +166,16 @@ OOD 一致性下降假设”，不能进入论文结论表。
 
 ## 7. 当前优先级
 
-1. 阶段三执行 Gate E.1：用单条、固定 noise/timestep 的标准 LIBERO train
-   sample 做 A0/A1 overfit 诊断，记录 gate/residual/BF16 hidden delta 和分模块
-   gradient-to-parameter ratio；不读取 OOD outcome。
-2. 当前 Gate E 已确认第 1 step 只打开 gate、第 2 step 起 projector/attention
-   获得 finite nonzero gradient，且 interrupted/uninterrupted Adapter SHA
-   完全一致；但固定 loss probe 未下降。修复该优化门禁并补 frozen hash after
-   前，不扩 A2/A4。
-3. 在不按自动 metric/outcome 挑案例的前提下，冻结正式 human-review budget、
+1. Gate E.1 已通过：A0/A1 单样本固定 loss 分别下降 92.93%/99.58%，且
+   frozen-before/after SHA 完全相同；这只证明注入图可以 overfit。
+2. 阶段三下一步先冻结 Gate E.2：8-sample train-only 的少量 LR/尺度诊断，
+   同时约束 loss 与 BF16 `delta/action-hidden`，不读取 development/OOD outcome。
+3. Gate E 多样本 fixed probe 尚未下降，且 Gate E.1 出现 A0 1.91×、A1 0.70×
+   hidden correction；在稳定配方和完整 28/4 Gate E 通过前，不扩 A2/A4。
+4. 在不按自动 metric/outcome 挑案例的前提下，冻结正式 human-review budget、
    seed 和每 job 至多一个 probe；至少两名 reviewer 独立标注并保留 agreement/
    adjudication。
-4. 人工 endpoint 只回答 goal progress、physical plausibility、局部 action
+5. 人工 endpoint 只回答 goal progress、physical plausibility、局部 action
    execution 和 future–actual agreement；不把它升级成 future-to-action 因果。
-5. 阶段三 OOD 结果不用于边训练边选择 K，
+6. 阶段三 OOD 结果不用于边训练边选择 K，
    Phase F 后先冻结分析协议再解锁正式 cohort。

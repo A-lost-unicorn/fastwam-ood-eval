@@ -223,21 +223,22 @@ outputs/thought3/phase_e_training_smoke_v3/  # fixed train-probe failure
 
 三个目录都必须保留。不要删除失败 run 后复用相同 Run ID。
 
-## 10. 下一步：Gate E.1 优化诊断
+## 10. Gate E.1 后续诊断
 
-在扩到 A2/A4 前，先做不涉及 OOD outcome 的最小诊断：
+Gate E.1 已按不涉及 OOD outcome 的最小协议完成：
 
-1. 单条标准 LIBERO train sample、固定 action noise/timestep，分别让 A0/A1
-   重复优化 100–300 step，验证是否能 overfit；
-2. 记录 gate gradient 符号、gate/residual scale、BF16 注入前后实际 hidden
-   delta，以及 projector/attention gradient-to-parameter ratio；
-3. 若单样本不能明显下降，优先检查注入尺度、gate optimizer group 和 loss
-   连接，不扩大数据或 K；
-4. 若单样本能下降，再用 8-sample train-only probe 比较 `1e-4/3e-4/1e-3`
-   等预先列出的少量 LR，不读取 development/OOD 结果来挑配方；
-5. 冻结一个配方后重新跑 28/4 Gate E，并确保 frozen hash after 与 before
-   完全相同；
-6. 只有 Gate E 完整通过才解锁 A2/A4 和 Phase F。
+1. A0/A1 各 200 step 的单样本固定 loss 分别下降 92.93%/99.58%；
+2. step 1 gate-only、step 2 non-gate、checkpoint round-trip 均通过；
+3. frozen-before/after 均为 `ac0dd59d…ceb4f8`；
+4. 但 step 200 的实际 BF16 delta/action-hidden 比率达到 A0 1.91×、A1
+   0.70×，暴露新的尺度稳定性问题；
+5. 下一步先做预注册 8-sample train-only LR/尺度诊断，不读取
+   development/OOD outcome；
+6. 冻结稳定配方后重新跑 28/4 Gate E；只有 Gate E 完整通过才解锁 A2/A4。
 
 当前阶段最重要的负面工程结论是：**梯度能传播，不等于当前优化配方已经学到稳定
 有效的 future-to-action 修正。**
+
+Gate E.1 的完整数字、逐步 gradient-to-parameter ratio、hidden delta、运行耗时和
+机器工件 SHA 见
+[thought3_phase_e1_report.md](thought3_phase_e1_report.md)。

@@ -1,6 +1,6 @@
 # Thought3 风险登记与停止条件
 
-状态：Phase A 已确认、Phase B 已完成；每次 gate 后更新
+状态：Phase A–D 已通过；Gate E 未通过；Gate E.1 工程诊断已通过
 范围：Partial-Future Adapter 的数据、cache、训练、推理、统计和阶段隔离
 
 ## 1. 等级
@@ -35,7 +35,7 @@
 | R10 | B0 与 zero-gate A0 初始动作不一致 | 中 | High | fixed-seed action allclose/hash | 初始差异超预注册容差即停止，先修注入路径 | B/C | Controlled |
 | R11 | 注入 hook 未调用、重复调用或泄露上一 batch context | 中 | Critical | hook counter、context lifecycle test | context manager + exact call count + finally cleanup；异常即失败 | B/C | Controlled |
 | R12 | 中层 hook 与 gradient checkpoint 重算冲突 | 中 | High | forward/backward call count、grad comparison | v1 改用 action encoder 输出；中层方案不进入第一版 | B | Controlled |
-| R13 | zero gate 长时间不开，Adapter 实际忽略 future | 高 | High | gate、submodule grad norm、counterfactual | 100–500 step dev smoke；允许结论为“未使用”，不得用正式集反复调 | E/F | Open |
+| R13 | zero gate 长时间不开，Adapter 实际忽略 future | 高 | High | gate、submodule grad norm、counterfactual | Gate E.1 已证实 step 2 non-gate gradient 和单目标可拟合；多样本与反事实使用仍需 E/F | E/F | Controlled |
 | R14 | Adapter attention mask 全 false 导致 NaN | 低 | High | finite test、mask validator | 每 sample 至少 1 token；masked softmax 单测；NaN 立即停止 | B/C | Controlled |
 | R15 | 上游 full `training_loss()` 把真实 future 带入图 | 高 | Critical | call audit、forbidden API test | 新 action-only loss；Thought3 trainer 禁止调用上游 full loss | B/C | Controlled |
 | R16 | action loss 与官方 flow target/weight 不一致 | 中 | Critical | formula parity test、fixed tensor reference | 逐项复用 scheduler/target/mask/reduction；不一致即停止 | B/C | Controlled |
@@ -47,17 +47,17 @@
 | R22 | upstream checkpoint `strict=False` 掩盖 identity 问题 | 中 | High | checkpoint/config/stats hash、live module shape | Thought3 checkpoint 绑定官方 SHA；禁止仅凭文件名恢复 | B/C | Controlled |
 | R23 | Adapter-only resume 搭配了不同 backbone/cache | 中 | Critical | resume manifest verification | 所有 identity 精确匹配；不提供 `strict=False`/force override | B/E | Controlled |
 | R24 | optimizer resume 恢复但 data cursor/RNG 未恢复 | 中 | High | uninterrupted vs resumed hash test | 保存 rank RNG、epoch、sample cursor；输出逐步一致性测试 | B/E | Controlled |
-| R25 | 单卡训练 OOM | 中 | High | peak allocated/reserved、preflight | microbatch 1、bf16、grad accumulation；>43 GiB 立即停 | C/E | Open |
+| R25 | 单卡训练 OOM | 中 | High | peak allocated/reserved、preflight | C/E/E.1 均低于 43 GiB；配方扩展后仍保留 hard abort | C/E | Controlled |
 | R26 | 三卡 DDP shard 重复或遗漏 | 中 | High | union/intersection/cardinality test | hash/ordered deterministic shard；重复或缺失即不运行 | B/D/E | Controlled |
 | R27 | FSDP/ZeRO 增加复杂度但无实际收益 | 中 | Medium | memory profile | v1 先普通 DDP；只有实测 OOM 才升级 | C | Controlled |
-| R28 | cache 磁盘不足或产生过多 inode | 中 | High | plan-cache 容量预检、free-space check | 512-sample safetensors shard；要求预计大小外加 20% 空间 | D | Open |
+| R28 | cache 磁盘不足或产生过多 inode | 中 | High | plan-cache 容量预检、free-space check | Phase D 96-entry pilot 已通过；扩大正式 cache 前重新估算并保留 20% | D | Controlled |
 | R29 | 把 Thought2 3.355 s 当作 K-step 在线延迟 | 高 | High | latency boundary manifest | 新 CUDA event 分段计时；旧数值只作上界背景 | C/F | Controlled |
 | R30 | 离线 cache 读取时间替代部署 future latency | 中 | Critical | report schema、online_no_cache test | 正式 success/latency 只来自 online sampling | F/G | Controlled |
 | R31 | correct 与 shuffle 的计算量不同 | 中 | High | per-stage latency trace | 两者均在线跑相同 K；donor loading 单独记录 | F/G | Controlled |
-| R32 | Video-only sampler 与上游 joint path 数值不等价 | 中 | Critical | same-input/seed parity test | Gate C 未过则改为 video-only MoT runner，不进入 cache build | C | Open |
+| R32 | Video-only sampler 与上游 joint path 数值不等价 | 中 | Critical | same-input/seed parity test | Gate C same-seed parity 已通过冻结容差，结果见 Phase C 报告 | C | Closed |
 | R33 | current first-frame slice在 update 后漂移 | 低 | Critical | per-step equality assertion | 每 step 强制覆盖并断言；漂移立即停止 | B/C | Controlled |
 | R34 | latent 被 VAE decode/re-encode，语义变成 Thought2 embedding | 中 | Critical | graph/provenance/schema | cache 只接收 native sampler state `z[:,:,1:]` | B/C | Controlled |
-| R35 | 数据集版本/样本总量未知 | 高 | High | dataset revision inventory | 当前训练数据缺失；Phase C/D 前必须下载并冻结 revision | C/D | Open |
+| R35 | 数据集版本/样本总量未知 | 高 | High | dataset revision inventory | LIBERO revision、archive SHA 和 42-episode task inventory 已冻结 | C/D | Closed |
 | R36 | 上游 config 默认 `val_set_proportion=0` 导致无 dev | 高 | Critical | split manifest | Thought3 自建 90/10 episode split，禁止沿用默认 | B/D | Controlled |
 | R37 | 数据 loader 虽只用 t0，却把后续 RGB 暴露给 model API | 中 | Critical | allowed-key schema、mutation test | 项目侧 current-observation dataset；模型调用对象不含未来帧 | B/C | Controlled |
 | R38 | action target 被误传入 uncond future sampler | 中 | Critical | signature test、taint sentinel | sampler signature 没有 action；传入即 TypeError/config error | B/C | Controlled |
@@ -71,6 +71,7 @@
 | R46 | Phase A 文档变更意外修改 Thought1/2 输出 | 低 | Critical | 冻结文件 SHA-256 复核 | Phase A 前后八个冻结哈希一致；后续 gate 继续复核 | A/B | Closed for A |
 | R47 | 旧 CLI 因 Thought3 import/参数变化而改变 | 中 | Critical | old CLI regression、dry-run | additive lazy import；旧命令输出/计划 fixture 不变 | B | Controlled |
 | R48 | LIBERO-Plus 既有 `.downloads/` 被误归因或写入 | 低 | Medium | upstream status snapshot | 记录为审计前既有；Thought3 path guard 禁止写 third_party | A–G | Controlled |
+| R49 | 单样本通过但 residual/hidden correction 尺度过大，导致多样本不稳定 | 高 | High | residual、gate、实际 BF16 delta/action-hidden | E.1 已发现 A0 1.91×、A1 0.70×；E.2 必须联合约束 loss 与尺度，超限不得扩 K | E | Open |
 
 ## 3. 最高优先级风险详解
 
@@ -211,38 +212,42 @@ Phase B closure：全量回归、冻结哈希和最终测试分母见
 
 ### Gate C：单 GPU
 
-- [ ] 真实 train sample；
-- [ ] `[B,48,2,14,28]` bf16 native latent；
-- [ ] K schedule/seed 配对；
-- [ ] video-only 与 upstream parity；
-- [ ] Adapter forward/backward finite；
-- [ ] only Adapter grad；
-- [ ] frozen pre/post hash；
-- [ ] zero-gate action parity；
-- [ ] peak <43 GiB；
-- [ ] current slice fixed；
-- [ ] no VAE decode；
-- [ ] 真实 future mutation invariance。
+- [x] 真实 train sample；
+- [x] `[B,48,2,14,28]` bf16 native latent；
+- [x] K schedule/seed 配对；
+- [x] video-only 与 upstream parity；
+- [x] Adapter forward/backward finite；
+- [x] only Adapter grad；
+- [x] frozen pre/post hash；
+- [x] zero-gate action parity；
+- [x] peak <43 GiB；
+- [x] current slice fixed；
+- [x] no VAE decode/re-encode；
+- [x] 真实 future mutation invariance。
 
 ### Gate D：cache
 
-- [ ] 一个 suite/task pilot；
-- [ ] K=1/2/4 完整配对；
-- [ ] build/resume/validate；
-- [ ] online recompute tolerance；
-- [ ] 3-rank union/intersection；
-- [ ] throughput/P50/P95；
-- [ ] 实际磁盘与计划误差；
-- [ ] 20% free-space margin。
+- [x] 一个 suite/task、32-base-sample pilot；
+- [x] K=1/2/4 完整配对；
+- [x] build/no-op resume/validate/checksum corruption；
+- [ ] 独立 online recompute tolerance（正式扩 cache 前补）；
+- [ ] 3-rank union/intersection（单卡 pilot 不执行）；
+- [x] throughput 与 K 分段 latency telemetry；
+- [x] 实际磁盘 bytes/inode 记录；
+- [x] 20% free-space margin。
+
+Phase D 已按用户批准的单卡小 cache smoke 范围通过。未勾选的两项不影响该
+32-sample pilot，但必须在扩大为分布式正式 cache 前另设门禁。
 
 ### Gate E：训练
 
 - [x] A0/A1 100–500 steps；
 - [x] loss/gate/grad finite；
-- [ ] loss 有可诊断下降；
+- [x] E.1 单样本固定 loss 有可诊断下降；
+- [ ] 多样本 fixed train/development loss 有稳定下降；
 - [x] uninterrupted/resumed 一致；
 - [x] dev-only checkpoint selection；
-- [ ] 无 frozen 变化；
+- [x] E.1 frozen-before/after 完全相同；
 - [x] 单卡无 OOM。
 
 2026-07-28 状态：v2 已完成 A0/A1 各 100-step resumed/uninterrupted；
@@ -250,6 +255,12 @@ Phase B closure：全量回归、冻结哈希和最终测试分母见
 v3 fixed train probe 未低于初始化，且 fail-fast 发生在 frozen-after hash
 之前，因此 Gate E 总体仍未通过。详见
 [thought3_phase_e_report.md](thought3_phase_e_report.md)。
+
+Gate E.1 随后证实 A0/A1 单样本固定 loss 分别下降 92.93%/99.58%，并关闭
+frozen hash 缺口；但发现实际 hidden correction 达 A0 1.91×、A1 0.70×。
+因此 Gate E 仍需 8-sample 尺度诊断和新的 28/4 完整运行，不能由 E.1
+追溯改判。详见
+[thought3_phase_e1_report.md](thought3_phase_e1_report.md)。
 
 ### Gate F：技术 pilot
 
@@ -306,11 +317,10 @@ v3 fixed train probe 未低于初始化，且 fail-fast 发生在 frozen-after h
 
 | 风险 | 关闭它所需的下一证据 |
 | --- | --- |
-| R13 gate 不打开 | Phase E 100–500 step gate/grad trace |
-| R25 OOM | Phase C 单 batch forward/backward memory trace |
-| R28 cache 容量 | 数据下载后的 sample inventory + plan-cache |
-| R32 sampler parity | Phase C same-seed upstream comparison |
-| R35 数据缺失 | 下载并冻结 `yuanty/LIBERO-fastwam` revision |
-| 真实 action loss parity | Phase C 与官方 scheduler/target/mask/reduction 对照 |
+| R13 多样本是否实际使用 future | 通过 Gate E 后做 same-checkpoint correct/null/shuffle counterfactual |
+| R28 正式 cache 容量 | 扩大样本前重新执行 inventory、容量估算和 free-space gate |
+| R49 hidden correction 尺度 | 预注册 8-sample train-only loss/`delta-hidden` 联合诊断 |
+| 3-rank cache 完整性 | 正式分布式 cache 的 union/intersection/cardinality 证明 |
+| Gate E 多样本优化 | 稳定配方下重新跑 28/4 fixed train/development gate |
 
 在这些证据出现前，文档必须使用“预计”“待验证”，不能写成已完成结果。

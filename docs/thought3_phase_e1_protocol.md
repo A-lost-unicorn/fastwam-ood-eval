@@ -1,6 +1,10 @@
 # Thought3 Gate E.1：单样本固定目标 overfit 诊断协议
 
-状态：`PREREGISTERED / NOT YET RUN`
+状态：`PREREGISTERED IN 30ffc93 / EXECUTED / PASSED`
+
+本协议在结果可见前冻结于 commit
+`30ffc9343e0f5936e97fbc4e7f629805b438329e`。实际结果、工件 SHA、尺度诊断与
+解释边界见 [thought3_phase_e1_report.md](thought3_phase_e1_report.md)。
 
 本门禁用于解释 Gate E 的负面训练结果。它不改变 Phase D cache，不读取
 development/OOD/success outcome，也不评价 K=1 是否优于 K=0。唯一问题是：

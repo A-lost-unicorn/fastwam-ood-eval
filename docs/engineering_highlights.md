@@ -361,6 +361,13 @@
   验证 gate 更新后的第 2 step 有百万级 non-gate 元素获得梯度，A0/A1 的
   checkpoint-resume 与 uninterrupted 最终权重 SHA 完全一致，并用 loss
   fail-closed 门禁阻止未收敛配方进入 OOD 评测。
+- 设计并预注册单样本 fixed-noise 训练诊断，在冻结 5B Fast-WAM 的前提下只训练
+  1.371M Adapter 参数；A0/A1 的固定真实 action loss 经 200 step 分别下降
+  92.93%/99.58%，backbone 全参数 SHA 训练前后逐位一致，单卡峰值
+  13.0 GiB。
+- 将 fp32 residual、scalar gate 与实际 BF16 hidden delta 分层遥测，发现单样本
+  overfit 时 A0/A1 correction 达原 hidden norm 的 1.91×/0.70×；据此拒绝直接
+  扩 K，把下一门禁收缩为 8-sample train-only 的 loss/尺度联合诊断。
 
 ### 可直接使用的量化表述
 
@@ -380,6 +387,12 @@
 > 在单张 RTX 4090 上从 32 个标准 LIBERO episode 生成 K=1/2/4 共 96 条 BF16
 > latent，以 12 个 safetensors shard 原子提交，并验证 paired noise、12/12
 > 无重载断点恢复、单字节损坏检测和 0 future-RGB 泄漏。
+
+> 在冻结 5B Fast-WAM 的单卡真实训练诊断中，只优化 1.371M
+> Future-to-Action Adapter 参数；通过 zero-gate 两步梯度门禁、逐模块
+> gradient-to-parameter telemetry 和全参数 pre/post SHA，验证 A0/A1 在固定
+> LIBERO 目标上的 loss 分别下降 92.93%/99.58%，并识别出 hidden correction
+> 尺度膨胀这一多样本训练前的关键风险。
 
 在人工标注完成前，不要追加“归纳出 K 类失败模式”。可以写“保存并审计
 3,563 个失败视频”，但“reviewed/labelled”分母目前仍为 0。

@@ -276,6 +276,22 @@ Gate E 已真实执行，但总门禁未通过：
   初始化，因此 `loss 有可诊断下降` 未通过；
 - Gate 在训练后 frozen hash 之前 fail-closed，`frozen before==after` 尚未闭环。
 
-当前先进入单样本 fixed-noise overfit 和注入/优化尺度诊断，不扩 A2/A4。权威数值、
-失败尝试 SHA 与边界见
+该状态随后由 Gate E.1 单样本 fixed-noise overfit 继续诊断；Gate E v1–v3 的
+权威数值、失败尝试 SHA 与边界见
 [thought3_phase_e_report.md](thought3_phase_e_report.md)。
+
+### 11.2 Gate E.1 实际状态
+
+Gate E.1 已在预注册 commit `30ffc93` 上执行并通过：
+
+- 同一条 train sample、同一 action noise/timestep，A0/A1 各 200 step；
+- 固定 action loss 分别下降 92.93% 和 99.58%；
+- 第 1 step gate-only，第 2 step non-gate gradient，最终 BF16 hidden delta
+  非零；
+- Fast-WAM frozen SHA before/after 完全相同；
+- optimizer-step 峰值 13,273.17 MiB，无 future RGB/OOD/outcome。
+
+但 A0/A1 step 200 的 `delta/action-hidden` 分别达到 1.91×/0.70×，所以
+Gate E.1 只关闭“图是否能 overfit”问题，没有关闭多样本稳定训练问题。下一步是
+先冻结 8-sample train-only LR/尺度诊断，再重跑完整 28/4 Gate E；A2/A4 仍锁定。
+详见 [thought3_phase_e1_report.md](thought3_phase_e1_report.md)。

@@ -36,7 +36,8 @@
 | `P3-PHASE-E-v2` | 2026-07-28 | 3 / FAILED-SMOKE | commit `c4fcadb`；A0/A1；确定性 CUDA | 两组各 50→100 + uninterrupted 100；第 2 step 非 gate grad；最终 SHA 完全一致；A1 development 未低于初始 | 工程恢复/梯度子门禁通过；总 Gate 拒绝，无 future 效果结论 |
 | `P3-PHASE-E-v3` | 2026-07-28 | 3 / FAILED-SMOKE | commit `dc77bd2`；固定 4-sample train probe | A0 两条 100-step 轨迹完全重放；fixed train probe `0.0015776→0.0015993`，未下降，停止于 A0 | Gate E 未通过；进入单样本 overfit/优化诊断，不扩 A2/A4 |
 | `P3-PHASE-E1-v1` | 2026-07-28 | 3 / ENGINEERING DIAGNOSTIC | prereg commit `30ffc93`；GPU 1；单 train sample、固定 noise/timestep；A0/A1 各 200 step | A0 loss `0.0358901→0.0025362`（−92.93%）；A1 `→0.0001490`（−99.58%）；first non-gate step=2；frozen SHA before=after | Gate E.1 通过，只证明单目标可拟合；发现 BF16 delta/action-hidden 为 A0 1.91×、A1 0.70×；Gate E、A2/A4、OOD 仍锁定 |
-| `P3-PHASE-E2-v1` | 待运行 | 3 / PREREGISTERED PLAN | 8 train samples；A0/A1；LR `1e-4/3e-4/1e-3`；各 200 step | 尚无结果；运行前联合冻结 mean loss、6/8 non-worsened、0 catastrophic、median/max delta-hidden 门槛 | 代码提交后等待用户显式确认；不自动训练，不读取 development/OOD，不扩 A2/A4 |
+| `P3-PHASE-E2-v1` | 2026-07-28 | 3 / FAILED ENGINEERING DIAGNOSTIC | prereg commit `e104328`；8 train samples；A0/A1 × LR `1e-4/3e-4/1e-3`；六轨迹共 1,200 step | 六轨迹 execution/pairing/frozen/checkpoint/memory 全通过；无共同 eligible LR；A1 mean reduction 为 24.19%/40.01%/−13.97%，但 non-worsened 仅 4/8、4/8、0/8 | Gate E.2 按预注册 6/8 门槛失败；不得回改阈值或扩 A2/A4；单固定 flow draw 的初始 loss 跨度 94.28× |
+| `P3-PHASE-E3-v1` | 待运行 | 3 / PREREGISTERED PLAN | 只读 E.2 六个 step-200 checkpoint；每 sample 使用 held-out `flow_step=1..5`；共 320 forward、0 optimizer/backward | 保持原 LR/门槛/权重不变，以 5-draw sample mean 诊断 E.2 per-sample 稳定性是否被单次 flow draw 混淆 | 代码提交后等待用户显式确认；不重新训练，不读 development/OOD/success，不修改 E.2 工件 |
 
 ### `P1-FORMAL-v1` 机器证据
 

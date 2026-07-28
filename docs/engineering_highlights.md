@@ -27,6 +27,7 @@
 | 阶段二 2B action-conditioned future | 严格阻塞 | release 配置为 `action_conditioned=false`，且不存在通过 provenance 门禁的匹配 checkpoint |
 | 阶段三 Phase C 单样本门禁 | SMOKE 已通过 | 真实 K1/K2/K4、upstream parity、zero gate、1 backward、0 backbone grad；执行峰值 12.964 GiB |
 | 阶段三 Phase D 真实 cache | SMOKE 已通过 | 32 samples、96 entries、12 shards；paired/checksum/resume/leakage 全通过；0.806 sample/s；0 optimizer step |
+| 阶段三 Gate E.2 多样本诊断 | FAILED-GATE，工程轨迹完整 | A0/A1 × 三 LR 共 1,200 step；梯度/resume/checkpoint/frozen SHA/13.0 GiB 全通过；无共同 6/8 stable LR，保留负结果并定位单-flow confound |
 
 ## 2. 可以对外说明的工程亮点
 

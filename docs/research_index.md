@@ -25,7 +25,7 @@
 | 阶段二正式抽样 | outcome-blind planner、anchor、exact-ratification 与 formal gate 已实现 | 200 Clean + 532 OOD 已 exact-ratify 并全部运行 | **完成**。只认证 Phase 2 future 指标前 job ID 不变；不冒充阶段一 outcome 前 preregistration |
 | 阶段二统计协议 | episode→task 分层、task bootstrap、首 probe/outcome gate 已实现 | 10,000 次 suite-stratified task bootstrap；730/732 outcome match | **post-run analysis 完成，非 preregistered confirmatory**。DRAFT 未在正式指标前冻结；人工 endpoint 待完成 |
 | 阶段二 B：action-conditioned future consistency | 严格门禁、schema、runner、测试已实现 | CPU/mock 与门禁测试通过 | **阻塞**。官方 release 为 `action_conditioned=false`，且没有可信匹配 checkpoint |
-| 阶段三：Future-to-Action Adapter | Phase A/B/C/D 完成；Phase E 真实小训练已执行但总 Gate 未通过 | A0/A1 各完成 resumed/uninterrupted 100 step；第 2 step 非 gate 梯度、Adapter-only resume、确定性 SHA、单卡显存通过；固定 loss probe 未稳定下降 | **阻塞在 Gate E.1 优化诊断**。不得扩 A2/A4 或启动 ID/OOD；无 future 增益或 K 优劣结论 |
+| 阶段三：Future-to-Action Adapter | Phase A/B/C/D 完成；E/E.1/E.2 真实诊断已执行，Gate E 仍未通过 | E.1 单样本可 overfit；E.2 六条 200-step 轨迹工程检查全通过，但三个 LR 都没有达到 A0/A1 共同 6/8 sample 稳定门槛 | **阻塞在 Gate E.3 held-out multi-flow 诊断**。不得扩 A2/A4 或启动 ID/OOD；无 future 增益或 K 优劣结论 |
 
 因此，“阶段一已经完成”的准确说法是：**阶段一工程、正式全量计算、聚合与
 完整性审计均已完成；失败机制人工 taxonomy 尚未完成，但不阻塞主成功率结论。**
@@ -132,6 +132,7 @@ outcome JSONL 前使用 `frozen_before_source_outcomes`；现有 v2 则走更窄
 | 阶段三 Phase B | 默认 Adapter `1,371,137` 参数；native future schema `[48,2,14,28]`；K1/K2/K4 paired cache、resume/checksum/mock training/checkpoint/online-no-cache tests 通过 | 只证明工程 contract；不是模型效果、真实延迟或显存结果 |
 | 阶段三 Phase C | 单条真实样本的 K1/K2/K4 分别为 `120.34/165.62/325.30 ms`；video-only parity max diff 0；zero-gate action bitwise equal；backbone gradient 0；执行峰值 `12.964 GiB` | 单卡真实工程可行性；latency 是单样本 telemetry，不是正式 P50/P95；不支持 OOD 增益 |
 | 阶段三 Phase D | 32 base samples、96 entries、12 shards；完整 split 37/5，cache 内 28/4；K1/K2/K4 mean `127.54/186.62/362.99 ms`；0.806 base sample/s；执行峰值 `12.677 GiB` | 真实离线 cache 工程门禁；sampling 不含 action denoising，不能作为在线总延迟或 OOD 效果 |
+| 阶段三 Gate E.2 | A0/A1 × 三 LR 共 1,200 step；六轨迹 execution/pairing/checkpoint/frozen SHA 全通过；峰值 `13,273.17 MiB`；Gate 总耗时 24.10 分钟 | A1 在 `1e-4/3e-4` 的 8-sample mean fixed loss 下降 24.19%/40.01%，但都只有 4/8 sample 不变差；无共同 eligible LR，属于 FAILED engineering gate，不是 future 效果 |
 
 20-step pilot 的 episode-weighted Clean→OOD 描述值为：latent L1
 `0.1512→0.2002`、cosine distance `0.1168→0.1942`、motion-direction cosine
@@ -160,6 +161,10 @@ OOD 一致性下降假设”，不能进入论文结论表。
   [thought3_phase_e1_report.md](thought3_phase_e1_report.md)
 - 阶段三 Gate E.2 八样本 LR/尺度诊断预注册：
   [thought3_phase_e2_protocol.md](thought3_phase_e2_protocol.md)
+- 阶段三 Gate E.2 八样本诊断结果：
+  [thought3_phase_e2_report.md](thought3_phase_e2_report.md)
+- 阶段三 Gate E.3 held-out multi-flow 预注册：
+  [thought3_phase_e3_protocol.md](thought3_phase_e3_protocol.md)
 - 阶段三数据/训练/评测：[thought3_data_protocol.md](thought3_data_protocol.md)、[thought3_training.md](thought3_training.md)、[thought3_evaluation.md](thought3_evaluation.md)
 - 阶段三分析 DRAFT 与限制：[thought3_analysis_protocol_DRAFT.md](thought3_analysis_protocol_DRAFT.md)、[thought3_limitations.md](thought3_limitations.md)
 - 阶段三旧版路线摘要：[thought3_adapter_plan.md](thought3_adapter_plan.md)
@@ -168,12 +173,13 @@ OOD 一致性下降假设”，不能进入论文结论表。
 
 ## 7. 当前优先级
 
-1. Gate E.1 已通过：A0/A1 单样本固定 loss 分别下降 92.93%/99.58%，且
-   frozen-before/after SHA 完全相同；这只证明注入图可以 overfit。
-2. 阶段三下一步先冻结 Gate E.2：8-sample train-only 的少量 LR/尺度诊断，
-   同时约束 loss 与 BF16 `delta/action-hidden`，不读取 development/OOD outcome。
-3. Gate E 多样本 fixed probe 尚未下降，且 Gate E.1 出现 A0 1.91×、A1 0.70×
-   hidden correction；在稳定配方和完整 28/4 Gate E 通过前，不扩 A2/A4。
+1. Gate E.2 已按预注册规则失败：六条轨迹工程上完整，但没有 A0/A1 共同达到
+   mean reduction、6/8 non-worsened 与尺度联合门槛；不得事后放宽为 4/8。
+2. 只读根因分析显示 E.2 单固定 flow draw 的 initial loss 跨度为 94.28×，
+   且与 BF16 timestep 的相关为 `−0.93466`。下一步是 E.3：只在 E.2 frozen
+   checkpoint 上评估 held-out `flow_step=1..5`，不重新训练。
+3. 只有 E.3 给出稳定候选 LR，并在新的完整 28/4 Gate E 中通过 train/dev、
+   resume、frozen 与尺度门槛后，才允许实现和训练 A2/A4。
 4. 在不按自动 metric/outcome 挑案例的前提下，冻结正式 human-review budget、
    seed 和每 job 至多一个 probe；至少两名 reviewer 独立标注并保留 agreement/
    adjudication。

@@ -296,9 +296,9 @@ Gate E.1 只关闭“图是否能 overfit”问题，没有关闭多样本稳定
 先冻结 8-sample train-only LR/尺度诊断，再重跑完整 28/4 Gate E；A2/A4 仍锁定。
 详见 [thought3_phase_e1_report.md](thought3_phase_e1_report.md)。
 
-### 11.3 Gate E.2 预注册状态
+### 11.3 Gate E.2 实际结果
 
-Gate E.2 代码只实现 A0/A1 的 8-sample train-only 工程诊断：
+Gate E.2 已完成 A0/A1 的 8-sample train-only 工程诊断：
 
 - LR 网格固定为 `1e-4 / 3e-4 / 1e-3`；
 - 每条轨迹 200 step，共 1,200 optimizer step；
@@ -306,7 +306,24 @@ Gate E.2 代码只实现 A0/A1 的 8-sample train-only 工程诊断：
 - 不读取 development/OOD/success outcome；
 - 同时门控 fixed loss 与实际 BF16 `delta/action-hidden`；
 - 多档通过时固定选择最小 LR；
-- 代码提交后不会自动启动真实训练。
+- 六条轨迹的 execution、pairing、checkpoint、frozen SHA 和显存检查全部通过；
+- 三个 LR 都没有达到 A0/A1 共同 `6/8 non-worsened`，总 Gate 失败；
+- initial fixed loss max/min 为 94.28×，且与单 fixed flow timestep 的相关为
+  `−0.93466`。
 
-完整阈值、恢复规则、预计时间/磁盘和解释边界见
-[thought3_phase_e2_protocol.md](thought3_phase_e2_protocol.md)。
+完整预注册和结果分别见
+[thought3_phase_e2_protocol.md](thought3_phase_e2_protocol.md)、
+[thought3_phase_e2_report.md](thought3_phase_e2_report.md)。
+
+### 11.4 Gate E.3 held-out multi-flow 诊断
+
+Gate E.3 不重新训练。它只读 E.2 六个 step-200 Adapter checkpoint，在未进入
+E.2 optimizer 的 `flow_step=1..5` 上完成 320 个 action-loss forward：
+
+- 每 sample 先跨五个 fixed flow draw 求均值；
+- 再执行 E.2 原有 mean reduction、6/8、catastrophic 和 hidden-scale 门槛；
+- LR 网格和 smallest-eligible 规则不变；
+- 0 optimizer step、0 backward、0 development/OOD/success/rollout；
+- 真实运行仍需用户显式确认。
+
+详见 [thought3_phase_e3_protocol.md](thought3_phase_e3_protocol.md)。

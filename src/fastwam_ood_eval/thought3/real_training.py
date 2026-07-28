@@ -707,6 +707,32 @@ def _flow_inputs(
     )
 
 
+def _flow_timestep_scalar(
+    model: Any,
+    sample: RealTrainingSample,
+    *,
+    train_seed: int,
+    step: int,
+    device: str,
+) -> float:
+    """Recreate the deterministic action-flow timestep without model input."""
+
+    timestep = _sample_training_t_on_cpu(
+        model.train_action_scheduler,
+        _stable_seed(
+            "thought3-real-action-time-v1",
+            train_seed,
+            step,
+            sample.base_sample_id,
+        ),
+        device,
+        model.torch_dtype,
+    )
+    value = float(timestep.detach().float().cpu().reshape(()))
+    del timestep
+    return value
+
+
 def _loss_for_real_sample(
     cfg: Thought3Config,
     model: Any,
@@ -2300,6 +2326,363 @@ def evaluate_fixed_subset_probe(
         ],
         "uses_ground_truth_future_input": False,
         "variant": cfg.variant,
+    }
+
+
+def aggregate_multiflow_probe_rows(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    sample_ids: Sequence[str],
+    flow_steps: Sequence[int],
+    variant: str,
+) -> dict[str, Any]:
+    """Aggregate a complete sample × held-out-flow objective grid."""
+
+    normalized_ids = tuple(str(value) for value in sample_ids)
+    normalized_steps = tuple(int(value) for value in flow_steps)
+    if (
+        len(normalized_ids) != 8
+        or len(set(normalized_ids)) != 8
+        or normalized_steps != (1, 2, 3, 4, 5)
+        or variant not in {"A0", "A1"}
+    ):
+        raise RealTrainingError(
+            "Gate E.3 requires 8 unique samples and held-out "
+            "flow steps 1..5"
+        )
+    expected_pairs = {
+        (base_sample_id, flow_step)
+        for base_sample_id in normalized_ids
+        for flow_step in normalized_steps
+    }
+    keyed: dict[tuple[str, int], Mapping[str, Any]] = {}
+    for row in rows:
+        key = (
+            str(row["base_sample_id"]),
+            int(row["flow_step"]),
+        )
+        if key in keyed:
+            raise RealTrainingError(
+                f"duplicate Gate E.3 multiflow objective: {key}"
+            )
+        values = (
+            float(row["action_loss"]),
+            float(row["action_hidden_norm"]),
+            float(row["attention_residual_norm"]),
+            float(row["gated_delta_nonzero_fraction"]),
+            float(row["gated_delta_norm"]),
+            float(row["gated_delta_to_action_hidden_ratio"]),
+            float(row["latency_ms"]),
+            float(row["peak_memory_mib"]),
+            float(row["timestep"]),
+        )
+        if (
+            any(not math.isfinite(value) for value in values)
+            or values[0] < 0
+            or values[1] <= 0
+            or values[3] < 0
+            or values[3] > 1
+            or values[4] < 0
+            or values[5] < 0
+            or values[6] < 0
+            or values[7] < 0
+        ):
+            raise RealTrainingError(
+                f"non-finite/invalid Gate E.3 multiflow row: {key}"
+            )
+        keyed[key] = row
+    if set(keyed) != expected_pairs:
+        missing = sorted(expected_pairs - set(keyed))
+        extra = sorted(set(keyed) - expected_pairs)
+        raise RealTrainingError(
+            "Gate E.3 multiflow objective grid mismatch: "
+            f"missing={missing[:5]}, extra={extra[:5]}"
+        )
+
+    ordered_rows = [
+        dict(keyed[(base_sample_id, flow_step)])
+        for base_sample_id in normalized_ids
+        for flow_step in normalized_steps
+    ]
+    per_sample: list[dict[str, Any]] = []
+    for base_sample_id in normalized_ids:
+        sample_rows = [
+            keyed[(base_sample_id, flow_step)]
+            for flow_step in normalized_steps
+        ]
+
+        def mean(field: str) -> float:
+            return statistics.fmean(
+                float(row[field]) for row in sample_rows
+            )
+
+        per_sample.append(
+            {
+                "action_hidden_norm": mean("action_hidden_norm"),
+                "action_loss": mean("action_loss"),
+                "attention_residual_norm": mean(
+                    "attention_residual_norm"
+                ),
+                "base_sample_id": base_sample_id,
+                "flow_objective_count": len(normalized_steps),
+                "flow_steps": list(normalized_steps),
+                "gated_delta_nonzero_fraction": mean(
+                    "gated_delta_nonzero_fraction"
+                ),
+                "gated_delta_norm": mean("gated_delta_norm"),
+                "gated_delta_to_action_hidden_ratio": mean(
+                    "gated_delta_to_action_hidden_ratio"
+                ),
+                "max_objective_gated_delta_to_action_hidden_ratio": max(
+                    float(
+                        row[
+                            "gated_delta_to_action_hidden_ratio"
+                        ]
+                    )
+                    for row in sample_rows
+                ),
+            }
+        )
+    sample_losses = [
+        float(row["action_loss"]) for row in per_sample
+    ]
+    sample_ratios = [
+        float(row["gated_delta_to_action_hidden_ratio"])
+        for row in per_sample
+    ]
+    objective_ratios = [
+        float(row["gated_delta_to_action_hidden_ratio"])
+        for row in ordered_rows
+    ]
+    return {
+        "flow_objective_count": len(ordered_rows),
+        "flow_steps": list(normalized_steps),
+        "max_gated_delta_to_action_hidden_ratio": max(sample_ratios),
+        "max_objective_gated_delta_to_action_hidden_ratio": max(
+            objective_ratios
+        ),
+        "mean_action_loss": statistics.fmean(sample_losses),
+        "median_gated_delta_to_action_hidden_ratio": (
+            statistics.median(sample_ratios)
+        ),
+        "per_objective": ordered_rows,
+        "per_sample": per_sample,
+        "sample_count": len(per_sample),
+        "sample_ids": list(normalized_ids),
+        "uses_ground_truth_future_input": False,
+        "variant": variant,
+    }
+
+
+@torch.no_grad()
+def evaluate_multiflow_subset_probe(
+    cfg: Thought3Config,
+    model: Any,
+    adapter: FutureToActionAdapter,
+    injector: ActionEncoderFutureInjector,
+    samples: Sequence[RealTrainingSample],
+    *,
+    flow_steps: Sequence[int],
+    device: str,
+) -> dict[str, Any]:
+    """Evaluate held-out deterministic action-flow draws without training."""
+
+    sample_ids = [sample.base_sample_id for sample in samples]
+    normalized_steps = tuple(int(value) for value in flow_steps)
+    if (
+        len(samples) != 8
+        or len(set(sample_ids)) != 8
+        or normalized_steps != (1, 2, 3, 4, 5)
+    ):
+        raise RealTrainingError(
+            "Gate E.3 multiflow probe requires 8 samples and steps 1..5"
+        )
+    was_training = adapter.training
+    adapter.eval()
+    objective_rows: list[dict[str, Any]] = []
+    try:
+        for sample in samples:
+            for flow_step in normalized_steps:
+                torch.cuda.synchronize(device)
+                torch.cuda.reset_peak_memory_stats(device)
+                started = time.perf_counter()
+                loss = _loss_for_real_sample(
+                    cfg,
+                    model,
+                    adapter,
+                    injector,
+                    sample,
+                    step=flow_step,
+                    device=device,
+                )
+                torch.cuda.synchronize(device)
+                latency_ms = (
+                    time.perf_counter() - started
+                ) * 1000.0
+                diagnostics = adapter.last_diagnostics
+                if (
+                    diagnostics is None
+                    or diagnostics.action_hidden_norm <= 0
+                ):
+                    raise RealTrainingError(
+                        "Gate E.3 multiflow diagnostics are invalid"
+                    )
+                loss_value = float(loss.detach().float().cpu())
+                ratio = (
+                    diagnostics.gated_delta_norm
+                    / diagnostics.action_hidden_norm
+                )
+                objective_rows.append(
+                    {
+                        "action_hidden_norm": (
+                            diagnostics.action_hidden_norm
+                        ),
+                        "action_loss": loss_value,
+                        "attention_residual_norm": (
+                            diagnostics.attention_residual_norm
+                        ),
+                        "base_sample_id": sample.base_sample_id,
+                        "flow_step": flow_step,
+                        "gated_delta_nonzero_fraction": (
+                            diagnostics.gated_delta_nonzero_fraction
+                        ),
+                        "gated_delta_norm": (
+                            diagnostics.gated_delta_norm
+                        ),
+                        "gated_delta_to_action_hidden_ratio": ratio,
+                        "latency_ms": latency_ms,
+                        "peak_memory_mib": (
+                            int(
+                                torch.cuda.max_memory_allocated(
+                                    device
+                                )
+                            )
+                            / 2**20
+                        ),
+                        "timestep": _flow_timestep_scalar(
+                            model,
+                            sample,
+                            train_seed=cfg.training.train_seed,
+                            step=flow_step,
+                            device=device,
+                        ),
+                    }
+                )
+                del loss
+    finally:
+        adapter.train(was_training)
+    result = aggregate_multiflow_probe_rows(
+        objective_rows,
+        sample_ids=sample_ids,
+        flow_steps=normalized_steps,
+        variant=cfg.variant,
+    )
+    result.update(
+        {
+            "gate_raw": float(
+                adapter.gate.detach().float().cpu()
+            ),
+            "max_objective_peak_memory_mib": max(
+                float(row["peak_memory_mib"])
+                for row in objective_rows
+            ),
+            "mean_objective_latency_ms": statistics.fmean(
+                float(row["latency_ms"])
+                for row in objective_rows
+            ),
+        }
+    )
+    return result
+
+
+def multiflow_subset_outcome(
+    initial_probe: Mapping[str, Any],
+    final_probe: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Compare two complete Gate E.3 held-out objective grids."""
+
+    if (
+        list(initial_probe.get("flow_steps", []))
+        != [1, 2, 3, 4, 5]
+        or list(final_probe.get("flow_steps", []))
+        != [1, 2, 3, 4, 5]
+        or int(initial_probe.get("flow_objective_count", -1)) != 40
+        or int(final_probe.get("flow_objective_count", -1)) != 40
+    ):
+        raise RealTrainingError(
+            "Gate E.3 probe does not cover the frozen held-out grid"
+        )
+    initial_objectives = {
+        (
+            str(row["base_sample_id"]),
+            int(row["flow_step"]),
+        ): row
+        for row in initial_probe["per_objective"]
+    }
+    final_objectives = {
+        (
+            str(row["base_sample_id"]),
+            int(row["flow_step"]),
+        ): row
+        for row in final_probe["per_objective"]
+    }
+    if (
+        len(initial_objectives) != 40
+        or set(initial_objectives) != set(final_objectives)
+    ):
+        raise RealTrainingError(
+            "Gate E.3 initial/final objective identities differ"
+        )
+    for probe, label in (
+        (initial_probe, "initial"),
+        (final_probe, "final"),
+    ):
+        recomputed = aggregate_multiflow_probe_rows(
+            probe["per_objective"],
+            sample_ids=probe["sample_ids"],
+            flow_steps=probe["flow_steps"],
+            variant=str(probe["variant"]),
+        )
+        checked_fields = (
+            "flow_objective_count",
+            "flow_steps",
+            "max_gated_delta_to_action_hidden_ratio",
+            "max_objective_gated_delta_to_action_hidden_ratio",
+            "mean_action_loss",
+            "median_gated_delta_to_action_hidden_ratio",
+            "per_sample",
+            "sample_count",
+            "sample_ids",
+            "uses_ground_truth_future_input",
+            "variant",
+        )
+        if any(
+            probe[field] != recomputed[field]
+            for field in checked_fields
+        ):
+            raise RealTrainingError(
+                f"Gate E.3 {label} summary differs from objective rows"
+            )
+    outcome = fixed_subset_outcome(initial_probe, final_probe)
+    objective_loss_ratios: list[float] = []
+    for key, initial_row in initial_objectives.items():
+        initial_loss = float(initial_row["action_loss"])
+        final_loss = float(final_objectives[key]["action_loss"])
+        if initial_loss <= 0:
+            raise RealTrainingError(
+                "Gate E.3 initial objective loss must be positive"
+            )
+        objective_loss_ratios.append(final_loss / initial_loss)
+    return {
+        **outcome,
+        "flow_objective_count": 40,
+        "flow_steps": [1, 2, 3, 4, 5],
+        "max_objective_gated_delta_to_action_hidden_ratio": float(
+            final_probe[
+                "max_objective_gated_delta_to_action_hidden_ratio"
+            ]
+        ),
+        "max_objective_loss_ratio": max(objective_loss_ratios),
     }
 
 

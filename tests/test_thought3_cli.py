@@ -18,6 +18,7 @@ THOUGHT3_COMMANDS = (
     "thought3-train-real-smoke",
     "thought3-diagnose-real-overfit",
     "thought3-diagnose-real-eight-sample",
+    "thought3-diagnose-heldout-multiflow",
     "thought3-plan-cache",
     "thought3-build-cache",
     "thought3-validate-cache",

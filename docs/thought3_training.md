@@ -1,7 +1,7 @@
 # Thought3 训练与恢复手册
 
-状态：Phase B CPU/mock 链路完成；真实 Fast-WAM backward 尚未运行
-更新时间：2026-07-27
+状态：Phase C 单卡真实 backward 已通过；尚未启动真实 cache 或 Adapter 训练
+更新时间：2026-07-28
 
 ## 1. 当前能做什么
 
@@ -16,10 +16,19 @@ Phase B 已实现：
 - train/development loss、grad norm、gate、attention norm、step time、NaN/Inf；
 - 中断+恢复与不中断训练的最终 Adapter tensor hash 一致测试。
 
-当前不能做：
+Phase C 已额外验证：
 
-- 加载官方 12 GB checkpoint 做训练；
-- 生成真实 Video DiT cache；
+- 一条真实 LIBERO training sample 的 K=1/2/4 latent；
+- BF16 Fast-WAM hidden 到 FP32 Adapter 的 zero-gate forward；
+- 一次官方 action loss backward；
+- backbone 0 gradient、MoT hash 不变；
+- 单卡执行峰值 12.964 GiB、模型加载峰值 23.125 GiB；
+- optimizer 0 step、真实 cache 0 条。
+
+当前仍不能做：
+
+- 启动正式或长时间 Adapter 训练；
+- 在 Gate D 前生成全量真实 Video DiT cache；
 - 声称 mock loss 下降代表机器人控制有效；
 - 自动启动 3 GPU 长训练。
 
@@ -63,8 +72,9 @@ gate 初始为 0，因此 A0 wrapper 与同一 B0 backbone 在固定输入上的
 - 每次 action prediction 检查 `action_encoder` hook 恰好调用一次；
 - 异常退出必须清理 context，防止 future 泄漏到下一 batch。
 
-真实 Phase C 还要对 VAE、Video DiT、Action DiT、MoT 和 proprio encoder
-做 forward/backward 前后 hash 与 `.grad is None` 审计。
+真实 Phase C 已确认整个 backbone `requires_grad=false`、backbone gradient
+count 为 0，并对 MoT 做 forward/backward 前后参数 hash。更细粒度的每个子模块
+hash 可在正式训练前继续扩充，但不阻塞小型 cache smoke。
 
 ## 4. Phase B 可复现流程
 
@@ -177,9 +187,9 @@ manifest.json
 
 每 checkpoint 原子刷新 metrics；因此 crash 后可从最近 commit 恢复。
 
-## 9. Phase C 单卡顺序
+## 9. Phase C 单卡结果
 
-Phase C 不直接开始训练，按以下顺序：
+Phase C 已按以下顺序完成：
 
 1. 获取一条标准 LIBERO train sample，确认没有 OOD/test 来源；
 2. 只加载一个官方 Fast-WAM；
@@ -192,9 +202,24 @@ Phase C 不直接开始训练，按以下顺序：
 9. 记录 CUDA allocated/reserved peak，硬上限 43 GiB；
 10. 完成真实 future mutation invariance。
 
-任一项失败就停在 Phase C，不进入 cache 或训练。
+全部硬门禁通过。精确 tensor、parity、gradient、memory、泄漏与工件 SHA 见
+[thought3_phase_c_report.md](thought3_phase_c_report.md)。
 
-## 10. Phase E 真实 smoke
+## 10. Phase D 真实 cache smoke
+
+先限定一个 `libero_goal` task 与约 32 条样本：
+
+- 在完整 episode 上固定 90/10 split；
+- 同一 base sample 的 K1/K2/K4 使用相同 seed 和 initial noise hash；
+- 每个 latent 为 BF16 `[48,2,14,28]`；
+- shard 原子提交，逐文件、逐 tensor、逐样本 checksum；
+- 用同一 config `--resume`，已提交 shard 必须全部验证后跳过；
+- manifest 明确 `uses_ground_truth_future=false`，且构建 API 不接收后续 RGB；
+- 记录模型加载、VAE/current encode、K sampling、写盘、validation 的吞吐与峰值显存。
+
+只有 Gate D 通过后才进入小训练。
+
+## 11. Phase E 真实 smoke
 
 真实小训练先只做 A0/A1：
 

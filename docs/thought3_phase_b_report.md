@@ -1,6 +1,6 @@
 # Thought3 Phase B：CPU/mock 实现验收报告
 
-状态：**完成**
+状态：**完成（历史 Phase B 验收；后续 Gate C 已通过）**
 验收日期：2026-07-27
 证据等级：`TEST`，无真实模型、训练或 OOD 结论
 
@@ -15,7 +15,9 @@
 - 未修改 Thought1/Thought2 正式输出；
 - 旧 CLI 与全量测试继续通过。
 
-阶段三现在处于：
+本文保留 2026-07-27 的 Phase B 验收快照。后续 Gate C 已于
+2026-07-28 通过，真实结果见
+[thought3_phase_c_report.md](thought3_phase_c_report.md)。Phase B 结束时的状态为：
 
 ```text
 Phase A 设计审计       ✅

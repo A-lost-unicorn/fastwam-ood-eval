@@ -1,7 +1,7 @@
 # Thought3 数据与 Future Cache 协议
 
-状态：Phase B schema 已实现并通过 CPU/mock 测试；真实 LIBERO 数据 revision 尚未冻结
-更新时间：2026-07-27
+状态：Phase C 已冻结 `libero_goal` revision 并通过单样本真实门禁；真实 cache 尚未生成
+更新时间：2026-07-28
 适用阶段：B–G
 
 ## 1. 目的与边界
@@ -44,8 +44,17 @@ Adapter 输入。真实 action chunk 只作为 action flow-matching 的监督目
 | checkpoint/stats | 官方文件 SHA-256 |
 | preprocessing | image range、拼接、尺寸和 proprio 配方 hash |
 
-当前工作区仍缺正式的四个标准 LIBERO LeRobot 训练目录，因此 Phase B 只使用
-`mock-phase-b-v1` inventory；它没有研究结论资格。
+当前工作区已有本轮 Gate C/D 使用的 `libero_goal` 子集：
+
+- revision：`117413dc0ca99c7cd64036c4eaa4a316c537d692`；
+- archive SHA-256：
+  `a21ae10171535585fb43e6405d9efa09ff38ef34689e4176428ca005af3a39ea`；
+- 433 episodes、52,895 frames；
+- dataset root：
+  `data/libero_mujoco3.3.2/libero_goal_no_noops_lerobot`。
+
+其余三个标准 suite 尚未下载；这不阻塞只覆盖一个 `libero_goal` task 的 Phase D，
+但在 Phase F/G 扩 suite 前必须分别冻结 revision、archive hash 和 inventory。
 
 ## 3. Train/development split
 

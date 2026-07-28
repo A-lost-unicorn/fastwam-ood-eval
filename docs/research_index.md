@@ -1,6 +1,6 @@
 # 研究总控：Fast-WAM 在 OOD 环境中真的不需要未来想象吗？
 
-更新日期：2026-07-27
+更新日期：2026-07-28
 
 本文是项目的研究入口与证据总账。详细命令、协议和实现分别链接到各阶段手册；这里只回答四件事：当前做到哪里、哪些数字可以使用、阶段之间如何隔离、下一步是什么。
 
@@ -25,7 +25,7 @@
 | 阶段二正式抽样 | outcome-blind planner、anchor、exact-ratification 与 formal gate 已实现 | 200 Clean + 532 OOD 已 exact-ratify 并全部运行 | **完成**。只认证 Phase 2 future 指标前 job ID 不变；不冒充阶段一 outcome 前 preregistration |
 | 阶段二统计协议 | episode→task 分层、task bootstrap、首 probe/outcome gate 已实现 | 10,000 次 suite-stratified task bootstrap；730/732 outcome match | **post-run analysis 完成，非 preregistered confirmatory**。DRAFT 未在正式指标前冻结；人工 endpoint 待完成 |
 | 阶段二 B：action-conditioned future consistency | 严格门禁、schema、runner、测试已实现 | CPU/mock 与门禁测试通过 | **阻塞**。官方 release 为 `action_conditioned=false`，且没有可信匹配 checkpoint |
-| 阶段三：Future-to-Action Adapter | Phase A 审计已确认；Phase B Adapter/cache/mock trainer/checkpoint/CLI 已完成 | CPU/mock 全量测试通过；1,371,137 参数；无 GPU/大 checkpoint load | **工程进入 Phase C 前门禁**。无真实 latent、训练或 OOD 结果 |
+| 阶段三：Future-to-Action Adapter | Phase A/B 完成；Phase C 单卡真实 tensor/backward/memory gate 已通过 | 1 条真实 `libero_goal` 样本；K=1/2/4；一次 backward；0 optimizer/cache；峰值 12.964 GiB | **允许进入 Phase D 小型 cache smoke**。仍无训练、ID/OOD 增益或 K 优劣结论 |
 
 因此，“阶段一已经完成”的准确说法是：**阶段一工程、正式全量计算、聚合与
 完整性审计均已完成；失败机制人工 taxonomy 尚未完成，但不阻塞主成功率结论。**
@@ -130,6 +130,7 @@ outcome JSONL 前使用 `frozen_before_source_outcomes`；现有 v2 则走更窄
 | 阶段二 outcome 关联 | OOD failure−success cosine `+0.0249`；仅首 probe `+0.0197`，两者 CI 均不跨 0 | future inconsistency 与失败相关；不能写成 future error 导致失败 |
 | 阶段二正式资源 | 20-step generation mean/p50/p95 `3354.66/3316.96/3564.12 ms`；full diagnostic `5816.77/5762.95/6271.52 ms`；峰值 `24841.09 MB` | Shadow 诊断成本；不是动作延迟或阶段三 K-step 在线成本 |
 | 阶段三 Phase B | 默认 Adapter `1,371,137` 参数；native future schema `[48,2,14,28]`；K1/K2/K4 paired cache、resume/checksum/mock training/checkpoint/online-no-cache tests 通过 | 只证明工程 contract；不是模型效果、真实延迟或显存结果 |
+| 阶段三 Phase C | 单条真实样本的 K1/K2/K4 分别为 `120.34/165.62/325.30 ms`；video-only parity max diff 0；zero-gate action bitwise equal；backbone gradient 0；执行峰值 `12.964 GiB` | 单卡真实工程可行性；latency 是单样本 telemetry，不是正式 P50/P95；不支持 OOD 增益 |
 
 20-step pilot 的 episode-weighted Clean→OOD 描述值为：latent L1
 `0.1512→0.2002`、cosine distance `0.1168→0.1942`、motion-direction cosine
@@ -149,6 +150,7 @@ OOD 一致性下降假设”，不能进入论文结论表。
 - 阶段二 static/no-op 校准手册：[thought2_static_calibration.md](thought2_static_calibration.md)
 - 阶段三审计与设计：[thought3_upstream_audit.md](thought3_upstream_audit.md)、[thought3_design.md](thought3_design.md)
 - 阶段三 Phase B 验收：[thought3_phase_b_report.md](thought3_phase_b_report.md)
+- 阶段三 Phase C 验收：[thought3_phase_c_report.md](thought3_phase_c_report.md)
 - 阶段三数据/训练/评测：[thought3_data_protocol.md](thought3_data_protocol.md)、[thought3_training.md](thought3_training.md)、[thought3_evaluation.md](thought3_evaluation.md)
 - 阶段三分析 DRAFT 与限制：[thought3_analysis_protocol_DRAFT.md](thought3_analysis_protocol_DRAFT.md)、[thought3_limitations.md](thought3_limitations.md)
 - 阶段三旧版路线摘要：[thought3_adapter_plan.md](thought3_adapter_plan.md)
@@ -157,15 +159,15 @@ OOD 一致性下降假设”，不能进入论文结论表。
 
 ## 7. 当前优先级
 
-1. 固定本次阶段二派生分析代码与文档 commit，并在 clean commit 上重建
-   `formal_analysis_v1` manifest；当前 raw collection provenance 已经 clean。
-2. 在不按自动 metric/outcome 挑案例的前提下，冻结正式 human-review budget、
+1. 阶段三执行 Gate D：只选 `libero_goal` 一个 task，按 episode 固定 90/10
+   split，生成约 32 条 K=1/2/4 cache，并验证 paired noise、shape、checksum、
+   resume、泄漏和吞吐。
+2. Gate D 通过后才执行 Phase E：先 A0/A1 单卡 100–500 step，确认 gate 打开后
+   非 gate Adapter 参数出现 finite nonzero gradient，再验证 loss/checkpoint resume。
+3. 在不按自动 metric/outcome 挑案例的前提下，冻结正式 human-review budget、
    seed 和每 job 至多一个 probe；至少两名 reviewer 独立标注并保留 agreement/
    adjudication。
-3. 人工 endpoint 只回答 goal progress、physical plausibility、局部 action
+4. 人工 endpoint 只回答 goal progress、physical plausibility、局部 action
    execution 和 future–actual agreement；不把它升级成 future-to-action 因果。
-4. 阶段三进入 Phase C：先补齐标准 LIBERO train data revision/inventory，再用
-   单卡一条样本验证 K=1/2/4 原生 latent、upstream parity、一次 backward、冻结
-   gradient/hash 和 <43 GiB 显存。
-5. Gate C 未通过前不生成真实 cache；阶段三 OOD 结果不用于边训练边选择 K，
+5. 阶段三 OOD 结果不用于边训练边选择 K，
    Phase F 后先冻结分析协议再解锁正式 cohort。

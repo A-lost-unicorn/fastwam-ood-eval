@@ -1,6 +1,6 @@
 # 实验、卡点与结论台账
 
-更新日期：2026-07-27
+更新日期：2026-07-28
 
 本台账只记录可追溯事实。机器工件是权威来源，本文是便于论文、周报、简历和面试使用的索引。
 
@@ -30,6 +30,7 @@
 | `P2A-FIVE-CATEGORY-ANALYSIS-v1` | 2026-07-27 | 2A / POST-RUN ANALYSIS | `formal_analysis_v1`；10,000 次 suite-stratified task bootstrap | cosine OOD−Clean `+0.0316`；direction `−0.1898`；730/732 outcome match；4,040 media 0 decode error | 与运行前 DRAFT 方法一致，但 DRAFT 未冻结；不得称 preregistered confirmatory |
 | `P3-PHASE-A-v1` | 2026-07-27 | 3 / PLAN-AUDIT | `thought3_{upstream_audit,design,risk_register}.md` | 上游/shape/scheduler/injection/显存/隔离审计；用户确认 10 项默认值 | 允许进入 Phase B；无模型结果 |
 | `P3-PHASE-B-v1` | 2026-07-27 | 3 / TEST | `src/fastwam_ood_eval/thought3/`、`configs/thought3/`、Thought3 tests | 1.371M Adapter、paired cache、mock trainer、Adapter-only resume、counterfactual、online-no-cache 与旧 CLI 回归通过 | 只证明 CPU/mock 工程 contract；无真实 latent/训练/OOD 结论 |
+| `P3-PHASE-C-v1` | 2026-07-28 | 3 / SMOKE | `configs/thought3/phase_c_single_sample.yaml`；GPU 1；真实 `libero_goal` sample 0 | K1/K2/K4、upstream parity、zero-gate、1 backward、0 backbone grad、12.964 GiB peak；0 cache/optimizer step | Gate C 通过，允许小型真实 cache；不支持训练收敛、OOD 增益或 K 排序 |
 
 ### `P1-FORMAL-v1` 机器证据
 
@@ -264,6 +265,34 @@
   `third_party/FastWAM` 无修改。
 - 未加载官方大 checkpoint、未使用 GPU、未生成真实 cache、未训练真实模型。
   因此该 run 只能登记为 `TEST`，不能填写阶段三成功率表。
+
+### `P3-PHASE-C-v1` 机器证据
+
+- 实现 commit：
+  `5c7d9a84a1058f1ca1d01641d02810eae102ea2a`；官方 checkpoint、
+  stats、Fast-WAM commit 与 Phase A/B 冻结值一致。
+- 数据 revision `117413dc0ca99c7cd64036c4eaa4a316c537d692`，archive
+  SHA-256 `a21ae10171535585fb43e6405d9efa09ff38ef34689e4176428ca005af3a39ea`；
+  本次只读取 `libero_goal` episode 0/frame 0。
+- current latent `[1,48,1,14,28]`；K1/K2/K4 future 均为
+  `[1,48,2,14,28]` BF16，且 initial-state SHA-256 完全相同。
+- K1/K2/K4 单样本 sampler latency 为
+  `120.34/165.62/325.30 ms`；这不是正式 latency 分布。
+- video-only 对 upstream joint video max/mean diff `0/0`；
+  zero-gate 对 current-only action bitwise equal。
+- action loss `0.0002746765`，一次 backward；Adapter 1,371,137 参数，
+  backbone gradient count 0，MoT hash 前后相同。zero-init 首步只有 gate
+  非零梯度，Phase E 必须验证 gate 打开后其余参数获得非零梯度。
+- 最高执行阶段 12.964 GiB；模型加载峰值 23.125 GiB；均低于 43 GiB。
+- `future_frames` schema 拒绝、future-RGB mutation hash invariant；
+  optimizer 未创建、optimizer step 0、真实 cache 0。
+- 权威工件 SHA-256：status
+  `581de5813e11fd19c8d7a1433c511c1a32e896900f62677ac3e47330d3f3bc33`；
+  result
+  `ccac9ac39fd7920dc89726313b89a3ae16ab71b5494b072d0b6c6ba6778d3f02`；
+  log
+  `f09670e9e5bd8bdb9ddd51653d71f7f5759c8f51cc3cb079a1c95993c5e648d2`。
+- 完整解释见 [thought3_phase_c_report.md](thought3_phase_c_report.md)。
 
 ## 2. 失败尝试与解决记录
 

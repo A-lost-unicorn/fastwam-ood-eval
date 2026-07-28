@@ -25,3 +25,4 @@ third_party/*
 *.tar.gz
 *.zip
 core
+data/libero_mujoco3.3.2/

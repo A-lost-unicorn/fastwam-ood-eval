@@ -396,6 +396,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     thought3_commands = (
         ("thought3-audit", "Report the frozen Phase A audit and Phase B boundary"),
+        (
+            "thought3-smoke-real",
+            "Run Gate C: one real LIBERO sample, one GPU, one backward",
+        ),
         ("thought3-plan-cache", "Plan paired K=1/2/4 future cache shards"),
         ("thought3-build-cache", "Build this rank's future cache shards"),
         ("thought3-validate-cache", "Validate cache schema, pairing and checksums"),
@@ -427,7 +431,7 @@ def build_parser() -> argparse.ArgumentParser:
         )
         command.add_argument(
             "--device",
-            help="Explicit runtime device; Phase B accepts cpu only",
+            help="Explicit runtime device",
         )
         command.add_argument("--rank", type=int, default=0)
         command.add_argument("--world-size", type=int, default=1)

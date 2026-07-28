@@ -294,7 +294,11 @@ class FutureToActionAdapter(nn.Module):
             device=tokens.device,
         )
 
-        query = self.query_projection(self.query_norm(action_hidden).to(tokens.dtype))
+        # The Adapter remains fp32 while Fast-WAM emits bf16 hidden states.
+        # CUDA layer_norm requires its activation and affine parameters to use
+        # compatible dtypes, so cast before normalization rather than after it.
+        query_input = action_hidden.to(dtype=self.query_norm.weight.dtype)
+        query = self.query_projection(self.query_norm(query_input))
         key = self.key_projection(tokens)
         value = self.value_projection(tokens)
         heads = self.spec.num_heads

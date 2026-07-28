@@ -30,6 +30,16 @@ def test_default_adapter_has_audited_parameter_count():
     assert adapter.trainable_parameter_count == 1_371_137
 
 
+def test_fp32_adapter_accepts_bfloat16_fastwam_inputs():
+    adapter = FutureToActionAdapter()
+    action = torch.randn(1, 4, 1024, dtype=torch.bfloat16)
+    future = torch.randn(1, 48, 2, 14, 28, dtype=torch.bfloat16)
+    output = adapter(action, future)
+    assert output.dtype == torch.bfloat16
+    assert output.shape == action.shape
+    assert torch.equal(output, action)
+
+
 def test_adapter_supports_variable_tokens_and_latent_mask():
     adapter = _small_adapter()
     action = torch.randn(2, 5, 16)

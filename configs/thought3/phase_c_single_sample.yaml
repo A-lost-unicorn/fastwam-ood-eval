@@ -1,0 +1,41 @@
+schema_version: thought3.config.v1
+variant: A4
+experiment:
+  name: thought3_phase_c_single_sample
+  output_dir: outputs/thought3/phase_c_single_sample_v1
+  seed: 3407
+runtime:
+  backend: fastwam
+  device: cuda:0
+  action_denoise_steps: 20
+  online_use_cache: false
+  max_gpu_memory_gb: 43.0
+sampler:
+  active_k: 4
+  cache_k: [1, 2, 4]
+  shift: 5.0
+  num_train_timesteps: 1000
+  global_cache_seed: 3407
+  rand_device: cpu
+  latent_shape: [48, 2, 14, 28]
+  cache_dtype: bfloat16
+data:
+  dataset_roots:
+    - data/libero_mujoco3.3.2/libero_goal_no_noops_lerobot
+  dataset_revision: 117413dc0ca99c7cd64036c4eaa4a316c537d692
+  split_seed: 3407
+  development_fraction: 0.1
+  camera_keys: [image, wrist_image]
+cache:
+  # Gate C never creates or reads this path.
+  root: outputs/thought3/cache/phase_c_forbidden
+  shard_size: 1
+  pilot_limit: 1
+training:
+  # Scope guards only: Gate C performs one backward and zero optimizer steps.
+  max_steps: 1
+  microbatch_size: 1
+  gradient_accumulation_steps: 1
+  train_seed: 3407
+  gradient_checkpointing: false
+  checkpoint_interval: 1

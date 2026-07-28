@@ -13,6 +13,8 @@ from thought3_test_utils import write_thought3_config
 
 THOUGHT3_COMMANDS = (
     "thought3-audit",
+    "thought3-smoke-real",
+    "thought3-cache-real-smoke",
     "thought3-plan-cache",
     "thought3-build-cache",
     "thought3-validate-cache",

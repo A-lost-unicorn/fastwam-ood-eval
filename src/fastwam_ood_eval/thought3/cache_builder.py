@@ -220,10 +220,21 @@ def build_cache(
     """Build only this rank's whole shards; never split one shard across ranks."""
 
     validate_rank_world_size(rank, world_size)
+    if cfg.runtime.backend == "fastwam":
+        from fastwam_ood_eval.thought3.real_cache_builder import (
+            build_real_cache,
+        )
+
+        return build_real_cache(
+            cfg,
+            resume=resume,
+            rank=rank,
+            world_size=world_size,
+            device=device,
+        )
     if cfg.runtime.backend != "mock":
         raise RuntimeError(
-            "Phase B cache builder supports backend=mock only; "
-            "the frozen Fast-WAM sampler is a Phase C gate"
+            f"unsupported Thought3 cache backend: {cfg.runtime.backend}"
         )
     if device != "cpu":
         raise RuntimeError("Phase B mock cache build is CPU-only")

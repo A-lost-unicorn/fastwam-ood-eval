@@ -393,6 +393,12 @@ def dispatch(args: Any) -> int:
         from fastwam_ood_eval.thought3.phase_c_smoke import run_phase_c_smoke
 
         result = run_phase_c_smoke(cfg, resume=args.resume)
+    elif args.command == "thought3-cache-real-smoke":
+        from fastwam_ood_eval.thought3.phase_d_cache_smoke import (
+            run_phase_d_cache_smoke,
+        )
+
+        result = run_phase_d_cache_smoke(cfg, resume=args.resume)
     elif args.command == "thought3-plan-cache":
         from fastwam_ood_eval.thought3.cache_planner import write_cache_plan
 

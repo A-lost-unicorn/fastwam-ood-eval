@@ -40,6 +40,7 @@
 | `P3-PHASE-E3-v1` | 2026-07-28 | 3 / INVALID ENGINEERING RUN | commit `330fe15`；config fingerprint `f2313eec...5652`；GPU 1；只读 E.2 checkpoint | model/data/A0/A1 initial probe 完成；A0/A1 mean loss 均为 `0.005565503754223755`；一个 `t=1000` objective 的官方 weight/loss 为 0；非门控 ratio 汇总抛错；frozen SHA 前后相同 | 未生成 `gate_e3_result.json`，无 Gate pass/fail 或 LR 结论；v1 工件按 SHA 冻结，不得覆盖 |
 | `P3-PHASE-E3-v2` | 2026-07-28 | 3 / FAILED ENGINEERING DIAGNOSTIC | prereg commit `139742f`；8 samples、6 E.2 checkpoints、held-out flow `1..5`；320 forward、0 optimizer/backward | 全部 execution/provenance/zero-weight checks 通过；A0 最好下降 1.35%/2-of-8，A1 最好下降 0.025%/2-of-8；三个 LR 均不 eligible | 有效负 Gate；E.2 的 fixed-flow 降幅未迁移到 held-out flow；不能解释为 future 无效，不扩 A2/A4/Phase F |
 | `P3-PHASE-E4-v1` | 2026-07-28 | 3 / FAILED ENGINEERING DIAGNOSTIC | prereg commit `07d949d`；8 samples；A0/A1 × 原 LR grid；唯一 paired slot `10001..10200`；held-out flow `1..5` | 六轨迹 1,200 step、480 held-out objectives 和 108 execution checks 完整；六条 reduction 均为正但仅 0.997%–1.948%；只有 A1@3e-4 达 7/8，三个 LR 均不 eligible | 有效负 Gate；diversified flow 缓解 fixed-flow 退化但不足 10%；不进入 full E、A2/A4 或 Phase F |
+| `P3-PHASE-E5-v1` | 2026-07-28 | 3 / PREREGISTERED ENGINEERING DIAGNOSTIC | config fingerprint `c4c6815...122fc`；matched-update；A0/A1 × 原 LR grid；每 update 8-sample mean；slots `20001..21600` | 计划 6×200 optimizer updates、9,600 train objectives、480 held-out objectives；代码/恢复/独立重算测试完成，真实 run 尚未执行 | 只允许检验 objective aggregation 是否产生稳定候选 LR；不支持 future/OOD 结论，执行需用户显式确认 |
 
 ### `P1-FORMAL-v1` 机器证据
 

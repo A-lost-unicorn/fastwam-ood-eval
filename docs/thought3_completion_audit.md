@@ -18,6 +18,7 @@ Gate E/E.2           failed overall
 Gate E.3 v1          invalid telemetry run; no gate conclusion
 Gate E.3 v2          valid failed gate; 320/320 probes complete
 Gate E.4             valid failed gate; 1,200 steps complete
+Gate E.5             preregistered/implemented; not executed
 full 28/4 Gate E     not passed
 A2/A4 real training  not started
 Phase F real pilot   not started
@@ -32,7 +33,9 @@ paper claim          unavailable
 - Adapter-only backward、checkpoint 和单卡显存可工作；
 - A0/A1 单目标可拟合；
 - E.2/E.4 各六条多样本训练轨迹工程上完整；
-- diversified train-flow 缓解 fixed-flow 退化，但未达到冻结训练门槛。
+- diversified train-flow 缓解 fixed-flow 退化，但未达到冻结训练门槛；
+- E.5 已实现 full-cohort mean-gradient、双层 telemetry 和原子恢复，但没有真实
+  loss、gradient、memory 或 gate 结果。
 
 尚无证据证明：
 
@@ -99,6 +102,7 @@ Phase D cache 只能用于训练；不得把它接入 Phase F/G 在线 policy。
 | E.3 v1 | invalid run | 官方 `t=1000` 零权重 objective 触发非门控 ratio 实现错误；冻结 SHA 不变，未生成 gate result |
 | E.3 v2 | valid failed gate | 320/320 probe 与全部执行检查通过；三个 LR 均未达到 A0/A1 共同 `10% + 6/8` |
 | E.4 | valid failed gate | 1,200 optimizer steps、480 held-out objectives、108 execution checks 完整；六条 reduction 仅 0.997%–1.948%，无共同 LR |
+| E.5 | preregistered/implemented | matched-update、8-sample arithmetic mean、slots `20001..21600`、schedule SHA、24 zero-weight slots 和恢复检查已冻结；真实 run 未执行 |
 | full E | not passed | 仍缺新的 28 train / 4 development 完整闭环 |
 
 在 full E 通过前：
@@ -106,7 +110,7 @@ Phase D cache 只能用于训练；不得把它接入 Phase F/G 在线 policy。
 - 不训练 A2/A4；
 - 不按 OOD outcome 选 LR/K/checkpoint；
 - 不启动真实 Phase F rollout；
-- 不把 E.2–E.4 的 A1/A0 mean-loss 差写成 future 效果。
+- 不把 E.2–E.5 的 A1/A0 mean-loss 差写成 future 效果。
 
 ## 6. 反事实与真实在线推理
 
@@ -153,14 +157,14 @@ CPU/mock；`thought3-counterfactual` 在 Fast-WAM backend 上仍返回
 | 独立分支/目录/CLI/schema | `feature/thought3-partial-future-adapter` 与 Thought3 namespace | **Satisfied** |
 | 不修改 `third_party/FastWAM` | worktree/status checks | **Satisfied to current commit** |
 | 不修改 Thought1/2 outputs | path guards + status/hash checks | **Satisfied to current commit** |
-| 旧 CLI 行为不变 | old CLI regression；完整测试 277 passed | **Satisfied to current commit** |
+| 旧 CLI 行为不变 | old CLI regression；完整测试 304 passed | **Satisfied to current commit** |
 | 正式运行前 dirty=false | Phase F/G 未到运行点 | **Pending** |
 | 三 GPU shard union/intersection | 纯函数测试存在，真实 run 缺失 | **Partial** |
 
 ## 9. 完成最终 Goal 的依赖链
 
 ```text
-freeze and run one-variable multi-objective gradient aggregation diagnostic
+run preregistered E.5 full-cohort objective aggregation diagnostic
   ↓
 if pass: freeze candidate LR
   ↓
@@ -191,10 +195,14 @@ held-out reduction，但范围只有 `0.997%–1.948%`；只有 A1@3e-4 达到 7
 sample 不变差，仍未达到冻结的 10% mean reduction。全部 execution、pairing、
 zero-weight、checkpoint、memory、provenance 和 frozen SHA 检查通过。
 
-最近允许设计的门禁只能改变 optimizer objective aggregation/effective batch。
-在实现前必须冻结 matched-objective 或 matched-update budget、accumulation
-factor、flow-slot 映射和 mean/sum loss。8 samples、A0/A1、LR grid、official
-loss、held-out probe 和 `10% + 6/8` 门槛不得改变；真实运行仍需新的用户显式
-确认。E.4 协议和结果分别见
+该门禁现已作为 E.5 冻结并实现：选择 matched-update budget，每条轨迹 200
+updates，每 update 固定聚合全部 8 条 sample 的独立 flow objective，并对 loss
+取算术均值；slots `20001..21600`、schedule identity SHA、24 个合法零权重
+objective、双层 telemetry 和 checkpoint cursor 均已锁定。8 samples、A0/A1、
+LR grid、official loss、held-out probe 和 `10% + 6/8` 门槛未改变。
+
+E.5 尚未执行，不能填写 loss/gradient/memory/Gate 结果。真实单卡执行预计约
+110–135 分钟，仍需用户显式确认。相关协议以及父结果见
+[thought3_phase_e5_protocol.md](thought3_phase_e5_protocol.md)、
 [thought3_phase_e4_protocol.md](thought3_phase_e4_protocol.md)、
 [thought3_phase_e4_report.md](thought3_phase_e4_report.md)。

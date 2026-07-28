@@ -432,6 +432,15 @@ def dispatch(args: Any) -> int:
             cfg,
             resume=args.resume,
         )
+    elif args.command == "thought3-diagnose-objective-aggregation":
+        from fastwam_ood_eval.thought3.phase_e5_objective_aggregation import (
+            run_phase_e5_objective_aggregation,
+        )
+
+        result = run_phase_e5_objective_aggregation(
+            cfg,
+            resume=args.resume,
+        )
     elif args.command == "thought3-plan-cache":
         from fastwam_ood_eval.thought3.cache_planner import write_cache_plan
 

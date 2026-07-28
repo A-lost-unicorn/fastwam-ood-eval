@@ -9,7 +9,7 @@
 | 项目 | 状态 | 可用证据 |
 | --- | --- | --- |
 | 配置、planner、adapter、分片、resume、聚合 | 已实现 | `src/`、`configs/`、`tests/` |
-| 自动化测试 | 已通过 | `pytest -q`：290 passed、5 warnings；覆盖阶段一/二回归与 Thought3 配置、cache、Adapter、resume、泄漏和真实 Gate 编排 |
+| 自动化测试 | 已通过 | `pytest -q`：304 passed、5 warnings；覆盖阶段一/二回归与 Thought3 配置、cache、Adapter、resume、泄漏和真实 Gate 编排 |
 | Conda 环境与激活入口 | 已配置 | `scripts/create_env.sh`、`scripts/activate_env.sh` |
 | checkpoint/stats | 已下载并人工校验 | checkpoint SHA-256 `1000437c...a49579`；stats SHA-256 `30f81ad7...68638` |
 | FastWAM 公共运行时模型 | 已下载并逐文件校验 | `scripts/download_fastwam_runtime_models.sh`；T5、VAE、tokenizer 共约 11.9 GiB |
@@ -30,6 +30,7 @@
 | 阶段三 Gate E.2 多样本诊断 | FAILED-GATE，工程轨迹完整 | A0/A1 × 三 LR 共 1,200 step；梯度/resume/checkpoint/frozen SHA/13.0 GiB 全通过；无共同 6/8 stable LR，保留负结果并定位单-flow confound |
 | 阶段三 Gate E.3 held-out flow | FAILED-GATE，320/320 probe 完整 | 执行/provenance/zero-weight checks 全通过；E.2 A1 fixed-flow 的 24.19%/40.01% 降幅在 held-out flow 变为 0.025%/−1.31%，阻止不稳定配方进入 OOD |
 | 阶段三 Gate E.4 diversified flow | FAILED-GATE，1,200 step 完整 | 200 unique paired slots、480 held-out objectives、108 execution checks 全通过；六条 reduction 转正但仅 0.997%–1.948%，继续阻止 full E/A2/A4 |
+| 阶段三 Gate E.5 objective aggregation | PREREGISTERED/IMPLEMENTED，未执行 | 冻结 matched-update 预算、8-objective arithmetic mean、1,600 paired slots/track、双层 telemetry、24 个零权重 objective 与原子恢复；等待显式 GPU 授权 |
 
 ## 2. 可以对外说明的工程亮点
 
@@ -360,6 +361,23 @@
   `2268×–2342×`，top 10% step 占约 59%，scalar gate gradient 高频换号且净值
   远小于绝对值；下一步收缩到 objective aggregation/effective-batch 单变量，而
   不是放宽阈值或直接扩 K。
+
+### 3.27 把多目标梯度聚合做成可审计单变量诊断
+
+- 决策：在结果前选择 matched-optimizer-update，而非事后在 matched-objective
+  与 matched-update 中挑口径；E.4/E.5 都做 200 次 AdamW update，但 E.5 每次
+  固定遍历完整 8-sample cohort 并对 `loss/8` 累积梯度。
+- 配对：为 200×8 个 objective 冻结 `20001..21600` 唯一 slot，锁定完整
+  sample/noise/timestep identity SHA；A0/A1 和三个 LR 共享同一 schedule，且与
+  probe/E.4 slots 不相交。
+- 遥测：分别落盘 objective 与 optimizer-update JSONL；记录每个 micro loss、
+  mean-scaled gate-gradient contribution、累计 gradient、符号及 update-level
+  cancellation ratio，可从工件独立重算 mean/sum。
+- 恢复：checkpoint 的 cursor 强制为 `update×8`，先原子提交两份 metrics 再保存
+  Adapter-only checkpoint；恢复时截断 checkpoint 后的孤立 metrics，不允许
+  partial cohort、重复或错序。
+- 边界：这是已预注册和测试、尚未运行的工程系统；9,600 train objectives、
+  loss/显存和 Gate 结果不能在真实执行前写成完成数字。
 
 ## 4. 简历表达素材
 

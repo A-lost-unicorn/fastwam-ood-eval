@@ -1,6 +1,6 @@
 # Thought3 风险登记与停止条件
 
-状态：Phase A–D 已通过；Gate E 未通过；Gate E.1 工程诊断已通过
+状态：Phase A–D 已通过；Gate E 未通过；E.2–E.4 有效负诊断；E.5 已预注册/实现但未执行
 范围：Partial-Future Adapter 的数据、cache、训练、推理、统计和阶段隔离
 
 ## 1. 等级
@@ -75,7 +75,7 @@
 | R50 | 每 sample 只绑定一个 fixed action-flow draw，使 sample stability 被 timestep/noise 混淆 | 高 | High | initial loss/timestep、multi-flow held-out probe | E.3 v2 已确认风险；E.4 使用 200 个唯一 paired slots 后六条 held-out reduction 均转正，但绝对幅度仍不足 | E | Controlled |
 | R51 | 官方 scheduler 零权重端点使逐 objective `final/initial` ratio 出现零分母 | 中 | Medium | action weight、timestep、zero-loss count、v1 traceback | v2 完成 320/320 probe；8 个零权重 row 全部 exact zero loss，保留于主统计且仅排除未定义 ratio；回归测试通过 | E | Closed |
 | R52 | Adapter 在 200 step 内主要拟合固定 action noise/timestep，而非形成跨 flow 稳定 action objective | 高 | High | E.2 fixed-flow、E.3 held-out 与 E.4 diversified-train 对照 | E.4 将六条 held-out reduction 改善为 `0.997%–1.948%`，说明 fixed-flow 是混淆但不是全部原因；不得回用 E.2 checkpoint | E | Controlled |
-| R53 | microbatch 1 的单 action-flow objective 方差过高，使 scalar gate/Adapter 更新抵消 | 高 | High | per-step loss CV/top-share、gate-gradient sign/cancellation、final gate 与 delta/hidden | E.4 post-run 遥测：positive loss max/min `2268×–2342×`、top 10% 占 `58.7%–59.0%`、gate sign flip `70–107/197`；下一协议只改变 objective aggregation/effective batch | E | Open |
+| R53 | microbatch 1 的单 action-flow objective 方差过高，使 scalar gate/Adapter 更新抵消 | 高 | High | per-step loss CV/top-share、gate-gradient sign/cancellation、final gate 与 delta/hidden | E.4 post-run 遥测触发 E.5；现已冻结 matched-update、8-sample arithmetic mean、slots/SHA 和 contribution/cancellation 独立重算，真实结果尚未产生 | E | Mitigation implemented / untested |
 
 ## 3. 最高优先级风险详解
 
@@ -266,6 +266,12 @@ frozen hash 缺口；但发现实际 hidden correction 达 A0 1.91×、A1 0.70×
 追溯改判。详见
 [thought3_phase_e1_report.md](thought3_phase_e1_report.md)。
 
+E.2–E.4 的后续证据显示 diversified objective 能把六条 held-out direction
+全部转正，但幅度仍只有约 1%–2%。E.5 已把 R53 的下一项控制冻结为：
+200 matched optimizer updates、每 update 全 8-sample cohort、8 个独立 flow
+objective 的 arithmetic mean、完整 contribution/cancellation telemetry。它尚未
+执行，不能把 mitigation implementation 写成风险已关闭。
+
 ### Gate F：技术 pilot
 
 - [ ] 六组都执行；
@@ -327,7 +333,7 @@ frozen hash 缺口；但发现实际 hidden correction 达 A0 1.91×、A1 0.70×
 | R50 单 fixed flow draw 混淆 | 已受控：E.4 使用唯一 paired slots，六条 held-out reduction 均转正但未过 Gate |
 | R51 零权重 objective ratio | 已关闭：v2 单测与真实 320 probes 的 weight/count/exact-zero 检查均通过 |
 | R52 fixed-flow objective 拟合 | 已受控：E.4 证明 diversification 有改善但不足以形成 eligible LR |
-| R53 单 objective 梯度方差 | 先冻结 matched-budget、accumulation factor、flow slots 和 mean/sum loss，再运行单变量聚合诊断 |
+| R53 单 objective 梯度方差 | E.5 协议/代码已冻结；需真实 6-track run 验证 held-out 门槛和 contribution/cancellation |
 | 3-rank cache 完整性 | 正式分布式 cache 的 union/intersection/cardinality 证明 |
 | Gate E 多样本优化 | 稳定配方下重新跑 28/4 fixed train/development gate |
 

@@ -177,6 +177,8 @@ OOD 一致性下降假设”，不能进入论文结论表。
   [thought3_phase_e4_protocol.md](thought3_phase_e4_protocol.md)
 - 阶段三 Gate E.4 有效负结果：
   [thought3_phase_e4_report.md](thought3_phase_e4_report.md)
+- 阶段三 Gate E.5 full-cohort objective aggregation 预注册：
+  [thought3_phase_e5_protocol.md](thought3_phase_e5_protocol.md)
 - 阶段三数据/训练/评测：[thought3_data_protocol.md](thought3_data_protocol.md)、[thought3_training.md](thought3_training.md)、[thought3_evaluation.md](thought3_evaluation.md)
 - 阶段三分析 DRAFT 与限制：[thought3_analysis_protocol_DRAFT.md](thought3_analysis_protocol_DRAFT.md)、[thought3_limitations.md](thought3_limitations.md)
 - 阶段三旧版路线摘要：[thought3_adapter_plan.md](thought3_adapter_plan.md)
@@ -193,15 +195,17 @@ OOD 一致性下降假设”，不能进入论文结论表。
    1.787%，不得事后把它选为候选 LR。
 3. E.4 只能说明 fixed-flow confound 得到缓解但训练信号仍不足；不能写成
    future latent 有效或无效，也不能进入完整 28/4 Gate E。
-4. 下一步只允许先冻结一个针对 optimizer objective aggregation/effective batch
-   的单变量协议；必须预先选择 matched-objective 或 matched-update budget、
-   accumulation factor、flow slots 和 mean/sum loss，不能边运行边决定。
+4. Gate E.5 已冻结为 matched-optimizer-update 单变量协议并实现：每条轨迹
+   200 updates、每 update 聚合完整 8-sample cohort、对 8 个官方 loss 取算术
+   均值；slots `20001..21600` 和 schedule SHA 已在结果前锁定。
 5. 只有新的诊断给出稳定候选 LR，并在新的完整 28/4 Gate E 中通过 train/dev、
    resume、frozen 与尺度门槛后，才允许实现和训练 A2/A4。
-6. 在不按自动 metric/outcome 挑案例的前提下，冻结正式 human-review budget、
+6. E.5 仍未执行，真实单卡运行必须由用户显式确认；预计约 110–135 分钟，
+   不能把实现或单测写成训练结果。
+7. 在不按自动 metric/outcome 挑案例的前提下，冻结正式 human-review budget、
    seed 和每 job 至多一个 probe；至少两名 reviewer 独立标注并保留 agreement/
    adjudication。
-7. 人工 endpoint 只回答 goal progress、physical plausibility、局部 action
+8. 人工 endpoint 只回答 goal progress、physical plausibility、局部 action
    execution 和 future–actual agreement；不把它升级成 future-to-action 因果。
-8. 阶段三 OOD 结果不用于边训练边选择 K，
+9. 阶段三 OOD 结果不用于边训练边选择 K，
    Phase F 后先冻结分析协议再解锁正式 cohort。

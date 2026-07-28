@@ -378,3 +378,32 @@ matched-update budget、accumulation factor、flow slots 与 mean/sum loss。
 冻结协议和结果分别见
 [thought3_phase_e4_protocol.md](thought3_phase_e4_protocol.md)、
 [thought3_phase_e4_report.md](thought3_phase_e4_report.md)。
+
+### 11.6 Gate E.5 full-cohort objective aggregation
+
+E.5 已完成协议冻结和代码实现，但尚未执行。它采用预先选定的
+`matched-optimizer-update` 预算：
+
+```text
+200 optimizer updates / track
+8 frozen train samples / update
+8 unique flow objectives / update
+loss reduction = arithmetic mean
+1,600 train objectives / track
+```
+
+唯一训练变化是把 E.4 的“单 sample objective 后立即更新”改成“同一次 update
+内完整遍历 8 条 sample，对 `loss/8` 累积梯度后更新”。A0/A1、三档 LR、
+Adapter/初始化、AdamW 更新次数、weight decay、checkpoint、held-out flow
+`1..5` 和 `10% + 6/8` 门槛均保持不变。
+
+训练 slots 冻结为 `20001..21600`，完整 pre-outcome identity schedule SHA 为
+`b6f9778d303a6ad2c4bef781f4a6027a800d013814110daa47eb7cb1d13af86d`。
+代码分别保存 1,600 条 objective 遥测和 200 条 update 遥测，可独立重算 mean
+loss、每个 micro-objective 的 gate-gradient contribution 及 cancellation ratio。
+24 个预知 `t=1000/weight=0` objective 原样保留。
+
+该预算不是 sample/compute matched：E.5 的 train objective 数是 E.4 的 8 倍。
+因此即使通过也只产生完整 28/4 Gate E 的工程候选 LR，不能解释为 future effect。
+协议、运行边界、预计耗时和手动命令见
+[thought3_phase_e5_protocol.md](thought3_phase_e5_protocol.md)。

@@ -48,7 +48,8 @@ Clean `97.25%`、OOD `47.70%`，绝对下降 `49.55` 个百分点，0 exception�
 未使用 train cohort 完成 A0/A1@3e-4 序贯复验：A1 信号复现，但 A0 仅 4/8
 样本不变差，故总 Gate 有效失败。E.7 已完成只读 step-50/100/150/200
 trajectory 诊断：primary flow 不支持预注册的实质晚期退化模式，且没有任何
-step 同时通过 A0、A1 absolute 与 paired 三组门槛。因此
+step 同时通过 A0、A1 absolute 与 paired 三组门槛。E.8 已预注册为 A0-only
+的 64 个全新 flow replication，尚未运行。因此
 完整 Gate E、A2/A4 和在线成功率评测仍未启动。未运行的实验不会填入虚构结果。
 
 当前 pinned Fast-WAM 代码与 release 权重带来四个结论边界：
@@ -80,6 +81,7 @@ step 同时通过 A0、A1 absolute 与 paired 三组门槛。因此
 - [思考点三 Gate E.6 预注册](docs/thought3_phase_e6_protocol.md)：未使用 cohort、全新 flow slots、post-selection 披露和冻结门槛。
 - [思考点三 Gate E.6 结果](docs/thought3_phase_e6_report.md)：两轨迹完整结果、唯一失败门槛、逐样本对照和工件哈希。
 - [思考点三 Gate E.7 协议与结果](docs/thought3_phase_e7_protocol.md)、[结果报告](docs/thought3_phase_e7_report.md)：只读 checkpoint trajectory、primary/continuity 分离、冻结分类与无候选结论。
+- [思考点三 Gate E.8 预注册](docs/thought3_phase_e8_protocol.md)：A0 step 100/200、64 个全新 flow、双 32-flow block、配对 bootstrap 与 tail-risk/variance 互斥分类。
 - [思考点三设计与数据协议](docs/thought3_design.md)、[训练手册](docs/thought3_training.md)、[在线评测手册](docs/thought3_evaluation.md)。
 - [思考点三最终目标完成度](docs/thought3_completion_audit.md)：已证明、未证明与通往正式 OOD 对照的依赖链。
 - [工程亮点、难点与阻碍台账](docs/engineering_highlights.md)：工程复盘、未解决风险和简历素材。
@@ -437,9 +439,11 @@ fastwam-ood thought3-counterfactual --config configs/thought3/train_a1_smoke.yam
 和 160 held-out objectives。A1 下降 14.842%/7-of-8，但 A0 仅 4/8 不变差，
 所以总 Gate 有效失败。E.7 的 800-objective 只读诊断工程 Gate 通过；primary
 flow 上 A0 在 step 50/100 稳定、150/200 不稳定，但 pooled mean 继续下降，
-故不支持实质晚期退化，且没有 joint checkpoint candidate。见
+故不支持实质晚期退化，且没有 joint checkpoint candidate。E.8 已冻结为
+1,536-objective 只读诊断，尚未运行。见
 [Gate E.6 报告](docs/thought3_phase_e6_report.md)与
-[Gate E.7 报告](docs/thought3_phase_e7_report.md)。
+[Gate E.7 报告](docs/thought3_phase_e7_report.md)、
+[Gate E.8 协议](docs/thought3_phase_e8_protocol.md)。
 
 ## 14. 查看失败视频
 
@@ -474,13 +478,14 @@ fastwam-ood review-failures --experiment-dir outputs/ood_full
 1. 保留 E.5 为有效负总 Gate，不覆盖 Run ID、不放宽共同门槛；
 2. 保留 E.6 failed Run ID，不 resume、不把 A0 的 6/8 门槛降为 4/8；
 3. 保留 E.7 primary 与 continuity 的证据等级，不事后合并或挑选 step 100/200；
-4. 预注册全新、更大的 flow replication panel，先估计 A0 stability 的
-   flow-panel 方差；产生候选后仍须在未使用 train cohort 独立复验；
+4. 按已冻结 E.8 协议运行 A0 step 100/200 的 64-flow replication，区分
+   预识别 sample tail risk 与五-flow panel 方差；
 5. 只有形成并独立验证稳定配方后才冻结新的完整 28-train/4-development Gate E；
 6. 完整 Gate E 通过后才训练 A2/A4，并实现真实 online no-cache evaluator；
 7. Phase F 技术 pilot 后冻结分析协议，再解锁正式 ID/OOD 六组对照。
 
 最近结果、停止条件和完整依赖链见
+[Gate E.8 预注册](docs/thought3_phase_e8_protocol.md)、
 [Gate E.7 结果](docs/thought3_phase_e7_report.md)、
 [Gate E.7 协议](docs/thought3_phase_e7_protocol.md)、
 [Gate E.6 结果](docs/thought3_phase_e6_report.md)、

@@ -25,7 +25,7 @@
 | 阶段二正式抽样 | outcome-blind planner、anchor、exact-ratification 与 formal gate 已实现 | 200 Clean + 532 OOD 已 exact-ratify 并全部运行 | **完成**。只认证 Phase 2 future 指标前 job ID 不变；不冒充阶段一 outcome 前 preregistration |
 | 阶段二统计协议 | episode→task 分层、task bootstrap、首 probe/outcome gate 已实现 | 10,000 次 suite-stratified task bootstrap；730/732 outcome match | **post-run analysis 完成，非 preregistered confirmatory**。DRAFT 未在正式指标前冻结；人工 endpoint 待完成 |
 | 阶段二 B：action-conditioned future consistency | 严格门禁、schema、runner、测试已实现 | CPU/mock 与门禁测试通过 | **阻塞**。官方 release 为 `action_conditioned=false`，且没有可信匹配 checkpoint |
-| 阶段三：Future-to-Action Adapter | Phase A/B/C/D 完成；E/E.1–E.7 均已真实执行 | E.7 只读 8 个 checkpoint、800 objectives；primary 上 A0 step 50/100 stable、150/200 unstable，但 step-200 mean 比 step 50 低 5.651%；A1 step 150/200 通过 absolute gate | **E.7 工程通过、主要机制假设未支持、无 joint candidate**。continuity 与 primary 的差异提示 flow-panel 方差；仍不得扩 A2/A4 或启动 ID/OOD |
+| 阶段三：Future-to-Action Adapter | Phase A/B/C/D 完成；E/E.1–E.7 均已真实执行；E.8 已预注册未运行 | E.7 只读 8 个 checkpoint、800 objectives；primary 上 A0 step 50/100 stable、150/200 unstable，但 step-200 mean 比 step 50 低 5.651%；A1 step 150/200 通过 absolute gate | **E.7 工程通过、主要机制假设未支持、无 joint candidate；E.8 尚无结果**。E.8 将区分预识别 A0 tail risk 与五-flow panel 方差；仍不得扩 A2/A4 或启动 ID/OOD |
 
 因此，“阶段一已经完成”的准确说法是：**阶段一工程、正式全量计算、聚合与
 完整性审计均已完成；失败机制人工 taxonomy 尚未完成，但不阻塞主成功率结论。**
@@ -138,6 +138,7 @@ outcome JSONL 前使用 `frozen_before_source_outcomes`；现有 v2 则走更窄
 | 阶段三 Gate E.5 | 六轨迹共 1,200 updates、9,600 train objectives、480 held-out objectives；120/120 execution checks；总耗时 114.65 分钟；413,198,197 bytes | A1@3e-4 held-out loss 下降 19.668%、8/8 不变差并单条过门；同 LR A0 仅 2.638%，故无共同 eligible LR。属于有效负总 Gate 与待独立复验的探索性 A1 信号 |
 | 阶段三 Gate E.6 | 新 cohort 双轨共 400 updates、3,200 train objectives、160 held-out objectives；总耗时 43.89 分钟；全部 execution/paired/frozen checks 通过 | A1 下降 14.842%、7/8 且相对 A0 final mean 低 13.815%；A0 仅 4/8 不变差，故为有效负 Gate，但 A1 工程信号得到序贯复现 |
 | 阶段三 Gate E.7 | 冻结 8 个既有 checkpoint、primary flow `6..10`、continuity flow `1..5`、800 个只读 forward objective；0 backward/optimizer/新训练；13.98 分钟 | Primary A0 50/100 通过、150/200 因 5/8 失败；step-200 mean 仍比 step 50 低 5.651%，故分类为 `not_supported_no_material_late_degradation`；A1 信号增强但无 joint candidate |
+| 阶段三 Gate E.8 预注册 | A0 step 100/200；全新 flow `11..74`，双 32-flow block；1,536 forward；20k paired bootstrap + 20k five-flow sensitivity；0 backward/optimizer/训练 | **尚未运行、无 E.8 结果**；只区分同一八条 cohort 上的 persistent target tail risk、five-flow variance 或 mixed，不消耗剩余 train cohort |
 
 20-step pilot 的 episode-weighted Clean→OOD 描述值为：latent L1
 `0.1512→0.2002`、cosine distance `0.1168→0.1942`、motion-direction cosine
@@ -190,6 +191,8 @@ OOD 一致性下降假设”，不能进入论文结论表。
 - 阶段三 Gate E.7 只读 checkpoint-trajectory 协议与结果：
   [thought3_phase_e7_protocol.md](thought3_phase_e7_protocol.md)、
   [thought3_phase_e7_report.md](thought3_phase_e7_report.md)
+- 阶段三 Gate E.8 A0 flow-variance replication 预注册：
+  [thought3_phase_e8_protocol.md](thought3_phase_e8_protocol.md)
 - 阶段三数据/训练/评测：[thought3_data_protocol.md](thought3_data_protocol.md)、[thought3_training.md](thought3_training.md)、[thought3_evaluation.md](thought3_evaluation.md)
 - 阶段三分析 DRAFT 与限制：[thought3_analysis_protocol_DRAFT.md](thought3_analysis_protocol_DRAFT.md)、[thought3_limitations.md](thought3_limitations.md)
 - 阶段三旧版路线摘要：[thought3_adapter_plan.md](thought3_adapter_plan.md)
@@ -210,11 +213,11 @@ OOD 一致性下降假设”，不能进入论文结论表。
    mean 不变差但只有 4/8 sample 不变差，未过冻结的 6/8 stability gate。
 5. E.7 已按冻结协议完成：primary 不支持实质晚期退化，continuity 描述性
    支持，两者共同显示 A0 在 step 100 后逐样本稳定性下降；无 joint candidate。
-6. 下一步先预注册全新、更大的 flow replication panel，量化五个 flow draw
-   对 A0 stability 判定的方差；不得追溯合并 primary/continuity 或挑 step。
+6. E.8 已预注册但未运行：下一步按冻结 `11..74` flow、双 32-flow block、
+   20k paired bootstrap 和三种互斥分类运行；不得换 target、block 或阈值。
 7. 只有后续产生稳定候选配方，并在未使用 cohort 复验及新的完整 28/4 Gate E
    中通过 train/dev、resume、frozen 与尺度门槛后，才允许实现和训练 A2/A4。
-8. 当前不得覆盖 E.5/E.6/E.7 Run ID、事后放宽门槛、启动完整 Gate E、A2/A4、
+8. 当前不得覆盖 E.5/E.6/E.7/E.8 Run ID、事后放宽门槛、启动完整 Gate E、A2/A4、
    Phase F 或 ID/OOD rollout。
 9. 在不按自动 metric/outcome 挑案例的前提下，冻结正式 human-review budget、
    seed 和每 job 至多一个 probe；至少两名 reviewer 独立标注并保留 agreement/

@@ -459,6 +459,15 @@ def dispatch(args: Any) -> int:
             cfg,
             resume=args.resume,
         )
+    elif args.command == "thought3-replicate-a0-flow-variance":
+        from fastwam_ood_eval.thought3.phase_e8_a0_flow_variance_replication import (
+            run_phase_e8_a0_flow_variance_replication,
+        )
+
+        result = run_phase_e8_a0_flow_variance_replication(
+            cfg,
+            resume=args.resume,
+        )
     elif args.command == "thought3-plan-cache":
         from fastwam_ood_eval.thought3.cache_planner import write_cache_plan
 

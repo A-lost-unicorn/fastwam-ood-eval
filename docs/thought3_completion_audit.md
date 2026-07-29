@@ -21,6 +21,7 @@ Gate E.4             valid failed gate; 1,200 steps complete
 Gate E.5             valid failed gate; 1,200 updates/9,600 objectives complete
 Gate E.6             valid failed gate; 400 updates/3,200 objectives complete
 Gate E.7             valid read-only diagnosis; primary hypothesis not supported
+Gate E.8             preregistered A0 larger-flow diagnosis; not run
 full 28/4 Gate E     not passed
 A2/A4 real training  not started
 Phase F real pilot   not started
@@ -44,6 +45,9 @@ paper claim          unavailable
   A0 step 50/100 稳定、150/200 不稳定，但 endpoint mean 比 step 50 低
   5.651%，故不支持预注册的实质晚期退化模式；A1 随 step 增强但无 joint
   checkpoint candidate。
+- E.8 已冻结三条 E.7 target、64 个全新 flow、双 32-flow block、FWER
+  bootstrap 与三种互斥分类；这只证明诊断设计和门禁已实现，尚无真实 E.8
+  outcome。
 
 尚无证据证明：
 
@@ -113,6 +117,7 @@ Phase D cache 只能用于训练；不得把它接入 Phase F/G 在线 policy。
 | E.5 | valid failed gate | 1,200 updates、9,600 train objectives、480 held-out objectives、120 execution checks 完整；A1@3e-4 单条过门，A0@3e-4 仅 2.638%，无共同 LR |
 | E.6 | valid failed gate | 新 cohort 上 400 updates、3,200 train objectives、160 held-out objectives 完整；A1 absolute/paired superiority 通过，A0 4/8 stability 未过门 |
 | E.7 | valid read-only diagnosis | 800 forward、0 backward/optimizer/write；primary 分类 `not_supported_no_material_late_degradation`，continuity 描述性分类相反；无 joint candidate |
+| E.8 | preregistered / not run | A0 step 100/200、flows 11–74、双 32-flow block、1,536 forward、20k bootstrap + 20k five-flow sensitivity；尚无结果 |
 | full E | not passed | 仍缺新的 28 train / 4 development 完整闭环 |
 
 在 full E 通过前：
@@ -167,7 +172,7 @@ CPU/mock；`thought3-counterfactual` 在 Fast-WAM backend 上仍返回
 | 独立分支/目录/CLI/schema | `feature/thought3-partial-future-adapter` 与 Thought3 namespace | **Satisfied** |
 | 不修改 `third_party/FastWAM` | worktree/status checks | **Satisfied to current commit** |
 | 不修改 Thought1/2 outputs | path guards + status/hash checks | **Satisfied to current commit** |
-| 旧 CLI 行为不变 | old CLI regression；完整测试 328 passed | **Satisfied to current commit** |
+| 旧 CLI 行为不变 | old CLI regression；完整测试 338 passed | **Satisfied to current commit** |
 | 正式运行前 dirty=false | Phase F/G 未到运行点 | **Pending** |
 | 三 GPU shard union/intersection | 纯函数测试存在，真实 run 缺失 | **Partial** |
 
@@ -176,7 +181,9 @@ CPU/mock；`thought3-counterfactual` 在 Fast-WAM backend 上仍返回
 ```text
 Gate E.7 completed: primary no material late degradation; no candidate
   ↓
-preregister a larger entirely new flow replication panel
+Gate E.8 protocol frozen: A0 64-flow tail-risk/variance diagnosis
+  ↓
+run E.8 without training or unused-cohort consumption
   ↓
 if a candidate emerges, replicate it on an unused train cohort
   ↓
@@ -216,9 +223,12 @@ Primary flow `6..10` 上，A0 step 50/100 通过，150/200 因 5/8 sample
 未通过，所以没有 joint candidate。Continuity 描述性 panel 满足 late
 overtraining rule，但不得覆盖 primary；分歧提示 flow-panel 方差仍未解决。
 
-下一步应先预注册全新、更大的 flow replication panel，而不是挑 step 100/200、
-改 optimizer 或解锁 OOD。即使新 panel 形成候选，也必须在尚未使用的 train
-cohort 上独立复验。相关协议、结果与父结果见
+下一步应按冻结 E.8 运行全新、更大的 flow replication panel，而不是挑
+step 100/200、改 optimizer 或解锁 OOD。该协议尚未运行：A0-only
+step 100/200、flow `11..74`、双 32-flow block、20k paired bootstrap 和三种
+互斥分类。即使 E.8 形成候选，也必须在尚未使用的 train cohort 上独立复验。
+相关协议、结果与父结果见
+[thought3_phase_e8_protocol.md](thought3_phase_e8_protocol.md)、
 [thought3_phase_e7_report.md](thought3_phase_e7_report.md)、
 [thought3_phase_e7_protocol.md](thought3_phase_e7_protocol.md)、
 [thought3_phase_e6_report.md](thought3_phase_e6_report.md)、

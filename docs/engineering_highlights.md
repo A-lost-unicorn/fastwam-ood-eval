@@ -9,7 +9,7 @@
 | 项目 | 状态 | 可用证据 |
 | --- | --- | --- |
 | 配置、planner、adapter、分片、resume、聚合 | 已实现 | `src/`、`configs/`、`tests/` |
-| 自动化测试 | 已通过 | `pytest -q`：328 passed、5 warnings；覆盖阶段一/二回归与 Thought3 配置、cache、Adapter、resume、泄漏和真实 Gate 编排 |
+| 自动化测试 | 已通过 | `pytest -q`：338 passed、5 warnings；覆盖阶段一/二回归与 Thought3 配置、cache、Adapter、resume、泄漏和真实 Gate 编排 |
 | Conda 环境与激活入口 | 已配置 | `scripts/create_env.sh`、`scripts/activate_env.sh` |
 | checkpoint/stats | 已下载并人工校验 | checkpoint SHA-256 `1000437c...a49579`；stats SHA-256 `30f81ad7...68638` |
 | FastWAM 公共运行时模型 | 已下载并逐文件校验 | `scripts/download_fastwam_runtime_models.sh`；T5、VAE、tokenizer 共约 11.9 GiB |
@@ -33,6 +33,7 @@
 | 阶段三 Gate E.5 objective aggregation | FAILED-GATE，1,200 updates 完整 | 9,600 train objectives、480 held-out objectives、120 execution checks 全通过；A1@3e-4 为 19.668%/8-of-8，但同 LR A0 仅 2.638%，无共同 eligible LR |
 | 阶段三 Gate E.6 fresh-cohort replication | FAILED-GATE，400 updates 完整 | 新 8-sample cohort、3,200 train objectives、160 held-out objectives；A1 降 14.842%/7-of-8 且相对 A0 final mean 低 13.815%，但 A0 仅 4/8 stable |
 | 阶段三 Gate E.7 checkpoint trajectory | COMPLETED READ-ONLY DIAGNOSTIC | 8 个既有 checkpoint、800/800 objectives、0 backward/optimizer/write；工程 Gate 通过，primary 不支持实质晚期退化且无 joint candidate |
+| 阶段三 Gate E.8 A0 flow variance | PRE-REGISTERED，尚未运行 | A0 step 100/200、64 个全新 flow、双 32-flow block、1,536 forward、20k paired bootstrap + 20k five-flow sensitivity；0 训练 |
 
 ## 2. 可以对外说明的工程亮点
 
@@ -425,6 +426,24 @@
   低 5.651%，故不支持实质晚期退化；A1 信号随 step 增强，但无 joint
   candidate。Continuity 的不同 materiality 分类被保留为描述性证据，未覆盖
   primary。
+
+### 3.30 区分真实逐样本尾部风险与小 flow panel 方差
+
+- Result-conditioned disclosure：冻结 E.7 已知的三条 step-200 worsened
+  sample 为 target，不允许 E.8 运行后改挑新的最差样本。
+- 新 RNG namespace：使用 flow `11..74`，与 fixed/held-out `0..10` 及
+  E.4/E.5/E.6 的 `10001+ / 20001+ / 31001+` train slots 硬不相交；512 个
+  sample-flow identity 预先 SHA 固化。
+- 内部 replication：64 flows 预拆为两个不重叠 32-flow block，每个 block
+  都比 E.7 panel 大 6.4 倍；full/两个 block 分别执行原 A0 Gate。
+- 统计门禁：20,000 次 paired-flow bootstrap 对 16 个 sample×checkpoint
+  contrast 做 family-wise 校正；另用 20,000 次 five-of-64 无放回重采样量化
+  五-flow Gate 自身的波动率。
+- Fail-closed 分类：至少 2/3 target 跨 full、双 block 与校正 CI 确认才支持
+  tail risk；只有 8 条均无确认恶化且三个 panel 都过 Gate 才支持 five-flow
+  variance；其余统一 mixed/inconclusive。
+- 状态：配置、CLI、单卡 runner、父工件/checkpoint SHA、zero-weight/RNG、
+  无训练与泄漏门禁和定向测试已完成；真实 1,536-objective probe 尚未运行。
 
 ## 4. 简历表达素材
 

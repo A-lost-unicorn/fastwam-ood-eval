@@ -474,3 +474,28 @@ flow-panel sensitivity，而不是事后选择 checkpoint。
 完整已知/未知披露、父 checkpoint SHA、四种互斥分类、命令与结果见
 [协议](thought3_phase_e7_protocol.md)和
 [结果报告](thought3_phase_e7_report.md)。
+
+### 11.9 Gate E.8 A0 flow-variance replication
+
+E.8 已于 2026-07-29 完成预注册，尚未运行。它是在查看 E.7 全部结果后的
+序贯只读诊断：
+
+- 只加载 A0 step 100/200，不加载 A1、不训练；
+- 使用完全未评估的 flow `11..74`；
+- 固定拆分为 `11..42` 与 `43..74` 两个 32-flow block；
+- initial/step100/step200 共 1,536 forward objectives；
+- 对 8 samples × 2 checkpoints 做 20,000 次 paired-flow bootstrap，
+  family-wise alpha 0.05/16；
+- 对 full 64-flow 工件做 20,000 次 five-of-64 sensitivity，描述原五-flow
+  Gate 的波动率；
+- 主要分类固定为 `persistent_target_tail_risk_supported`、
+  `five_flow_panel_variance_supported` 或 `mixed_or_inconclusive`。
+
+Tail-risk 判据只针对 E.7 step-200 预识别的三条 sample，至少 2/3 必须在 full
+panel、两个 block 和校正 bootstrap 下共同确认。Variance 判据要求 step 200
+八条 sample 均无 confirmed worsening，且 full/两个 block 全部通过原 A0
+Gate。E.8 只增加 flow-level 精度，不增加 demonstration 数；任何候选仍须在
+未使用 train cohort 独立复验。
+
+完整污染披露、target ID、RNG SHA、zero-weight 位置、分类和命令见
+[thought3_phase_e8_protocol.md](thought3_phase_e8_protocol.md)。

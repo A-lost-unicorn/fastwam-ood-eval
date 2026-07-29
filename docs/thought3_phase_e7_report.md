@@ -245,3 +245,7 @@ replication panel**，检验 A0 5/8 与 panel 分歧是否来自五个 flow draw
 在更大 flow panel 仍确认 A0 不稳定后，才进入 matched A0/A1 的单变量优化诊断，
 例如对 per-sample tail risk/稳定性进行约束。完整 Gate E、A2/A4 和 OOD 继续
 锁定。
+
+2026-07-29 更新：上述后续现已冻结为 E.8，采用 A0 step 100/200、全新 flow
+`11..74`、双 32-flow block、paired bootstrap 和三种互斥分类；尚未运行。详见
+[thought3_phase_e8_protocol.md](thought3_phase_e8_protocol.md)。

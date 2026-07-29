@@ -427,7 +427,7 @@ loss、每个 micro-objective 的 gate-gradient contribution 及 cancellation ra
 
 ### 11.7 Gate E.6 未使用 cohort 序贯复验
 
-E.6 已于 2026-07-29 完成预注册和实现，但尚未启动真实 GPU：
+E.6 已于 2026-07-29 按预注册协议完成真实单卡运行：
 
 - 明确披露 `3e-4` 是查看 E.5 后选择，不是 E.5 selected LR；
 - 只运行匹配的 A0/A1 两条轨迹，不再扫描 LR；
@@ -437,6 +437,8 @@ E.6 已于 2026-07-29 完成预注册和实现，但尚未启动真实 GPU：
 - 冻结 A1 绝对复现、A0 稳定性和 A1-vs-A0 配对优势三组门槛；
 - 预算为 400 updates、3,200 train objectives、160 held-out objectives。
 
-E.6 即使通过，也只允许建立新的完整 28/4 Gate E，不直接解锁 A2/A4 或 OOD。
-详见
-[thought3_phase_e6_protocol.md](thought3_phase_e6_protocol.md)。
+结果中 A1 下降 14.842%、7/8 不变差，且 final mean 比 A0 低 13.815%、6/8
+逐样本占优；两类 A1 门槛均通过。A0 mean 下降 1.191%，但仅 4/8 不变差，未达
+冻结的 6/8。因此 E.6 是执行完整的有效负 Gate，仍不解锁完整 E、A2/A4 或
+OOD。详见 [协议](thought3_phase_e6_protocol.md) 与
+[结果报告](thought3_phase_e6_report.md)。

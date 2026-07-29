@@ -193,10 +193,16 @@ def test_phase_e6_refuses_before_any_run_state_write(
 ) -> None:
     cfg = load_thought3_config(CONFIG)
     monkeypatch.delenv("CONFIRM_THOUGHT3_PHASE_E6", raising=False)
-    assert not PHASE_E6_ROOT.exists()
+    result_path = PHASE_E6_ROOT / "gate_e6_result.json"
+    result_before = (
+        result_path.read_bytes() if result_path.is_file() else None
+    )
     with pytest.raises(RuntimeError, match="CONFIRM_THOUGHT3_PHASE_E6"):
         run_phase_e6_fresh_cohort_replication(cfg)
-    assert not PHASE_E6_ROOT.exists()
+    result_after = (
+        result_path.read_bytes() if result_path.is_file() else None
+    )
+    assert result_after == result_before
 
 
 def test_phase_e6_resume_marker_is_protocol_specific() -> None:

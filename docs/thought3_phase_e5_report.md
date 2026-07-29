@@ -286,5 +286,6 @@ unused train cohort（development 保持不可见）
    optimizer 的单变量诊断。
 
 2026-07-29 状态更新：该复验已按
-[Gate E.6 协议](thought3_phase_e6_protocol.md)完成预注册与实现，但尚未运行、
-未产生 E.6 outcome，也未解锁完整 Gate E。
+[Gate E.6 协议](thought3_phase_e6_protocol.md)完成运行。A1 信号复现，但 A0
+只有 4/8 sample 不变差，故 E.6 总 Gate 有效失败，仍未解锁完整 Gate E。详见
+[E.6 结果报告](thought3_phase_e6_report.md)。

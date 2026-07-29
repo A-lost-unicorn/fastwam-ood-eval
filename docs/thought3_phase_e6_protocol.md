@@ -1,12 +1,17 @@
 # Thought3 Gate E.6：未使用 Train Cohort 的序贯复验协议
 
-状态：**已预注册、已实现、尚未运行**
+状态：**已按协议运行；Gate E.6 有效失败**
 
 冻结日期：2026-07-29
 
 > 本协议是在查看 Gate E.5 结果之后建立的。`3e-4` 来自 E.5 的探索性结果后
 > 选择，因此 E.6 是 post-selection sequential replication，不是独立确认性
 > 实验。代码完成后不会自动启动 GPU；真实运行仍需显式确认。
+
+> 2026-07-29 结果更新：两条轨迹执行完整，A1 absolute 与 paired superiority
+> 通过，但 A0 只有 4/8 sample 不变差，未达到冻结的 6/8，故总 Gate 有效失败。
+> 原协议与门槛不追溯修改。详见
+> [thought3_phase_e6_report.md](thought3_phase_e6_report.md)。
 
 ## 1. 问题与结论边界
 

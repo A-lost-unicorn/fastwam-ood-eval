@@ -31,6 +31,7 @@
 | 阶段三 Gate E.3 held-out flow | FAILED-GATE，320/320 probe 完整 | 执行/provenance/zero-weight checks 全通过；E.2 A1 fixed-flow 的 24.19%/40.01% 降幅在 held-out flow 变为 0.025%/−1.31%，阻止不稳定配方进入 OOD |
 | 阶段三 Gate E.4 diversified flow | FAILED-GATE，1,200 step 完整 | 200 unique paired slots、480 held-out objectives、108 execution checks 全通过；六条 reduction 转正但仅 0.997%–1.948%，继续阻止 full E/A2/A4 |
 | 阶段三 Gate E.5 objective aggregation | FAILED-GATE，1,200 updates 完整 | 9,600 train objectives、480 held-out objectives、120 execution checks 全通过；A1@3e-4 为 19.668%/8-of-8，但同 LR A0 仅 2.638%，无共同 eligible LR |
+| 阶段三 Gate E.6 fresh-cohort replication | FAILED-GATE，400 updates 完整 | 新 8-sample cohort、3,200 train objectives、160 held-out objectives；A1 降 14.842%/7-of-8 且相对 A0 final mean 低 13.815%，但 A0 仅 4/8 stable |
 
 ## 2. 可以对外说明的工程亮点
 
@@ -399,9 +400,9 @@
   namespace 做硬不相交检查。
 - 三层门槛：分别检查 A1 绝对复现、A0 null-future 稳定性以及 sample-paired
   A1-vs-A0 优势，防止只展示最有利的一条轨迹。
-- 工程状态：配置、Adapter-only 双轨编排、动态 checkpoint marker、prefix
-  provenance、失败 Run ID 保护、单卡 runner 和回归测试已完成；尚未运行，
-  不报告任何 E.6 loss 或效果。
+- 执行结果：单卡 43.89 分钟完成 400 updates/3,200 objectives；所有工程检查
+  通过。A1 absolute 与 paired superiority 复现，但 A0 只有 4/8 不变差，冻结
+  Gate 有效失败；结果只支持工程可重复性，不支持 future/OOD 效果。
 
 ## 4. 简历表达素材
 

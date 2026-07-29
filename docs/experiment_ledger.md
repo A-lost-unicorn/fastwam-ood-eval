@@ -383,6 +383,7 @@
 | 2026-07-28 / Gate E.4 | 六条 diversified-flow 轨迹完整后命令返回非零 | 不是工程异常；全部 execution checks 通过，但六条 held-out reduction 仅 0.997%–1.948%，无 LR 达到共同 10%+6/8 | 保存 valid failed root result；不挑 A1@3e-4、不放宽门槛；下一诊断收缩到 objective aggregation/effective batch | 否；无 dev/OOD/success/rollout/future RGB，Fast-WAM SHA 前后相同 |
 | 2026-07-28 / Gate E.5 | 六条 full-cohort 轨迹完整后命令返回非零 | 不是执行异常；120/120 execution、全部 paired/cross/frozen checks 通过，但 A0 在三档 LR 都未达 10%，所以无 A0/A1 共同 eligible LR | 冻结 valid failed root result；保留 A1@3e-4 的 19.668%/8-of-8 为探索性复验信号，不回改门槛或 selected LR | 否；0 dev/OOD/success/rollout/future RGB，Fast-WAM SHA 前后相同 |
 | 2026-07-29 / Gate E.6 预注册 | E.5 后只复验 A0/A1@3e-4，存在结果后选择污染风险 | 明确登记为 post-selection sequential replication；冻结未使用 train 排序 9–16、slots 31001–32600、A1 绝对/A0 稳定/A1-vs-A0 三组门槛 | 配置、编排器、resume provenance、CLI、单卡 runner 和测试已实现；尚未运行、无 E.6 outcome | 否；预注册阶段只读 Phase D/E.5，运行仍锁定 dev/OOD/success/rollout/future RGB |
+| 2026-07-29 / Gate E.6 结果 | 命令在两条轨迹完整后以 hard checks failed 返回 | 有效负门禁而非工程崩溃；唯一 false check 是 A0 non-worsened 4/8 < 6/8。A1 降 14.842%/7-of-8，A1 final mean 比 A0 低 13.815%/6-of-8 | 冻结 failed Run ID，不 resume、不放宽门槛；下一步先做只读 intermediate-checkpoint trajectory 诊断 | 否；400 updates/3,200 objectives 完整，全部 execution/paired/frozen/leakage checks 通过 |
 
 冷启动观测：2-step smoke 中 Wan 组件装载约 `336–433 s`；20-step OOD
 三进程观测到约 `604.37 s`，Clean 单进程为 `521.74 s`。这不是单次 future
@@ -444,6 +445,10 @@ Provenance 补充核对：Fast-WAM 和 LIBERO checkout clean；LIBERO-Plus
     其中 `A1@3e-4` held-out loss 下降 19.668%、8/8 sample 不变差；但同 LR
     A0 仅下降 2.638%，故预注册共同门有效失败。该配对差只构成新 cohort
     序贯复验的工程依据，不构成 future 或 OOD 效果。
+23. Gate E.6 在未使用的八条 train demonstration 上完成匹配 A0/A1@3e-4
+    复验：A1 held-out loss 下降 14.842%、7/8 不变差，final mean 比 A0 低
+    13.815%；但 A0 只有 4/8 不变差，预注册 Gate 有效失败。该结果证明审计链路
+    能保留“信号复现但总门禁失败”的细粒度结果，不构成 OOD 因果结论。
 
 ### 尚未支持
 

@@ -1,8 +1,12 @@
 # Thought3 Gate E.8：A0 大规模 Flow-Variance Replication 预注册
 
-状态：**PRE-REGISTERED / NOT RUN**
+状态：**PRE-REGISTERED PROTOCOL / RUN COMPLETED**
 
 冻结日期：2026-07-29
+
+运行完成：2026-07-29。工程 Gate 通过，预注册主要分类为
+`mixed_or_inconclusive`；本文件继续保留运行前规则，实际数字、工件 SHA 和
+结论边界见 [结果报告](thought3_phase_e8_report.md)。
 
 > 本协议在查看 E.7 全部结果后建立。E.7 的 primary/continuity trajectory、
 > step 100/200 outcome 和三条 step-200 worsened sample 均已知。E.8 是明确
@@ -382,5 +386,5 @@ tail -f \
 - `gate_e8_result.json`
 - `logs/phase_e8.log`
 
-运行完成后才允许撰写 E.8 结果报告；本协议的 flow、target、bootstrap、分类和
-证据边界不得追溯修改。
+E.8 已按本协议完成；本协议的 flow、target、bootstrap、分类和证据边界未追溯
+修改。结果报告见 [thought3_phase_e8_report.md](thought3_phase_e8_report.md)。

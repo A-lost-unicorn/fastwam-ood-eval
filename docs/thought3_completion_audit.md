@@ -21,7 +21,7 @@ Gate E.4             valid failed gate; 1,200 steps complete
 Gate E.5             valid failed gate; 1,200 updates/9,600 objectives complete
 Gate E.6             valid failed gate; 400 updates/3,200 objectives complete
 Gate E.7             valid read-only diagnosis; primary hypothesis not supported
-Gate E.8             preregistered A0 larger-flow diagnosis; not run
+Gate E.8             valid read-only diagnosis; mixed/inconclusive classification
 full 28/4 Gate E     not passed
 A2/A4 real training  not started
 Phase F real pilot   not started
@@ -45,9 +45,10 @@ paper claim          unavailable
   A0 step 50/100 稳定、150/200 不稳定，但 endpoint mean 比 step 50 低
   5.651%，故不支持预注册的实质晚期退化模式；A1 随 step 增强但无 joint
   checkpoint candidate。
-- E.8 已冻结三条 E.7 target、64 个全新 flow、双 32-flow block、FWER
-  bootstrap 与三种互斥分类；这只证明诊断设计和门禁已实现，尚无真实 E.8
-  outcome。
+- E.8 以 1,536 个只读 objective、64 个全新 flow、双 32-flow block 和 FWER
+  bootstrap 完成真实诊断；step-200 pooled mean 改善 3.728%，但只有 1/3
+  预识别 target 被确认恶化，另有一条非 target 确认恶化，故分类为
+  `mixed_or_inconclusive`。
 
 尚无证据证明：
 
@@ -117,7 +118,7 @@ Phase D cache 只能用于训练；不得把它接入 Phase F/G 在线 policy。
 | E.5 | valid failed gate | 1,200 updates、9,600 train objectives、480 held-out objectives、120 execution checks 完整；A1@3e-4 单条过门，A0@3e-4 仅 2.638%，无共同 LR |
 | E.6 | valid failed gate | 新 cohort 上 400 updates、3,200 train objectives、160 held-out objectives 完整；A1 absolute/paired superiority 通过，A0 4/8 stability 未过门 |
 | E.7 | valid read-only diagnosis | 800 forward、0 backward/optimizer/write；primary 分类 `not_supported_no_material_late_degradation`，continuity 描述性分类相反；无 joint candidate |
-| E.8 | preregistered / not run | A0 step 100/200、flows 11–74、双 32-flow block、1,536 forward、20k bootstrap + 20k five-flow sensitivity；尚无结果 |
+| E.8 | valid read-only diagnosis | A0 step 100/200、flows 11–74、双 32-flow block、1,536 forward、20k bootstrap + 20k five-flow sensitivity；工程通过，分类 `mixed_or_inconclusive` |
 | full E | not passed | 仍缺新的 28 train / 4 development 完整闭环 |
 
 在 full E 通过前：
@@ -181,11 +182,11 @@ CPU/mock；`thought3-counterfactual` 在 Fast-WAM backend 上仍返回
 ```text
 Gate E.7 completed: primary no material late degradation; no candidate
   ↓
-Gate E.8 protocol frozen: A0 64-flow tail-risk/variance diagnosis
+Gate E.8 completed: pooled improvement + confirmed sample harm; mixed result
   ↓
-run E.8 without training or unused-cohort consumption
+preregister one matched A0/A1 sample-tail mitigation
   ↓
-if a candidate emerges, replicate it on an unused train cohort
+develop only on used cohort; replicate once on unused train positions 17–28
   ↓
 if a stable recipe is independently replicated: freeze full 28/4 Gate E
   ↓
@@ -211,24 +212,23 @@ shuffle、在线 no-cache 或统计冻结要求。
 
 ## 10. 当前最近一步
 
-E.7 已按冻结协议完整运行，工程 Gate 通过。八个既有 A0/A1
-step-50/100/150/200 checkpoint 共完成 800 forward objectives，0
-backward/optimizer/checkpoint write；所有 frozen、RNG、paired、provenance、
-memory 和 leakage checks 通过。
+E.8 已按冻结协议完整运行，工程 Gate 通过。A0 step 100/200 共完成 1,536
+forward objectives，0 backward/optimizer/checkpoint write；所有 frozen、RNG、
+paired、provenance、memory 和 leakage checks 通过。
 
-Primary flow `6..10` 上，A0 step 50/100 通过，150/200 因 5/8 sample
-不变差而失败；但 step-200 mean 比 step 50 低 5.651%，non-worsened 只下降
-1，因此冻结分类为 `not_supported_no_material_late_degradation`。A1 step
-150/200 通过 absolute gate，step 200 也通过 paired gate，但 matched A0
-未通过，所以没有 joint candidate。Continuity 描述性 panel 满足 late
-overtraining rule，但不得覆盖 primary；分歧提示 flow-panel 方差仍未解决。
+step 200 的 full/Block A/Block B pooled loss 均改善
+`3.728%/3.472%/4.047%`，但原 sample-stability Gate 分别只有
+`4/8、4/8、5/8`。三条预识别 target 只有 `episode_000012` 确认恶化，另有
+`episode_000000` 非 target 确认恶化。因此 tail-risk 的 `2/3` 门槛与纯
+five-flow variance 条件都不满足，冻结分类为 `mixed_or_inconclusive`。
 
-下一步应按冻结 E.8 运行全新、更大的 flow replication panel，而不是挑
-step 100/200、改 optimizer 或解锁 OOD。该协议尚未运行：A0-only
-step 100/200、flow `11..74`、双 32-flow block、20k paired bootstrap 和三种
-互斥分类。即使 E.8 形成候选，也必须在尚未使用的 train cohort 上独立复验。
+下一步不应继续在同 cohort 堆叠 flow、挑 step 100 或改旧门槛。应先预注册一个
+matched A0/A1 的单变量 sample-tail mitigation；配方开发使用既有 cohort，并把
+train 排序 17–28 保留为一次性 demonstration-level 独立复验。只有形成稳定且
+独立复验通过的候选，才冻结新的完整 28/4 Gate E。
 相关协议、结果与父结果见
 [thought3_phase_e8_protocol.md](thought3_phase_e8_protocol.md)、
+[thought3_phase_e8_report.md](thought3_phase_e8_report.md)、
 [thought3_phase_e7_report.md](thought3_phase_e7_report.md)、
 [thought3_phase_e7_protocol.md](thought3_phase_e7_protocol.md)、
 [thought3_phase_e6_report.md](thought3_phase_e6_report.md)、

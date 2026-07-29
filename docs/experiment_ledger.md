@@ -45,6 +45,7 @@
 | `P3-PHASE-E7-PREREG-v1` | 2026-07-29 | 3 / PRE-REGISTERED DIAGNOSTIC | `phase_e7_checkpoint_trajectory.yaml`；E.6 step 50/100/150/200；primary flow `6..10` | 预注册冻结时预算为 8 checkpoints、800 forward objectives、0 backward/optimizer/新训练，尚未运行 | 只诊断 A0 instability 是否符合晚期退化；运行结果另见 `P3-PHASE-E7-v1` |
 | `P3-PHASE-E7-v1` | 2026-07-29 | 3 / COMPLETED READ-ONLY DIAGNOSTIC | prereg commit `703b57fd`；primary flow `6..10`、continuity `1..5`；8 checkpoints | 800/800 forward objectives、0 backward/optimizer/write；primary A0 step 50/100 pass、150/200 为 5/8 fail；step-200 mean 比 step 50 低 5.651%；13.98 分钟 | 工程 Gate 通过；冻结分类为 `not_supported_no_material_late_degradation`；A1 随 step 增强但无 joint candidate，不解锁 full E/A2/A4/OOD |
 | `P3-PHASE-E8-PREREG-v1` | 2026-07-29 | 3 / PRE-REGISTERED DIAGNOSTIC | A0 step 100/200；flows `11..74`；target 为 E.7 step-200 三条 worsened sample | 预算 1,536 forward、0 backward/optimizer/训练；双 32-flow block；20k paired bootstrap、16-comparison Bonferroni、20k five-flow resampling；**尚未运行** | 只区分 persistent target tail risk、five-flow variance 或 mixed；同一 cohort flow-level 精度诊断，不产生 checkpoint selection |
+| `P3-PHASE-E8-v1` | 2026-07-29 | 3 / COMPLETED READ-ONLY DIAGNOSTIC | prereg commit `e6ebdf2`；A0 step 100/200；flows `11..74`；双 32-flow block | 1,536/1,536 forward、0 backward/optimizer/write；step-200 full reduction 3.728% 但 4/8 stable；1 条 target + 1 条非 target 经 FWER 确认恶化；18.51 分钟 | 工程 Gate 通过；冻结分类 `mixed_or_inconclusive`，既不支持 2/3 target tail-risk，也不支持纯 five-flow variance；不选择 checkpoint、不解锁 A2/A4/OOD |
 
 ### `P1-FORMAL-v1` 机器证据
 
@@ -391,6 +392,7 @@
 | 2026-07-29 / Gate E.7 预注册 | 已知 E.6 step-200 A0 不稳定，若复用同一 flow 后挑中间 checkpoint 会产生结果后选择 | 将旧 flow `1..5` 降为 continuity-only；新 primary flow 固定为 `6..10`，冻结四种 A0 分类、最早稳定点比较和 post-run-only joint candidate | 8 个 checkpoint 的三文件 SHA、两套 probe identity SHA、只读/clean-repo gate、CLI、单卡 runner 和测试已实现；尚未加载模型或查看中间 outcome | 否；复用 E.6 cohort 但不训练、不消耗剩余 cohort，0 dev/OOD/success/rollout/future RGB |
 | 2026-07-29 / Gate E.7 结果 | Primary A0 step 50/100 稳定、150/200 不稳定，但 pooled mean 继续下降；continuity 描述性 panel 则满足 late-overtraining rule | 不存在预注册要求的“non-worsened 至少下降 2 且 endpoint mean 变差”；五个 flow draw 对 8-sample stability/materiality 判定仍敏感 | 保留 primary 分类 `not_supported_no_material_late_degradation`，continuity 不覆盖主结论；不挑 step 100/200。下一步先预注册更大的全新 flow panel | 否；800 objectives 完整，0 backward/optimizer/checkpoint write，全部 frozen/provenance/RNG/leakage checks 通过 |
 | 2026-07-29 / Gate E.8 预注册 | E.7 已知三条 worsened target 与 step-100/200 outcome，继续扩大 panel 存在新的结果后分析自由度 | 明确登记为 E.7 后序贯诊断；冻结 target、A0-only step 100/200、flows 11–74、两个 32-flow block、20k bootstrap/FWER 与三种互斥分类 | config、CLI、单卡 runner、父工件/checkpoint SHA、RNG/zero-weight、无训练/leakage gate 和测试已实现；尚未加载模型 | 否；不读取剩余 train cohort、dev/OOD/success/rollout/future RGB，0 optimizer/backward |
+| 2026-07-29 / Gate E.8 结果 | 64-flow pooled mean 改善，但 step-200 full/双 block 的逐样本 Gate 仍失败；三条 target 只有一条确认，另有一条非 target 确认恶化 | flow panel 方差和真实 sample-level heterogeneity 同时存在；原点符号 6/8 Gate 对小幅不确定变化敏感，但 `episode_000012` 的 +8.881% harm 跨 block 与校正 CI 稳定 | 保留 `mixed_or_inconclusive`，不降低 2/3、不换 target、不继续堆同 cohort flow；下一协议应把 pooled、point-sign 与 confirmed harm 分层并做 matched tail mitigation | 否；1,536 objectives 完整，0 backward/optimizer/write，全部 frozen/RNG/provenance/leakage checks 通过 |
 
 冷启动观测：2-step smoke 中 Wan 组件装载约 `336–433 s`；20-step OOD
 三进程观测到约 `604.37 s`，Clean 单进程为 `521.74 s`。这不是单次 future
@@ -461,6 +463,12 @@ Provenance 补充核对：Fast-WAM 和 LIBERO checkout clean；LIBERO-Plus
     step 50 仍低 5.651%，故不支持预注册的实质晚期退化模式；A1 在 150/200
     通过 absolute gate，但没有任何 joint candidate。该结论是 train-cohort
     optimization diagnosis，不是 future 或 OOD 效果。
+25. Gate E.8 用 64 个全新 flow 和两个独立 32-flow block 完成 1,536 个只读
+    objective。A0 step 200 pooled mean 在 full/双 block 均改善，但原逐样本
+    Gate 分别只有 4/8、4/8、5/8；`episode_000012` 的 +8.881% target harm 和
+    `episode_000000` 的 +1.603% non-target harm 经 16-comparison FWER
+    bootstrap 确认。因此预注册分类为 `mixed_or_inconclusive`，而非纯抽样
+    方差或普遍 target tail risk。
 
 ### 尚未支持
 
@@ -475,9 +483,10 @@ Provenance 补充核对：Fast-WAM 和 LIBERO checkout clean；LIBERO-Plus
    formal future 指标生成前没有冻结。
 6. 20-step shadow RGB 生成成本是否等于阶段三 cached latent 或在线 Adapter
    成本；阶段三必须单独计时。
-7. E.7 预识别的 A0 step-200 三条 worsened sample 是 persistent tail risk
-   还是 five-flow panel 方差。E.8 已预注册但未运行；无论结果为何，中间
-   checkpoint 仍不是正式选择，A2/A4 和阶段三成功率继续锁定。
+7. E.8 mixed 结果能否推广到新的 demonstration cohort，以及新的 matched
+   sample-tail mitigation 能否同时稳定 A0/A1。当前只增加了同八条 sample 的
+   flow-level 精度；中间 checkpoint 仍不是正式选择，A2/A4 和阶段三成功率
+   继续锁定。
 
 ## 4. 待填论文主表
 

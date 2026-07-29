@@ -1,7 +1,7 @@
 # Thought3 训练与恢复手册
 
-状态：Phase D 小规模真实 cache 已通过；尚未启动真实 Adapter 训练
-更新时间：2026-07-28
+状态：Phase D 已通过；Gate E.1–E.8 已完成，完整 Gate E 尚未通过
+更新时间：2026-07-29
 
 ## 1. 当前能做什么
 
@@ -37,7 +37,7 @@ Phase D 已额外验证：
 
 当前仍不能做：
 
-- 启动正式或长时间 Adapter 训练；
+- 启动未预注册的正式或长时间 Adapter 训练；
 - 把 32-sample cache 当作完整训练集或论文数据；
 - 声称 mock loss 下降代表机器人控制有效；
 - 自动启动 3 GPU 长训练。
@@ -477,8 +477,8 @@ flow-panel sensitivity，而不是事后选择 checkpoint。
 
 ### 11.9 Gate E.8 A0 flow-variance replication
 
-E.8 已于 2026-07-29 完成预注册，尚未运行。它是在查看 E.7 全部结果后的
-序贯只读诊断：
+E.8 已于 2026-07-29 按预注册协议完成。它是在查看 E.7 全部结果后的序贯
+只读诊断：
 
 - 只加载 A0 step 100/200，不加载 A1、不训练；
 - 使用完全未评估的 flow `11..74`；
@@ -497,5 +497,23 @@ panel、两个 block 和校正 bootstrap 下共同确认。Variance 判据要求
 Gate。E.8 只增加 flow-level 精度，不增加 demonstration 数；任何候选仍须在
 未使用 train cohort 独立复验。
 
+实际结果：
+
+- 1,536/1,536 forward objectives 完成，0 backward/optimizer/checkpoint
+  write，工程 Gate 全部通过；
+- step 100 的 full/双 block 均通过原 A0 Gate；
+- step 200 full/Block A/Block B pooled loss 分别改善
+  `3.728%/3.472%/4.047%`，但 sample stability 只有 `4/8、4/8、5/8`；
+- 三条 E.7 target 只有 `episode_000012` 被严格确认恶化，未达到 `2/3`；
+- 另有非 target `episode_000000` 确认小幅恶化，因此纯 five-flow variance
+  条件也不成立；
+- 冻结主要分类为 `mixed_or_inconclusive`，onset 为
+  `already_present_by_step100`。
+
+因此不再在同八条 sample 上增加 flow，也不事后选择 step 100。下一训练设计必须
+在运行前冻结 matched A0/A1 的单变量 sample-tail mitigation，并保留 train
+排序 17–28 作为 demonstration-level 独立复验。
+
 完整污染披露、target ID、RNG SHA、zero-weight 位置、分类和命令见
-[thought3_phase_e8_protocol.md](thought3_phase_e8_protocol.md)。
+[协议](thought3_phase_e8_protocol.md)与
+[结果报告](thought3_phase_e8_report.md)。

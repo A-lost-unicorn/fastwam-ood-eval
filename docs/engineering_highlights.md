@@ -33,7 +33,7 @@
 | 阶段三 Gate E.5 objective aggregation | FAILED-GATE，1,200 updates 完整 | 9,600 train objectives、480 held-out objectives、120 execution checks 全通过；A1@3e-4 为 19.668%/8-of-8，但同 LR A0 仅 2.638%，无共同 eligible LR |
 | 阶段三 Gate E.6 fresh-cohort replication | FAILED-GATE，400 updates 完整 | 新 8-sample cohort、3,200 train objectives、160 held-out objectives；A1 降 14.842%/7-of-8 且相对 A0 final mean 低 13.815%，但 A0 仅 4/8 stable |
 | 阶段三 Gate E.7 checkpoint trajectory | COMPLETED READ-ONLY DIAGNOSTIC | 8 个既有 checkpoint、800/800 objectives、0 backward/optimizer/write；工程 Gate 通过，primary 不支持实质晚期退化且无 joint candidate |
-| 阶段三 Gate E.8 A0 flow variance | PRE-REGISTERED，尚未运行 | A0 step 100/200、64 个全新 flow、双 32-flow block、1,536 forward、20k paired bootstrap + 20k five-flow sensitivity；0 训练 |
+| 阶段三 Gate E.8 A0 flow variance | COMPLETED READ-ONLY DIAGNOSTIC | 1,536/1,536 forward、0 backward/optimizer/write；step-200 pooled loss 改善 3.728%，但 full/双 block 稳定性为 4/8、4/8、5/8；分类 `mixed_or_inconclusive` |
 
 ## 2. 可以对外说明的工程亮点
 
@@ -442,8 +442,14 @@
 - Fail-closed 分类：至少 2/3 target 跨 full、双 block 与校正 CI 确认才支持
   tail risk；只有 8 条均无确认恶化且三个 panel 都过 Gate 才支持 five-flow
   variance；其余统一 mixed/inconclusive。
-- 状态：配置、CLI、单卡 runner、父工件/checkpoint SHA、zero-weight/RNG、
-  无训练与泄漏门禁和定向测试已完成；真实 1,536-objective probe 尚未运行。
+- 执行结果：单卡 18.51 分钟完成 1,536/1,536 objectives，全部
+  frozen/RNG/provenance/leakage checks 通过，0 backward/optimizer/write。
+  step-200 pooled mean 改善 3.728%，但 full/双 block 只有 4/8、4/8、5/8
+  sample 不变差；一条 target 与一条非 target 经 FWER 确认恶化，冻结分类为
+  `mixed_or_inconclusive`。
+- 工程解释：20,000 个 five-of-64 panel 中 86.36% 会因 sample stability
+  失败，而只有 3.555% pooled mean 变差；这量化了小 panel 波动，同时保留
+  `episode_000012` 跨两个 block 的稳定 +8.881% harm，没有把它抹成纯噪声。
 
 ## 4. 简历表达素材
 
@@ -503,6 +509,10 @@
   与新 primary flow 隔离；单卡完成 8 个 checkpoint、800 个 forward objective，
   以 0 backward/optimizer/write 和全量 SHA 证明未改模型，并识别出 pooled
   mean 改善与逐样本稳定性下降之间的 flow-sensitive trade-off。
+- 将 A0 stability 诊断扩展到 64 个全新 action-flow、两个独立 32-flow block
+  和 20,000 次 FWER paired bootstrap；单卡完成 1,536 个只读 objective，
+  分离出“pooled loss 改善 3.728%”与“两条 sample 确认恶化”的混合结构，
+  并以 fail-closed 分类阻止事后选择 checkpoint 或降低门槛。
 
 ### 可直接使用的量化表述
 

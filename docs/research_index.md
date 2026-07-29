@@ -25,7 +25,7 @@
 | 阶段二正式抽样 | outcome-blind planner、anchor、exact-ratification 与 formal gate 已实现 | 200 Clean + 532 OOD 已 exact-ratify 并全部运行 | **完成**。只认证 Phase 2 future 指标前 job ID 不变；不冒充阶段一 outcome 前 preregistration |
 | 阶段二统计协议 | episode→task 分层、task bootstrap、首 probe/outcome gate 已实现 | 10,000 次 suite-stratified task bootstrap；730/732 outcome match | **post-run analysis 完成，非 preregistered confirmatory**。DRAFT 未在正式指标前冻结；人工 endpoint 待完成 |
 | 阶段二 B：action-conditioned future consistency | 严格门禁、schema、runner、测试已实现 | CPU/mock 与门禁测试通过 | **阻塞**。官方 release 为 `action_conditioned=false`，且没有可信匹配 checkpoint |
-| 阶段三：Future-to-Action Adapter | Phase A/B/C/D 完成；E/E.1–E.5 真实诊断已执行，Gate E 仍未通过 | E.5 完成 1,200 updates、9,600 train objectives、480 held-out objectives；120/120 execution checks 通过；A1@3e-4 为 19.668%/8-of-8，但 A0 仅 2.638%，无共同 eligible LR | **full-cohort aggregation 产生强 A1 候选信号，但总 Gate 有效失败**。先用新 train cohort 序贯复验，不得扩 A2/A4 或启动 ID/OOD |
+| 阶段三：Future-to-Action Adapter | Phase A/B/C/D 完成；E/E.1–E.5 真实诊断已执行；E.6 已预注册实现、尚未运行 | E.5 完成 1,200 updates、9,600 train objectives、480 held-out objectives；A1@3e-4 为 19.668%/8-of-8，但 A0 仅 2.638%；E.6 冻结 8 条新 train sample 和 slots 31001–32600 | **E.5 总 Gate 有效失败；E.6 是显式 post-selection 的序贯复验**。未产生 E.6 outcome，不得扩 A2/A4 或启动 ID/OOD |
 
 因此，“阶段一已经完成”的准确说法是：**阶段一工程、正式全量计算、聚合与
 完整性审计均已完成；失败机制人工 taxonomy 尚未完成，但不阻塞主成功率结论。**
@@ -198,9 +198,9 @@ OOD 一致性下降假设”，不能进入论文结论表。
    `10% + 6/8`，所以 `selected_lr=null`。
 3. E.5 与 E.4 matched optimizer update，但 E.5 使用 8 倍 train objectives，
    因而不能把增幅唯一归因于“梯度聚合”，更不能写成 future/OOD 效果。
-4. 下一步优先冻结新 train cohort 的 A0/A1@3e-4 序贯复验；必须披露 LR 来自
-   E.5 探索性选择，并预先冻结 A1 absolute、A0 safety 和 paired contrast 三类
-   门槛。该复验尚未预注册、实现或运行。
+4. 新 train cohort 的 A0/A1@3e-4 序贯复验已预注册并实现；协议披露 LR 来自
+   E.5 探索性选择，并冻结 A1 absolute、A0 safety 和 paired contrast 三类
+   门槛。下一步是按冻结 E.6 协议运行，当前尚无 E.6 outcome。
 5. 只有复验产生稳定候选配方，并在新的完整 28/4 Gate E 中通过 train/dev、
    resume、frozen 与尺度门槛后，才允许实现和训练 A2/A4。
 6. 当前不得覆盖 E.5 Run ID、事后放宽共同门槛、启动完整 Gate E、A2/A4、

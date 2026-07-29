@@ -441,6 +441,15 @@ def dispatch(args: Any) -> int:
             cfg,
             resume=args.resume,
         )
+    elif args.command == "thought3-replicate-fresh-cohort":
+        from fastwam_ood_eval.thought3.phase_e6_fresh_cohort_replication import (
+            run_phase_e6_fresh_cohort_replication,
+        )
+
+        result = run_phase_e6_fresh_cohort_replication(
+            cfg,
+            resume=args.resume,
+        )
     elif args.command == "thought3-plan-cache":
         from fastwam_ood_eval.thought3.cache_planner import write_cache_plan
 

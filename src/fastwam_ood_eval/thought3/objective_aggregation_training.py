@@ -1,9 +1,10 @@
-"""Gate E.5 full-cohort objective aggregation for real Fast-WAM training.
+"""Full-cohort objective aggregation for real Fast-WAM training.
 
 This module intentionally lives beside, rather than inside, ``real_training``
 so the executed Gate E.4 implementation remains frozen.  Gate E.5 changes one
 optimizer input: every optimizer update is the mean of one unique action-flow
-objective for each of the same eight source-filtered training samples.
+objective for each of eight source-filtered training samples.  Later protocols
+may reuse the trainer only through an explicit frozen schedule identity.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import hashlib
 import math
 import statistics
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -91,13 +93,55 @@ OBJECTIVE_AGGREGATION_EXPECTED_ZERO_WEIGHT_SLOTS = (
 )
 
 
+@dataclass(frozen=True)
+class ObjectiveAggregationProtocol:
+    """Frozen schedule/provenance identity for one full-cohort Gate."""
+
+    gate_label: str
+    checkpoint_marker_key: str
+    flow_slot_offset: int
+    expected_zero_weight_slots: tuple[tuple[int, int, int], ...]
+
+    def __post_init__(self) -> None:
+        if (
+            not self.gate_label
+            or not self.checkpoint_marker_key
+            or self.flow_slot_offset < 1
+            or any(
+                len(row) != 3
+                or not 1 <= row[0] <= OBJECTIVE_AGGREGATION_UPDATES
+                or not 1 <= row[1] <= OBJECTIVES_PER_UPDATE
+                or row[2]
+                != (
+                    self.flow_slot_offset
+                    + (row[0] - 1) * OBJECTIVES_PER_UPDATE
+                    + row[1]
+                )
+                for row in self.expected_zero_weight_slots
+            )
+        ):
+            raise ValueError("invalid objective-aggregation protocol")
+
+
+PHASE_E5_OBJECTIVE_AGGREGATION_PROTOCOL = ObjectiveAggregationProtocol(
+    gate_label="Gate E.5",
+    checkpoint_marker_key="gate_e5_objective_aggregation",
+    flow_slot_offset=OBJECTIVE_AGGREGATION_FLOW_SLOT_OFFSET,
+    expected_zero_weight_slots=(
+        OBJECTIVE_AGGREGATION_EXPECTED_ZERO_WEIGHT_SLOTS
+    ),
+)
+
+
 class ObjectiveAggregationTrainingError(RealTrainingError):
-    """Raised when the frozen Gate E.5 training contract is violated."""
+    """Raised when a frozen objective-aggregation contract is violated."""
 
 
 def objective_aggregation_flow_slot(
     optimizer_update: int,
     micro_index: int,
+    *,
+    flow_slot_offset: int = OBJECTIVE_AGGREGATION_FLOW_SLOT_OFFSET,
 ) -> int:
     """Map one update/micro pair to a unique slot outside all probe slots."""
 
@@ -106,6 +150,9 @@ def objective_aggregation_flow_slot(
         or isinstance(micro_index, bool)
         or not isinstance(optimizer_update, int)
         or not isinstance(micro_index, int)
+        or isinstance(flow_slot_offset, bool)
+        or not isinstance(flow_slot_offset, int)
+        or flow_slot_offset < 1
         or not 1 <= optimizer_update <= OBJECTIVE_AGGREGATION_UPDATES
         or not 1 <= micro_index <= OBJECTIVES_PER_UPDATE
     ):
@@ -113,7 +160,7 @@ def objective_aggregation_flow_slot(
             "Gate E.5 requires optimizer_update=1..200 and micro_index=1..8"
         )
     return (
-        OBJECTIVE_AGGREGATION_FLOW_SLOT_OFFSET
+        flow_slot_offset
         + (optimizer_update - 1) * OBJECTIVES_PER_UPDATE
         + micro_index
     )
@@ -121,6 +168,8 @@ def objective_aggregation_flow_slot(
 
 def _validate_schedule_positions(
     rows: Sequence[Mapping[str, Any]],
+    *,
+    flow_slot_offset: int = OBJECTIVE_AGGREGATION_FLOW_SLOT_OFFSET,
 ) -> None:
     if (
         not rows
@@ -141,6 +190,7 @@ def _validate_schedule_positions(
         expected_slot = objective_aggregation_flow_slot(
             expected_update,
             expected_micro,
+            flow_slot_offset=flow_slot_offset,
         )
         if (
             int(row["objective_index"]) != expected_objective
@@ -158,10 +208,15 @@ def _validate_schedule_positions(
 
 def objective_aggregation_schedule_sha256(
     rows: Sequence[Mapping[str, Any]],
+    *,
+    flow_slot_offset: int = OBJECTIVE_AGGREGATION_FLOW_SLOT_OFFSET,
 ) -> str:
     """Hash the complete observed sample/noise/timestep/weight schedule."""
 
-    _validate_schedule_positions(rows)
+    _validate_schedule_positions(
+        rows,
+        flow_slot_offset=flow_slot_offset,
+    )
     payload = []
     for row in rows:
         payload.append(
@@ -190,6 +245,7 @@ def objective_aggregation_identity_schedule_sha256(
     *,
     train_seed: int,
     update_count: int = OBJECTIVE_AGGREGATION_UPDATES,
+    flow_slot_offset: int = OBJECTIVE_AGGREGATION_FLOW_SLOT_OFFSET,
 ) -> str:
     """Hash the schedule knowable before model loading or result inspection."""
 
@@ -212,6 +268,7 @@ def objective_aggregation_identity_schedule_sha256(
             flow_slot = objective_aggregation_flow_slot(
                 optimizer_update,
                 micro_index,
+                flow_slot_offset=flow_slot_offset,
             )
             identity = _flow_objective_identity(
                 base_sample_id=str(base_sample_id),
@@ -271,6 +328,7 @@ def _objective_rows_for_resume(
     path: Path,
     *,
     start_update: int,
+    flow_slot_offset: int = OBJECTIVE_AGGREGATION_FLOW_SLOT_OFFSET,
 ) -> list[dict[str, Any]]:
     if not path.is_file():
         if start_update:
@@ -279,7 +337,10 @@ def _objective_rows_for_resume(
             )
         return []
     rows = load_jsonl(path)
-    _validate_schedule_positions(rows)
+    _validate_schedule_positions(
+        rows,
+        flow_slot_offset=flow_slot_offset,
+    )
     required = start_update * OBJECTIVES_PER_UPDATE
     if len(rows) < required:
         raise ObjectiveAggregationTrainingError(
@@ -350,6 +411,9 @@ def _validate_resume_metric_provenance(
     objective_rows: Sequence[Mapping[str, Any]],
     update_rows: Sequence[Mapping[str, Any]],
     identity_schedule_sha256: str,
+    protocol: ObjectiveAggregationProtocol = (
+        PHASE_E5_OBJECTIVE_AGGREGATION_PROTOCOL
+    ),
 ) -> None:
     """Bind a resumed checkpoint to both committed metric prefixes."""
 
@@ -360,27 +424,31 @@ def _validate_resume_metric_provenance(
         or sample_cursor != expected_objectives
         or len(objective_rows) != expected_objectives
         or len(update_rows) != global_step
-        or extra.get("gate_e5_objective_aggregation") is not True
+        or extra.get(protocol.checkpoint_marker_key) is not True
         or extra.get("gradient_reduction") != "arithmetic_mean"
         or int(extra.get("objectives_per_update", -1))
         != OBJECTIVES_PER_UPDATE
         or int(extra.get("objective_count", -1))
         != expected_objectives
         or int(extra.get("training_flow_slot_offset", -1))
-        != OBJECTIVE_AGGREGATION_FLOW_SLOT_OFFSET
+        != protocol.flow_slot_offset
         or list(extra.get("heldout_flow_steps", []))
         != list(OBJECTIVE_AGGREGATION_HELDOUT_FLOW_STEPS)
         or extra.get("identity_schedule_sha256")
         != identity_schedule_sha256
         or extra.get("train_flow_schedule_sha256")
-        != objective_aggregation_schedule_sha256(objective_rows)
+        != objective_aggregation_schedule_sha256(
+            objective_rows,
+            flow_slot_offset=protocol.flow_slot_offset,
+        )
         or extra.get("objective_metrics_prefix_sha256")
         != objective_aggregation_metric_rows_sha256(objective_rows)
         or extra.get("update_metrics_prefix_sha256")
         != objective_aggregation_metric_rows_sha256(update_rows)
     ):
         raise ObjectiveAggregationTrainingError(
-            "Gate E.5 checkpoint/metric-prefix provenance mismatch"
+            f"{protocol.gate_label} checkpoint/metric-prefix "
+            "provenance mismatch"
         )
 
 
@@ -393,8 +461,11 @@ def run_full_cohort_objective_aggregation(
     resume: bool,
     device: str,
     progress: ProgressCallback | None = None,
+    protocol: ObjectiveAggregationProtocol = (
+        PHASE_E5_OBJECTIVE_AGGREGATION_PROTOCOL
+    ),
 ) -> dict[str, Any]:
-    """Train one E.5 track with eight mean-aggregated objectives per update."""
+    """Train one frozen track with eight mean-aggregated objectives/update."""
 
     if (
         cfg.runtime.backend != "fastwam"
@@ -408,7 +479,8 @@ def run_full_cohort_objective_aggregation(
         or cfg.runtime.device != device
     ):
         raise ObjectiveAggregationTrainingError(
-            "Gate E.5 requires real A0/A1, cuda:0, 200 optimizer updates, "
+            f"{protocol.gate_label} requires real A0/A1, cuda:0, "
+            "200 optimizer updates, "
             "microbatch 1, mean accumulation 8, checkpoint 50"
         )
     output = ensure_thought3_output_path(cfg.experiment.output_dir)
@@ -428,7 +500,9 @@ def run_full_cohort_objective_aggregation(
         ):
             return existing
     if output.exists() and not resume and any(output.iterdir()):
-        raise FileExistsError(f"Gate E.5 track output exists: {output}")
+        raise FileExistsError(
+            f"{protocol.gate_label} track output exists: {output}"
+        )
     output.mkdir(parents=True, exist_ok=True)
     atomic_write_json(
         status_path,
@@ -452,13 +526,15 @@ def run_full_cohort_objective_aggregation(
         or any(sample.split != "train" for sample in prepared.samples)
     ):
         raise ObjectiveAggregationTrainingError(
-            "Gate E.5 requires exactly 8 source-filtered train samples"
+            f"{protocol.gate_label} requires exactly 8 "
+            "source-filtered train samples"
         )
     sample_ids = [sample.base_sample_id for sample in samples]
     identity_schedule_sha256 = (
         objective_aggregation_identity_schedule_sha256(
             sample_ids,
             train_seed=cfg.training.train_seed,
+            flow_slot_offset=protocol.flow_slot_offset,
         )
     )
     adapter = build_real_adapter(cfg, device=device)
@@ -477,11 +553,13 @@ def run_full_cohort_objective_aggregation(
         id(parameter) for parameter in adapter.parameters()
     }:
         raise ObjectiveAggregationTrainingError(
-            "Gate E.5 optimizer contains non-Adapter parameters"
+            f"{protocol.gate_label} optimizer contains "
+            "non-Adapter parameters"
         )
     if any(parameter.requires_grad for parameter in model.parameters()):
         raise ObjectiveAggregationTrainingError(
-            "Gate E.5 frozen Fast-WAM parameter became trainable"
+            f"{protocol.gate_label} frozen Fast-WAM parameter "
+            "became trainable"
         )
     injector = ActionEncoderFutureInjector(
         model.action_expert.action_encoder,
@@ -506,7 +584,7 @@ def run_full_cohort_objective_aggregation(
         sample_cursor = loaded_manifest.sample_cursor
         if sample_cursor != start_update * OBJECTIVES_PER_UPDATE:
             raise ObjectiveAggregationTrainingError(
-                "Gate E.5 checkpoint cursor is not update*8"
+                f"{protocol.gate_label} checkpoint cursor is not update*8"
             )
     elif (
         resume
@@ -514,12 +592,14 @@ def run_full_cohort_objective_aggregation(
         and any(checkpoints_root.iterdir())
     ):
         raise ObjectiveAggregationTrainingError(
-            "Gate E.5 resume requested without a valid checkpoint"
+            f"{protocol.gate_label} resume requested without "
+            "a valid checkpoint"
         )
 
     existing_objectives = _objective_rows_for_resume(
         objective_metrics_path,
         start_update=start_update,
+        flow_slot_offset=protocol.flow_slot_offset,
     )
     existing_updates = _update_rows_for_resume(
         update_metrics_path,
@@ -533,6 +613,7 @@ def run_full_cohort_objective_aggregation(
             objective_rows=existing_objectives,
             update_rows=existing_updates,
             identity_schedule_sha256=identity_schedule_sha256,
+            protocol=protocol,
         )
     if state_path.is_file():
         state = load_json(state_path)
@@ -544,7 +625,7 @@ def run_full_cohort_objective_aggregation(
             != initial_adapter_sha256
             or list(state["sample_ids"]) != sample_ids
             or int(state["training_flow_slot_offset"])
-            != OBJECTIVE_AGGREGATION_FLOW_SLOT_OFFSET
+            != protocol.flow_slot_offset
             or int(state["objectives_per_update"])
             != OBJECTIVES_PER_UPDATE
             or state["loss_reduction"] != "arithmetic_mean"
@@ -554,13 +635,14 @@ def run_full_cohort_objective_aggregation(
             != list(OBJECTIVE_AGGREGATION_HELDOUT_FLOW_STEPS)
         ):
             raise ObjectiveAggregationTrainingError(
-                "Gate E.5 training-state provenance mismatch"
+                f"{protocol.gate_label} training-state provenance mismatch"
             )
         initial_probe = dict(state["initial_probe"])
     else:
         if start_update:
             raise ObjectiveAggregationTrainingError(
-                "Gate E.5 checkpoint exists without initial state"
+                f"{protocol.gate_label} checkpoint exists without "
+                "initial state"
             )
         initial_probe = evaluate_multiflow_subset_probe(
             cfg,
@@ -584,7 +666,8 @@ def run_full_cohort_objective_aggregation(
             )
         ):
             raise ObjectiveAggregationTrainingError(
-                "Gate E.5 zero-gate initialization is not exact identity"
+                f"{protocol.gate_label} zero-gate initialization is "
+                "not exact identity"
             )
         state = {
             "cache_fingerprint": prepared.cache_fingerprint,
@@ -602,7 +685,7 @@ def run_full_cohort_objective_aggregation(
             "sample_ids": sample_ids,
             "split_fingerprint": prepared.split_fingerprint,
             "training_flow_slot_offset": (
-                OBJECTIVE_AGGREGATION_FLOW_SLOT_OFFSET
+                protocol.flow_slot_offset
             ),
             "uses_ground_truth_future_input": False,
             "variant": cfg.variant,
@@ -621,19 +704,21 @@ def run_full_cohort_objective_aggregation(
             not in ([0], [0, OBJECTIVE_AGGREGATION_UPDATES])
         ):
             raise ObjectiveAggregationTrainingError(
-                "Gate E.5 held-out probe history is invalid"
+                f"{protocol.gate_label} held-out probe history is invalid"
             )
         if (
             start_update < OBJECTIVE_AGGREGATION_UPDATES
             and len(probe_rows) != 1
         ):
             raise ObjectiveAggregationTrainingError(
-                "Gate E.5 final probe precedes final checkpoint"
+                f"{protocol.gate_label} final probe precedes "
+                "final checkpoint"
             )
     else:
         if start_update:
             raise ObjectiveAggregationTrainingError(
-                "Gate E.5 checkpoint exists without initial probe"
+                f"{protocol.gate_label} checkpoint exists without "
+                "initial probe"
             )
         probe_rows = [
             {
@@ -676,6 +761,7 @@ def run_full_cohort_objective_aggregation(
                 flow_slot = objective_aggregation_flow_slot(
                     optimizer_update,
                     micro_index,
+                    flow_slot_offset=protocol.flow_slot_offset,
                 )
                 identity = _flow_objective_identity(
                     base_sample_id=sample.base_sample_id,
@@ -693,7 +779,8 @@ def run_full_cohort_objective_aggregation(
                 )
                 if optimizer_update <= 2 and action_weight <= 0:
                     raise ObjectiveAggregationTrainingError(
-                        "Gate E.5 first two full cohorts require positive weights"
+                        f"{protocol.gate_label} first two full cohorts "
+                        "require positive weights"
                     )
                 cumulative_gate_before = (
                     0.0
@@ -711,7 +798,7 @@ def run_full_cohort_objective_aggregation(
                 )
                 if not bool(torch.isfinite(loss).item()):
                     raise ObjectiveAggregationTrainingError(
-                        "Gate E.5 action loss is NaN/Inf"
+                        f"{protocol.gate_label} action loss is NaN/Inf"
                     )
                 raw_loss = float(loss.detach().float().cpu())
                 diagnostics = adapter.last_diagnostics
@@ -720,7 +807,8 @@ def run_full_cohort_objective_aggregation(
                     or diagnostics.action_hidden_norm <= 0
                 ):
                     raise ObjectiveAggregationTrainingError(
-                        "Gate E.5 Adapter diagnostics are missing"
+                        f"{protocol.gate_label} Adapter diagnostics "
+                        "are missing"
                     )
                 _backward_mean_objective(
                     loss,
@@ -728,7 +816,7 @@ def run_full_cohort_objective_aggregation(
                 )
                 if adapter.gate.grad is None:
                     raise ObjectiveAggregationTrainingError(
-                        "Gate E.5 gate gradient is missing"
+                        f"{protocol.gate_label} gate gradient is missing"
                     )
                 cumulative_gate_after = float(
                     adapter.gate.grad.detach().float().cpu()
@@ -738,7 +826,8 @@ def run_full_cohort_objective_aggregation(
                 )
                 if not math.isfinite(gate_contribution):
                     raise ObjectiveAggregationTrainingError(
-                        "Gate E.5 gate contribution is non-finite"
+                        f"{protocol.gate_label} gate contribution "
+                        "is non-finite"
                     )
                 sample_cursor += 1
                 row = {
@@ -792,7 +881,8 @@ def run_full_cohort_objective_aggregation(
                 }
                 if action_weight == 0 and raw_loss != 0:
                     raise ObjectiveAggregationTrainingError(
-                        "Gate E.5 zero-weight objective has nonzero loss"
+                        f"{protocol.gate_label} zero-weight objective "
+                        "has nonzero loss"
                     )
                 raw_losses.append(raw_loss)
                 action_weights.append(action_weight)
@@ -803,7 +893,7 @@ def run_full_cohort_objective_aggregation(
             groups = adapter_gradient_groups(adapter)
             if not all(bool(value["finite"]) for value in groups.values()):
                 raise ObjectiveAggregationTrainingError(
-                    "Gate E.5 Adapter gradient is non-finite"
+                    f"{protocol.gate_label} Adapter gradient is non-finite"
                 )
             if optimizer_update == 1 and (
                 float(groups["gate"]["l2"]) <= 0
@@ -813,7 +903,8 @@ def run_full_cohort_objective_aggregation(
                 != 0
             ):
                 raise ObjectiveAggregationTrainingError(
-                    "Gate E.5 first-update zero-gate contract failed"
+                    f"{protocol.gate_label} first-update zero-gate "
+                    "contract failed"
                 )
             if optimizer_update == 2 and (
                 int(
@@ -828,7 +919,8 @@ def run_full_cohort_objective_aggregation(
                 <= 0
             ):
                 raise ObjectiveAggregationTrainingError(
-                    "Gate E.5 second-update non-gate gradient contract failed"
+                    f"{protocol.gate_label} second-update non-gate "
+                    "gradient contract failed"
                 )
             if (
                 first_non_gate_update is None
@@ -863,7 +955,8 @@ def run_full_cohort_objective_aggregation(
             ]
             if backbone_grads:
                 raise ObjectiveAggregationTrainingError(
-                    "Gate E.5 frozen Fast-WAM received gradients: "
+                    f"{protocol.gate_label} frozen Fast-WAM "
+                    "received gradients: "
                     f"{backbone_grads[:5]}"
                 )
             gate_gradient = float(
@@ -876,7 +969,8 @@ def run_full_cohort_objective_aggregation(
                 abs_tol=1e-8,
             ):
                 raise ObjectiveAggregationTrainingError(
-                    "Gate E.5 per-objective gate contributions do not sum "
+                    f"{protocol.gate_label} per-objective gate "
+                    "contributions do not sum "
                     "to the accumulated mean gradient"
                 )
             absolute_contribution_sum = sum(
@@ -898,7 +992,8 @@ def run_full_cohort_objective_aggregation(
                 >= cfg.runtime.max_gpu_memory_gb * 1024
             ):
                 raise ObjectiveAggregationTrainingError(
-                    "Gate E.5 exceeded the frozen GPU-memory ceiling"
+                    f"{protocol.gate_label} exceeded the frozen "
+                    "GPU-memory ceiling"
                 )
             update_time_ms = (
                 time.perf_counter() - update_started
@@ -990,7 +1085,7 @@ def run_full_cohort_objective_aggregation(
                         sample_cursor=sample_cursor,
                         train_sample_count=len(samples),
                         extra={
-                            "gate_e5_objective_aggregation": True,
+                            protocol.checkpoint_marker_key: True,
                             "gradient_reduction": "arithmetic_mean",
                             "heldout_flow_steps": list(
                                 OBJECTIVE_AGGREGATION_HELDOUT_FLOW_STEPS
@@ -1012,11 +1107,14 @@ def run_full_cohort_objective_aggregation(
                             "subset_sample_count": len(samples),
                             "train_flow_schedule_sha256": (
                                 objective_aggregation_schedule_sha256(
-                                    committed_objectives
+                                    committed_objectives,
+                                    flow_slot_offset=(
+                                        protocol.flow_slot_offset
+                                    ),
                                 )
                             ),
                             "training_flow_slot_offset": (
-                                OBJECTIVE_AGGREGATION_FLOW_SLOT_OFFSET
+                                protocol.flow_slot_offset
                             ),
                             "update_metrics_prefix_sha256": (
                                 objective_aggregation_metric_rows_sha256(
@@ -1057,7 +1155,8 @@ def run_full_cohort_objective_aggregation(
             or len(all_updates) != OBJECTIVE_AGGREGATION_UPDATES
         ):
             raise ObjectiveAggregationTrainingError(
-                "Gate E.5 did not commit 1600 objectives and 200 updates"
+                f"{protocol.gate_label} did not commit 1600 "
+                "objectives and 200 updates"
             )
         final_probe_rows = [
             row
@@ -1068,7 +1167,7 @@ def run_full_cohort_objective_aggregation(
         if final_probe_rows:
             if len(final_probe_rows) != 1:
                 raise ObjectiveAggregationTrainingError(
-                    "Gate E.5 final probe is duplicated"
+                    f"{protocol.gate_label} final probe is duplicated"
                 )
             final_probe = final_probe_rows[0]
         else:
@@ -1095,7 +1194,7 @@ def run_full_cohort_objective_aggregation(
         latest_checkpoint = find_latest_checkpoint(checkpoints_root)
         if latest_checkpoint is None:
             raise ObjectiveAggregationTrainingError(
-                "Gate E.5 wrote no checkpoint"
+                f"{protocol.gate_label} wrote no checkpoint"
             )
         roundtrip = _checkpoint_roundtrip(
             cfg,
@@ -1107,7 +1206,8 @@ def run_full_cohort_objective_aggregation(
             device=device,
         )
         schedule_sha256 = objective_aggregation_schedule_sha256(
-            all_objectives
+            all_objectives,
+            flow_slot_offset=protocol.flow_slot_offset,
         )
         zero_slots = tuple(
             (
@@ -1120,10 +1220,11 @@ def run_full_cohort_objective_aggregation(
         )
         if (
             zero_slots
-            != OBJECTIVE_AGGREGATION_EXPECTED_ZERO_WEIGHT_SLOTS
+            != protocol.expected_zero_weight_slots
         ):
             raise ObjectiveAggregationTrainingError(
-                "Gate E.5 zero-weight objective schedule changed"
+                f"{protocol.gate_label} zero-weight objective "
+                "schedule changed"
             )
         result = {
             "adapter_fingerprint": cfg.adapter_structural_fingerprint,
@@ -1175,16 +1276,18 @@ def run_full_cohort_objective_aggregation(
             "train_flow_slot_end": objective_aggregation_flow_slot(
                 OBJECTIVE_AGGREGATION_UPDATES,
                 OBJECTIVES_PER_UPDATE,
+                flow_slot_offset=protocol.flow_slot_offset,
             ),
             "train_flow_slot_start": objective_aggregation_flow_slot(
                 1,
                 1,
+                flow_slot_offset=protocol.flow_slot_offset,
             ),
             "trainable_parameter_count": (
                 adapter.trainable_parameter_count
             ),
             "training_flow_slot_offset": (
-                OBJECTIVE_AGGREGATION_FLOW_SLOT_OFFSET
+                protocol.flow_slot_offset
             ),
             "update_metrics": str(update_metrics_path),
             "uses_development_outcomes": False,

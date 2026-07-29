@@ -9,7 +9,7 @@
 | 项目 | 状态 | 可用证据 |
 | --- | --- | --- |
 | 配置、planner、adapter、分片、resume、聚合 | 已实现 | `src/`、`configs/`、`tests/` |
-| 自动化测试 | 已通过 | `pytest -q`：304 passed、5 warnings；覆盖阶段一/二回归与 Thought3 配置、cache、Adapter、resume、泄漏和真实 Gate 编排 |
+| 自动化测试 | 已通过 | `pytest -q`：314 passed、5 warnings；覆盖阶段一/二回归与 Thought3 配置、cache、Adapter、resume、泄漏和真实 Gate 编排 |
 | Conda 环境与激活入口 | 已配置 | `scripts/create_env.sh`、`scripts/activate_env.sh` |
 | checkpoint/stats | 已下载并人工校验 | checkpoint SHA-256 `1000437c...a49579`；stats SHA-256 `30f81ad7...68638` |
 | FastWAM 公共运行时模型 | 已下载并逐文件校验 | `scripts/download_fastwam_runtime_models.sh`；T5、VAE、tokenizer 共约 11.9 GiB |
@@ -386,6 +386,22 @@
   `23,679.513/13,277.440 MiB`；每个 8-objective update 平均 4.961 秒。
 - 决策：不把强 A1 配对差包装成 future 效果，也不事后选择 3e-4；下一步先在
   未使用 train cohort 上做披露 post-selection 的 A0/A1 序贯复验。
+
+### 3.28 把结果后候选复验做成显式可审计协议
+
+- 污染披露：E.6 工件强制记录 `3e-4` 来自查看 E.5 后选择、不是 E.5
+  selected LR，并标记非独立确认性实验。
+- 新数据窗口：从冻结 Phase D train inventory 的确定性排序中取第 9–16 条，
+  与 E.5 cohort/development 零交集且八条来自不同 episode；cohort 身份单独
+  SHA 固化。
+- 新随机目标：使用 `31001..32600` 共 1,600 个新 flow slots，预先计算完整
+  identity schedule SHA 和 19 个合法 zero-weight endpoints，并与 E.4/E.5
+  namespace 做硬不相交检查。
+- 三层门槛：分别检查 A1 绝对复现、A0 null-future 稳定性以及 sample-paired
+  A1-vs-A0 优势，防止只展示最有利的一条轨迹。
+- 工程状态：配置、Adapter-only 双轨编排、动态 checkpoint marker、prefix
+  provenance、失败 Run ID 保护、单卡 runner 和回归测试已完成；尚未运行，
+  不报告任何 E.6 loss 或效果。
 
 ## 4. 简历表达素材
 

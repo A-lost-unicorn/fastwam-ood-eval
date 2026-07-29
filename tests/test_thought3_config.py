@@ -13,7 +13,7 @@ from thought3_test_utils import write_thought3_config
 
 def test_all_committed_thought3_configs_validate():
     paths = sorted(Path("configs/thought3").glob("*.yaml"))
-    assert len(paths) == 21
+    assert len(paths) == 22
     assert Path("configs/thought3/phase_c_single_sample.yaml") in paths
     assert Path("configs/thought3/phase_d_cache_smoke.yaml") in paths
     assert Path("configs/thought3/phase_e_training_smoke.yaml") in paths
@@ -44,6 +44,13 @@ def test_all_committed_thought3_configs_validate():
         Path(
             "configs/thought3/"
             "phase_e5_objective_aggregation_diagnostic.yaml"
+        )
+        in paths
+    )
+    assert (
+        Path(
+            "configs/thought3/"
+            "phase_e6_fresh_cohort_replication.yaml"
         )
         in paths
     )

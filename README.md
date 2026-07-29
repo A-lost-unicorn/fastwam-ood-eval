@@ -44,8 +44,9 @@ Clean `97.25%`、OOD `47.70%`，绝对下降 `49.55` 个百分点，0 exception�
 
 阶段一、二仍冻结，不重训或改写其 Fast-WAM 基线，也不把仿真 OOD 结论外推成
 真机结论。阶段三已在独立 namespace 完成 Phase A–D 与 E.1–E.5 的真实工程
-诊断；Gate E.5 六条轨迹完整，但没有 A0/A1 共同 eligible LR，因此完整 Gate E、
-A2/A4 和在线成功率评测仍未启动。未运行的实验不会填入虚构结果。
+诊断；Gate E.5 六条轨迹完整，但没有 A0/A1 共同 eligible LR。E.6 已完成
+未使用 train cohort 的 A0/A1@3e-4 序贯复验预注册与实现，但尚未运行，因此
+完整 Gate E、A2/A4 和在线成功率评测仍未启动。未运行的实验不会填入虚构结果。
 
 当前 pinned Fast-WAM 代码与 release 权重带来四个结论边界：
 
@@ -73,6 +74,7 @@ A2/A4 和在线成功率评测仍未启动。未运行的实验不会填入虚�
 - [思考点三 Phase B 验收](docs/thought3_phase_b_report.md)：1.37M Adapter、cache、mock trainer、checkpoint、测试与 Phase C 门禁。
 - [思考点三 Phase C/D 验收](docs/thought3_phase_c_report.md)、[Phase D cache 验收](docs/thought3_phase_d_report.md)：真实单样本 backward 与 32-sample K1/K2/K4 cache。
 - [思考点三 Gate E.5 结果](docs/thought3_phase_e5_report.md)：full-cohort 六轨迹结果、有效失败原因、工件哈希和下一复验边界。
+- [思考点三 Gate E.6 预注册](docs/thought3_phase_e6_protocol.md)：未使用 cohort、全新 flow slots、post-selection 披露和冻结门槛。
 - [思考点三设计与数据协议](docs/thought3_design.md)、[训练手册](docs/thought3_training.md)、[在线评测手册](docs/thought3_evaluation.md)。
 - [思考点三最终目标完成度](docs/thought3_completion_audit.md)：已证明、未证明与通往正式 OOD 对照的依赖链。
 - [工程亮点、难点与阻碍台账](docs/engineering_highlights.md)：工程复盘、未解决风险和简历素材。
@@ -456,17 +458,19 @@ fastwam-ood review-failures --experiment-dir outputs/ood_full
 
 ## 17. 下一阶段路线
 
-阶段一与阶段二正式计算已完成；阶段三 Phase A–D 与 E.1–E.5 已完成。当前
+阶段一与阶段二正式计算已完成；阶段三 Phase A–D 与 E.1–E.5 已完成，E.6
+已预注册实现但未运行。当前
 路线是：
 
 1. 保留 E.5 为有效负总 Gate，不覆盖 Run ID、不放宽共同门槛；
-2. 用未使用 train cohort 和全新 flow slots 预注册 A0/A1@3e-4 序贯复验；
-3. 显式披露 3e-4 来自 E.5 的 post-selection，继续隔离 development/OOD；
+2. 按冻结协议运行未使用 train cohort、全新 flow slots 的 A0/A1@3e-4 序贯复验；
+3. 保持 3e-4 来自 E.5 post-selection 的披露，继续隔离 development/OOD；
 4. 复验通过后才冻结新的完整 28-train/4-development Gate E；
 5. 完整 Gate E 通过后才训练 A2/A4，并实现真实 online no-cache evaluator；
 6. Phase F 技术 pilot 后冻结分析协议，再解锁正式 ID/OOD 六组对照。
 
 最近结果、停止条件和完整依赖链见
+[Gate E.6 预注册](docs/thought3_phase_e6_protocol.md)、
 [Gate E.5 报告](docs/thought3_phase_e5_report.md) 与
 [阶段三完成度审计](docs/thought3_completion_audit.md)。
 

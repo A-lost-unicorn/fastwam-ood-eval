@@ -590,6 +590,7 @@ def test_objective_aggregation_api_has_no_outcome_input() -> None:
         "model",
         "prepared",
         "progress",
+        "protocol",
         "resume",
     }
     assert not parameters & {

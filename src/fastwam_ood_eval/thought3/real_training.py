@@ -356,12 +356,14 @@ def prepare_real_training_data(
     device: str,
     progress: ProgressCallback | None = None,
     train_only_limit: int | None = None,
+    train_only_offset: int = 0,
 ) -> PreparedRealTrainingData:
     """Join Phase D K=1 identities to current-only LIBERO supervision.
 
-    Gate E/E.1 use the complete frozen 28/4 subset. Gate E.2 passes
-    ``train_only_limit=8`` so development action targets are never decoded
-    or loaded merely to discard them later.
+    Gate E/E.1 use the complete frozen 28/4 subset. Gate E.2–E.5 pass
+    ``train_only_limit=8`` with offset 0. Sequential replication Gates may
+    select another deterministic eight-sample train window without decoding
+    development action targets.
     """
 
     started = time.perf_counter()
@@ -387,16 +389,26 @@ def prepare_real_training_data(
             f"4 development, got {available_split_counts}"
         )
     if train_only_limit is None:
+        if train_only_offset != 0:
+            raise RealTrainingError(
+                "train_only_offset requires train_only_limit=8"
+            )
         reference_entries = all_reference_entries
         expected_split_counts = {"train": 28, "development": 4}
         selection_mode = "complete_phase_d_subset"
     else:
-        if train_only_limit != 8:
+        if (
+            train_only_limit != 8
+            or isinstance(train_only_offset, bool)
+            or not isinstance(train_only_offset, int)
+            or train_only_offset < 0
+            or train_only_offset + train_only_limit > 28
+        ):
             raise RealTrainingError(
-                "real train-only preparation currently permits exactly "
-                "8 samples"
+                "real train-only preparation requires an in-range "
+                "eight-sample window"
             )
-        reference_entries = sorted(
+        ordered_train_entries = sorted(
             (
                 entry
                 for entry in all_reference_entries
@@ -406,12 +418,20 @@ def prepare_real_training_data(
                 entry.identity.base_sample_id,
                 seed=cfg.training.train_seed,
             ),
-        )[:train_only_limit]
+        )
+        reference_entries = ordered_train_entries[
+            train_only_offset:
+            train_only_offset + train_only_limit
+        ]
         expected_split_counts = {
             "train": train_only_limit,
             "development": 0,
         }
-        selection_mode = "ordered_train_only"
+        selection_mode = (
+            "ordered_train_only"
+            if train_only_offset == 0
+            else "ordered_train_window"
+        )
     if plan["cache_fingerprint"] != cache_report["cache_fingerprint"]:
         raise RealTrainingError("cache plan/validation fingerprint mismatch")
     reader = FutureCacheReader(
@@ -611,6 +631,8 @@ def prepare_real_training_data(
         "split_fingerprint": plan["split_fingerprint"],
         "train_only_limit": train_only_limit,
     }
+    if train_only_offset:
+        report["train_only_offset"] = train_only_offset
     return PreparedRealTrainingData(
         samples=tuple(samples),
         split_fingerprint=str(plan["split_fingerprint"]),

@@ -382,6 +382,7 @@
 | 2026-07-28 / Gate E.3 v1 | A0/A1 initial probe 后，在首个 final checkpoint outcome 汇总报 `initial objective loss must be positive` | 一个 held-out draw 经 BF16 得到 `timestep=1000`；官方 scheduler weight 精确为 0，官方加权 loss 合法为 0；v1 非门控 `final/initial` ratio 错误假定严格正分母 | 冻结 v1 四个工件和 frozen-backbone SHA；v2 新 Run ID 显式记录 weight，零 loss 保留在 sample mean，只排除未定义 ratio；新增端点回归测试 | 否；0 optimizer/backward/rollout，frozen SHA 前后相同；但 v1 无 Gate 结论 |
 | 2026-07-28 / Gate E.4 | 六条 diversified-flow 轨迹完整后命令返回非零 | 不是工程异常；全部 execution checks 通过，但六条 held-out reduction 仅 0.997%–1.948%，无 LR 达到共同 10%+6/8 | 保存 valid failed root result；不挑 A1@3e-4、不放宽门槛；下一诊断收缩到 objective aggregation/effective batch | 否；无 dev/OOD/success/rollout/future RGB，Fast-WAM SHA 前后相同 |
 | 2026-07-28 / Gate E.5 | 六条 full-cohort 轨迹完整后命令返回非零 | 不是执行异常；120/120 execution、全部 paired/cross/frozen checks 通过，但 A0 在三档 LR 都未达 10%，所以无 A0/A1 共同 eligible LR | 冻结 valid failed root result；保留 A1@3e-4 的 19.668%/8-of-8 为探索性复验信号，不回改门槛或 selected LR | 否；0 dev/OOD/success/rollout/future RGB，Fast-WAM SHA 前后相同 |
+| 2026-07-29 / Gate E.6 预注册 | E.5 后只复验 A0/A1@3e-4，存在结果后选择污染风险 | 明确登记为 post-selection sequential replication；冻结未使用 train 排序 9–16、slots 31001–32600、A1 绝对/A0 稳定/A1-vs-A0 三组门槛 | 配置、编排器、resume provenance、CLI、单卡 runner 和测试已实现；尚未运行、无 E.6 outcome | 否；预注册阶段只读 Phase D/E.5，运行仍锁定 dev/OOD/success/rollout/future RGB |
 
 冷启动观测：2-step smoke 中 Wan 组件装载约 `336–433 s`；20-step OOD
 三进程观测到约 `604.37 s`，Clean 单进程为 `521.74 s`。这不是单次 future

@@ -37,6 +37,8 @@ from fastwam_ood_eval.thought3.objective_aggregation_training import (
     OBJECTIVE_AGGREGATION_HELDOUT_FLOW_STEPS,
     OBJECTIVE_AGGREGATION_UPDATES,
     OBJECTIVES_PER_UPDATE,
+    ObjectiveAggregationProtocol,
+    PHASE_E5_OBJECTIVE_AGGREGATION_PROTOCOL,
     objective_aggregation_flow_slot,
     objective_aggregation_identity_schedule_sha256,
     objective_aggregation_schedule_sha256,
@@ -363,6 +365,10 @@ def _objective_schedule_matches(
     cfg: Thought3Config,
     rows: Sequence[Mapping[str, Any]],
     sample_ids: Sequence[str],
+    *,
+    protocol: ObjectiveAggregationProtocol = (
+        PHASE_E5_OBJECTIVE_AGGREGATION_PROTOCOL
+    ),
 ) -> bool:
     if (
         len(rows)
@@ -380,6 +386,7 @@ def _objective_schedule_matches(
         flow_slot = objective_aggregation_flow_slot(
             optimizer_update,
             micro_index,
+            flow_slot_offset=protocol.flow_slot_offset,
         )
         expected = _flow_objective_identity(
             base_sample_id=base_sample_id,
@@ -560,6 +567,16 @@ def _update_aggregation_matches(
 def _track_checks(
     cfg: Thought3Config,
     result: Mapping[str, Any],
+    *,
+    protocol: ObjectiveAggregationProtocol = (
+        PHASE_E5_OBJECTIVE_AGGREGATION_PROTOCOL
+    ),
+    frozen_identity_schedule_sha256: str = (
+        PHASE_E5_FROZEN_IDENTITY_SCHEDULE_SHA256
+    ),
+    forbidden_training_slot_ranges: tuple[
+        tuple[int, int], ...
+    ] = ((10_001, 10_200),),
 ) -> tuple[dict[str, bool], dict[str, Any]]:
     objective_path = Path(str(result["objective_metrics"]))
     update_path = Path(str(result["update_metrics"]))
@@ -585,17 +602,22 @@ def _track_checks(
         cfg,
         objective_rows,
         sample_ids,
+        protocol=protocol,
     )
     schedule_sha_matches = False
     if schedule_matches:
         schedule_sha_matches = (
             result["train_flow_schedule_sha256"]
-            == objective_aggregation_schedule_sha256(objective_rows)
+            == objective_aggregation_schedule_sha256(
+                objective_rows,
+                flow_slot_offset=protocol.flow_slot_offset,
+            )
         )
     expected_identity_sha = (
         objective_aggregation_identity_schedule_sha256(
             sample_ids,
             train_seed=cfg.training.train_seed,
+            flow_slot_offset=protocol.flow_slot_offset,
         )
     )
     finite_trace = (
@@ -667,8 +689,8 @@ def _track_checks(
             [int(row["training_flow_slot"]) for row in objective_rows]
             == list(
                 range(
-                    OBJECTIVE_AGGREGATION_FLOW_SLOT_OFFSET + 1,
-                    OBJECTIVE_AGGREGATION_FLOW_SLOT_OFFSET
+                    protocol.flow_slot_offset + 1,
+                    protocol.flow_slot_offset
                     + OBJECTIVE_AGGREGATION_UPDATES
                     * OBJECTIVES_PER_UPDATE
                     + 1,
@@ -679,16 +701,19 @@ def _track_checks(
                 for row in objective_rows
             }
             & {0, *OBJECTIVE_AGGREGATION_HELDOUT_FLOW_STEPS}
-            and not {
-                int(row["training_flow_slot"])
-                for row in objective_rows
-            }
-            & set(range(10_001, 10_201))
+            and all(
+                not {
+                    int(row["training_flow_slot"])
+                    for row in objective_rows
+                }
+                & set(range(start, end + 1))
+                for start, end in forbidden_training_slot_ranges
+            )
         ),
         "objective_seed_identity_exact": schedule_matches,
         "identity_schedule_sha_exact": (
             expected_identity_sha
-            == PHASE_E5_FROZEN_IDENTITY_SCHEDULE_SHA256
+            == frozen_identity_schedule_sha256
             == result["identity_schedule_sha256"]
         ),
         "observed_schedule_sha_exact": schedule_sha_matches,
@@ -700,16 +725,16 @@ def _track_checks(
         ),
         "frozen_zero_weight_slots_exact": (
             zero_slots
-            == OBJECTIVE_AGGREGATION_EXPECTED_ZERO_WEIGHT_SLOTS
+            == protocol.expected_zero_weight_slots
             and int(result["zero_weight_objective_count"])
             == len(
-                OBJECTIVE_AGGREGATION_EXPECTED_ZERO_WEIGHT_SLOTS
+                protocol.expected_zero_weight_slots
             )
             and tuple(
                 tuple(int(value) for value in row)
                 for row in result["zero_weight_slots"]
             )
-            == OBJECTIVE_AGGREGATION_EXPECTED_ZERO_WEIGHT_SLOTS
+            == protocol.expected_zero_weight_slots
             and all(
                 (float(row["action_weight"]) == 0)
                 == bool(row["zero_weight_objective"])

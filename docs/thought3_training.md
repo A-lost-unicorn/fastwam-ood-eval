@@ -424,3 +424,19 @@ loss、每个 micro-objective 的 gate-gradient contribution 及 cancellation ra
 协议和结果见
 [thought3_phase_e5_protocol.md](thought3_phase_e5_protocol.md)、
 [thought3_phase_e5_report.md](thought3_phase_e5_report.md)。
+
+### 11.7 Gate E.6 未使用 cohort 序贯复验
+
+E.6 已于 2026-07-29 完成预注册和实现，但尚未启动真实 GPU：
+
+- 明确披露 `3e-4` 是查看 E.5 后选择，不是 E.5 selected LR；
+- 只运行匹配的 A0/A1 两条轨迹，不再扫描 LR；
+- 使用 train 排序第 9–16 条，与 E.5/development 零重叠；
+- 新 slots 为 `31001..32600`，调度 SHA 为
+  `419b09a2ec30ce7bffc99c95aff1a343f77d39e83e77a752fc67bc984508febc`；
+- 冻结 A1 绝对复现、A0 稳定性和 A1-vs-A0 配对优势三组门槛；
+- 预算为 400 updates、3,200 train objectives、160 held-out objectives。
+
+E.6 即使通过，也只允许建立新的完整 28/4 Gate E，不直接解锁 A2/A4 或 OOD。
+详见
+[thought3_phase_e6_protocol.md](thought3_phase_e6_protocol.md)。

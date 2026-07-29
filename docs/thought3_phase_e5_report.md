@@ -285,4 +285,6 @@ unused train cohort（development 保持不可见）
 5. 复验失败后才允许转向 gate parameterization、Adapter normalization 或
    optimizer 的单变量诊断。
 
-该复验目前只是建议，**尚未预注册、实现或获 GPU 运行授权**。
+2026-07-29 状态更新：该复验已按
+[Gate E.6 协议](thought3_phase_e6_protocol.md)完成预注册与实现，但尚未运行、
+未产生 E.6 outcome，也未解锁完整 Gate E。

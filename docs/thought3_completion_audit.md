@@ -157,14 +157,14 @@ CPU/mock；`thought3-counterfactual` 在 Fast-WAM backend 上仍返回
 | 独立分支/目录/CLI/schema | `feature/thought3-partial-future-adapter` 与 Thought3 namespace | **Satisfied** |
 | 不修改 `third_party/FastWAM` | worktree/status checks | **Satisfied to current commit** |
 | 不修改 Thought1/2 outputs | path guards + status/hash checks | **Satisfied to current commit** |
-| 旧 CLI 行为不变 | old CLI regression；完整测试 304 passed | **Satisfied to current commit** |
+| 旧 CLI 行为不变 | old CLI regression；完整测试 314 passed | **Satisfied to current commit** |
 | 正式运行前 dirty=false | Phase F/G 未到运行点 | **Pending** |
 | 三 GPU shard union/intersection | 纯函数测试存在，真实 run 缺失 | **Partial** |
 
 ## 9. 完成最终 Goal 的依赖链
 
 ```text
-preregister fresh-cohort sequential replication of A0/A1 @ 3e-4
+run preregistered fresh-cohort sequential replication of A0/A1 @ 3e-4
   ↓
 if replicated: freeze a new full 28/4 Gate E protocol and candidate recipe
   ↓
@@ -200,10 +200,12 @@ memory、provenance 和 frozen SHA 检查全部通过。
 预注册的 A0/A1 共同 `10% + 6/8` 不成立，`selected_lr=null`。该结果不能
 事后改判为 future effect 或正式 LR。
 
-最近一步应是用未使用 train cohort、全新 flow slots 和新 Run ID，预注册
-A0/A1@3e-4 的序贯复验；必须披露 LR 来自 E.5 post-selection，development、
-OOD 和 success outcome 继续不可见。该复验尚未预注册、实现或获真实运行授权。
+E.6 已用未使用 train cohort、全新 flow slots 和新 Run ID 完成
+A0/A1@3e-4 序贯复验的预注册与实现；协议明确披露 LR 来自 E.5
+post-selection，development、OOD 和 success outcome 继续不可见。该复验尚未
+真实运行，未产生任何 E.6 outcome，也未解锁完整 Gate E。
 相关协议、结果与父结果见
+[thought3_phase_e6_protocol.md](thought3_phase_e6_protocol.md)、
 [thought3_phase_e5_protocol.md](thought3_phase_e5_protocol.md)、
 [thought3_phase_e5_report.md](thought3_phase_e5_report.md)、
 [thought3_phase_e4_report.md](thought3_phase_e4_report.md)。

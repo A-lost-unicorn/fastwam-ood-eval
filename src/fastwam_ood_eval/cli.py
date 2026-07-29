@@ -428,6 +428,10 @@ def build_parser() -> argparse.ArgumentParser:
             "thought3-diagnose-objective-aggregation",
             "Run Gate E.5: paired full-cohort gradient aggregation",
         ),
+        (
+            "thought3-replicate-fresh-cohort",
+            "Run Gate E.6: post-selection A0/A1@3e-4 fresh-cohort replication",
+        ),
         ("thought3-plan-cache", "Plan paired K=1/2/4 future cache shards"),
         ("thought3-build-cache", "Build this rank's future cache shards"),
         ("thought3-validate-cache", "Validate cache schema, pairing and checksums"),

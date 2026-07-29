@@ -1,7 +1,7 @@
 # Thought3 最终目标完成度审计
 
 状态：`ACTIVE / INCOMPLETE`
-审计日期：2026-07-28
+审计日期：2026-07-29
 目标文件 SHA-256：
 `8459b07d6cf870ec6c1cf9f2d0254e61b543dd5c3532b116a0079a0c0c2ca972`
 
@@ -18,7 +18,7 @@ Gate E/E.2           failed overall
 Gate E.3 v1          invalid telemetry run; no gate conclusion
 Gate E.3 v2          valid failed gate; 320/320 probes complete
 Gate E.4             valid failed gate; 1,200 steps complete
-Gate E.5             preregistered/implemented; not executed
+Gate E.5             valid failed gate; 1,200 updates/9,600 objectives complete
 full 28/4 Gate E     not passed
 A2/A4 real training  not started
 Phase F real pilot   not started
@@ -34,8 +34,8 @@ paper claim          unavailable
 - A0/A1 单目标可拟合；
 - E.2/E.4 各六条多样本训练轨迹工程上完整；
 - diversified train-flow 缓解 fixed-flow 退化，但未达到冻结训练门槛；
-- E.5 已实现 full-cohort mean-gradient、双层 telemetry 和原子恢复，但没有真实
-  loss、gradient、memory 或 gate 结果。
+- E.5 的 full-cohort mean-gradient、双层 telemetry 和原子恢复已完成真实
+  六轨迹验证；A1@3e-4 出现 19.668%/8-of-8 候选信号，但没有共同 eligible LR。
 
 尚无证据证明：
 
@@ -102,7 +102,7 @@ Phase D cache 只能用于训练；不得把它接入 Phase F/G 在线 policy。
 | E.3 v1 | invalid run | 官方 `t=1000` 零权重 objective 触发非门控 ratio 实现错误；冻结 SHA 不变，未生成 gate result |
 | E.3 v2 | valid failed gate | 320/320 probe 与全部执行检查通过；三个 LR 均未达到 A0/A1 共同 `10% + 6/8` |
 | E.4 | valid failed gate | 1,200 optimizer steps、480 held-out objectives、108 execution checks 完整；六条 reduction 仅 0.997%–1.948%，无共同 LR |
-| E.5 | preregistered/implemented | matched-update、8-sample arithmetic mean、slots `20001..21600`、schedule SHA、24 zero-weight slots 和恢复检查已冻结；真实 run 未执行 |
+| E.5 | valid failed gate | 1,200 updates、9,600 train objectives、480 held-out objectives、120 execution checks 完整；A1@3e-4 单条过门，A0@3e-4 仅 2.638%，无共同 LR |
 | full E | not passed | 仍缺新的 28 train / 4 development 完整闭环 |
 
 在 full E 通过前：
@@ -164,9 +164,9 @@ CPU/mock；`thought3-counterfactual` 在 Fast-WAM backend 上仍返回
 ## 9. 完成最终 Goal 的依赖链
 
 ```text
-run preregistered E.5 full-cohort objective aggregation diagnostic
+preregister fresh-cohort sequential replication of A0/A1 @ 3e-4
   ↓
-if pass: freeze candidate LR
+if replicated: freeze a new full 28/4 Gate E protocol and candidate recipe
   ↓
 new full 28/4 Gate E training + dev selection
   ↓
@@ -190,19 +190,20 @@ shuffle、在线 no-cache 或统计冻结要求。
 
 ## 10. 当前最近一步
 
-Gate E.4 已完整运行并有效失败。六条 diversified-train-flow 轨迹都取得正
-held-out reduction，但范围只有 `0.997%–1.948%`；只有 A1@3e-4 达到 7/8
-sample 不变差，仍未达到冻结的 10% mean reduction。全部 execution、pairing、
-zero-weight、checkpoint、memory、provenance 和 frozen SHA 检查通过。
+Gate E.5 已完整运行并有效失败。六条 full-cohort 轨迹完成 1,200 optimizer
+updates、9,600 train objectives 和 480 held-out objectives；120/120
+execution、21/21 paired、7/7 cross checks、zero-weight、checkpoint、
+memory、provenance 和 frozen SHA 检查全部通过。
 
-该门禁现已作为 E.5 冻结并实现：选择 matched-update budget，每条轨迹 200
-updates，每 update 固定聚合全部 8 条 sample 的独立 flow objective，并对 loss
-取算术均值；slots `20001..21600`、schedule identity SHA、24 个合法零权重
-objective、双层 telemetry 和 checkpoint cursor 均已锁定。8 samples、A0/A1、
-LR grid、official loss、held-out probe 和 `10% + 6/8` 门槛未改变。
+`A1@3e-4` held-out mean loss 下降 19.668%、8/8 sample 不变差，并在同 LR
+下对 8/8 sample 都取得低于 A0 的 final loss；但 A0 只下降 2.638%，所以
+预注册的 A0/A1 共同 `10% + 6/8` 不成立，`selected_lr=null`。该结果不能
+事后改判为 future effect 或正式 LR。
 
-E.5 尚未执行，不能填写 loss/gradient/memory/Gate 结果。真实单卡执行预计约
-110–135 分钟，仍需用户显式确认。相关协议以及父结果见
+最近一步应是用未使用 train cohort、全新 flow slots 和新 Run ID，预注册
+A0/A1@3e-4 的序贯复验；必须披露 LR 来自 E.5 post-selection，development、
+OOD 和 success outcome 继续不可见。该复验尚未预注册、实现或获真实运行授权。
+相关协议、结果与父结果见
 [thought3_phase_e5_protocol.md](thought3_phase_e5_protocol.md)、
-[thought3_phase_e4_protocol.md](thought3_phase_e4_protocol.md)、
+[thought3_phase_e5_report.md](thought3_phase_e5_report.md)、
 [thought3_phase_e4_report.md](thought3_phase_e4_report.md)。

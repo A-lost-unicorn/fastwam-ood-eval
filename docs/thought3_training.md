@@ -381,8 +381,7 @@ matched-update budget、accumulation factor、flow slots 与 mean/sum loss。
 
 ### 11.6 Gate E.5 full-cohort objective aggregation
 
-E.5 已完成协议冻结和代码实现，但尚未执行。它采用预先选定的
-`matched-optimizer-update` 预算：
+E.5 已按预先冻结的 `matched-optimizer-update` 预算完整执行：
 
 ```text
 200 optimizer updates / track
@@ -404,6 +403,24 @@ loss、每个 micro-objective 的 gate-gradient contribution 及 cancellation ra
 24 个预知 `t=1000/weight=0` objective 原样保留。
 
 该预算不是 sample/compute matched：E.5 的 train objective 数是 E.4 的 8 倍。
-因此即使通过也只产生完整 28/4 Gate E 的工程候选 LR，不能解释为 future effect。
-协议、运行边界、预计耗时和手动命令见
-[thought3_phase_e5_protocol.md](thought3_phase_e5_protocol.md)。
+因此 E.5 与 E.4 的差异不能只归因于梯度聚合。
+
+真实结果：
+
+- 六条轨迹共 1,200 updates、9,600 train objectives 和 480 held-out
+  objectives；
+- 120/120 execution、21/21 paired、7/7 cross checks 全部通过；
+- 六条 reduction 为 A0/A1：
+  `1.889%/6.452%`、`2.638%/19.668%`、`2.890%/7.315%`；
+- `A1@3e-4` 单条通过全部 performance checks，8/8 sample 不变差；
+- 同 LR 的 A0 只下降 2.638%，所以三个 LR 仍全部不 eligible；
+- frozen Fast-WAM SHA 前后相同，0 development/OOD/success/rollout/future
+  RGB。
+
+因此 E.5 是有效负总 Gate，不得进入完整 Gate E、A2/A4 或 Phase F。
+`A1@3e-4` 的 19.668%/8-of-8 是需要在未使用 train cohort 上预注册复验的
+探索性工程信号，不能事后充当 selected LR 或 future effect。
+
+协议和结果见
+[thought3_phase_e5_protocol.md](thought3_phase_e5_protocol.md)、
+[thought3_phase_e5_report.md](thought3_phase_e5_report.md)。

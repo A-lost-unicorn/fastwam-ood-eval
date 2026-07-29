@@ -43,9 +43,9 @@ Clean `97.25%`、OOD `47.70%`，绝对下降 `49.55` 个百分点，0 exception�
 ## 3. 当前阶段不做什么
 
 阶段一、二仍冻结，不重训或改写其 Fast-WAM 基线，也不把仿真 OOD 结论外推成
-真机结论。阶段三已在独立 namespace 完成 Future-to-Action Adapter 的 Phase A
-审计与 Phase B CPU/mock 实现，但尚未加载大模型、生成真实 future cache、训练或
-评测成功率。未运行的实验不会填入虚构结果。
+真机结论。阶段三已在独立 namespace 完成 Phase A–D 与 E.1–E.5 的真实工程
+诊断；Gate E.5 六条轨迹完整，但没有 A0/A1 共同 eligible LR，因此完整 Gate E、
+A2/A4 和在线成功率评测仍未启动。未运行的实验不会填入虚构结果。
 
 当前 pinned Fast-WAM 代码与 release 权重带来四个结论边界：
 
@@ -71,7 +71,10 @@ Clean `97.25%`、OOD `47.70%`，绝对下降 `49.55` 个百分点，0 exception�
 - [思考点二统计分析计划](docs/thought2_statistical_analysis_plan.md)：episode/task 层级、primary estimand、cluster bootstrap、缺失与停止规则。
 - [思考点二 static/no-op 校准](docs/thought2_static_calibration.md)：独立 null set、候选阈值、freeze gate、真实数据与恢复规则。
 - [思考点三 Phase B 验收](docs/thought3_phase_b_report.md)：1.37M Adapter、cache、mock trainer、checkpoint、测试与 Phase C 门禁。
+- [思考点三 Phase C/D 验收](docs/thought3_phase_c_report.md)、[Phase D cache 验收](docs/thought3_phase_d_report.md)：真实单样本 backward 与 32-sample K1/K2/K4 cache。
+- [思考点三 Gate E.5 结果](docs/thought3_phase_e5_report.md)：full-cohort 六轨迹结果、有效失败原因、工件哈希和下一复验边界。
 - [思考点三设计与数据协议](docs/thought3_design.md)、[训练手册](docs/thought3_training.md)、[在线评测手册](docs/thought3_evaluation.md)。
+- [思考点三最终目标完成度](docs/thought3_completion_audit.md)：已证明、未证明与通往正式 OOD 对照的依赖链。
 - [工程亮点、难点与阻碍台账](docs/engineering_highlights.md)：工程复盘、未解决风险和简历素材。
 - [环境配置](docs/environment_setup.md)、[实验协议](docs/experiment_protocol.md)、[上游勘察](docs/upstream_notes.md)。
 
@@ -422,9 +425,11 @@ fastwam-ood thought3-train --config configs/thought3/train_a1_smoke.yaml
 fastwam-ood thought3-counterfactual --config configs/thought3/train_a1_smoke.yaml
 ```
 
-这些产物是 `TEST`，不能解释为 OOD 提升。下一步是 Phase C 单 GPU、单条标准
-LIBERO train sample 的 tensor/backward/memory smoke；Gate C 未过前不生成真实
-cache 或长训练。见 [Phase B 报告](docs/thought3_phase_b_report.md)。
+以上命令是 Phase B 的 `TEST` 工程链路，不能解释为 OOD 提升。真实 Phase C/D
+现已通过，Gate E.5 也已完成 1,200 updates、9,600 train objectives 和 480
+held-out objectives；其中 A1@3e-4 单条下降 19.668%/8-of-8，但同 LR A0 只
+下降 2.638%，所以总 Gate 有效失败。见
+[Gate E.5 报告](docs/thought3_phase_e5_report.md)。
 
 ## 14. 查看失败视频
 
@@ -451,17 +456,18 @@ fastwam-ood review-failures --experiment-dir outputs/ood_full
 
 ## 17. 下一阶段路线
 
-阶段一与阶段二正式计算已完成；阶段三 Phase B 也已完成。当前只推进 Phase C：
+阶段一与阶段二正式计算已完成；阶段三 Phase A–D 与 E.1–E.5 已完成。当前
+路线是：
 
-1. 冻结标准 LIBERO training revision 与 episode inventory；
-2. 单卡加载同一官方 checkpoint；
-3. 一条样本生成 K=1/2/4 native latent；
-4. 验证 upstream sampler parity、zero-gate action parity；
-5. 做一次 action loss backward，确认 only-Adapter gradient；
-6. 记录 frozen hash 与 <43 GiB peak memory；
-7. 通过真实 future mutation leakage test。
+1. 保留 E.5 为有效负总 Gate，不覆盖 Run ID、不放宽共同门槛；
+2. 用未使用 train cohort 和全新 flow slots 预注册 A0/A1@3e-4 序贯复验；
+3. 显式披露 3e-4 来自 E.5 的 post-selection，继续隔离 development/OOD；
+4. 复验通过后才冻结新的完整 28-train/4-development Gate E；
+5. 完整 Gate E 通过后才训练 A2/A4，并实现真实 online no-cache evaluator；
+6. Phase F 技术 pilot 后冻结分析协议，再解锁正式 ID/OOD 六组对照。
 
-完成这些门禁后才进入一个 suite/task 的真实 cache smoke，之后才是 A0/A1 的
-100–500 step 小训练。正式 OOD 结果必须等 Phase F 后冻结分析协议再解锁。
+最近结果、停止条件和完整依赖链见
+[Gate E.5 报告](docs/thought3_phase_e5_report.md) 与
+[阶段三完成度审计](docs/thought3_completion_audit.md)。
 
 实施过程中的工程决策、阻碍和可量化简历素材持续记录在 [工程台账](docs/engineering_highlights.md)。

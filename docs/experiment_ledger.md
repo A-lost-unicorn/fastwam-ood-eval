@@ -1,6 +1,6 @@
 # 实验、卡点与结论台账
 
-更新日期：2026-07-28
+更新日期：2026-07-29
 
 本台账只记录可追溯事实。机器工件是权威来源，本文是便于论文、周报、简历和面试使用的索引。
 
@@ -40,7 +40,7 @@
 | `P3-PHASE-E3-v1` | 2026-07-28 | 3 / INVALID ENGINEERING RUN | commit `330fe15`；config fingerprint `f2313eec...5652`；GPU 1；只读 E.2 checkpoint | model/data/A0/A1 initial probe 完成；A0/A1 mean loss 均为 `0.005565503754223755`；一个 `t=1000` objective 的官方 weight/loss 为 0；非门控 ratio 汇总抛错；frozen SHA 前后相同 | 未生成 `gate_e3_result.json`，无 Gate pass/fail 或 LR 结论；v1 工件按 SHA 冻结，不得覆盖 |
 | `P3-PHASE-E3-v2` | 2026-07-28 | 3 / FAILED ENGINEERING DIAGNOSTIC | prereg commit `139742f`；8 samples、6 E.2 checkpoints、held-out flow `1..5`；320 forward、0 optimizer/backward | 全部 execution/provenance/zero-weight checks 通过；A0 最好下降 1.35%/2-of-8，A1 最好下降 0.025%/2-of-8；三个 LR 均不 eligible | 有效负 Gate；E.2 的 fixed-flow 降幅未迁移到 held-out flow；不能解释为 future 无效，不扩 A2/A4/Phase F |
 | `P3-PHASE-E4-v1` | 2026-07-28 | 3 / FAILED ENGINEERING DIAGNOSTIC | prereg commit `07d949d`；8 samples；A0/A1 × 原 LR grid；唯一 paired slot `10001..10200`；held-out flow `1..5` | 六轨迹 1,200 step、480 held-out objectives 和 108 execution checks 完整；六条 reduction 均为正但仅 0.997%–1.948%；只有 A1@3e-4 达 7/8，三个 LR 均不 eligible | 有效负 Gate；diversified flow 缓解 fixed-flow 退化但不足 10%；不进入 full E、A2/A4 或 Phase F |
-| `P3-PHASE-E5-v1` | 2026-07-28 | 3 / PREREGISTERED ENGINEERING DIAGNOSTIC | config fingerprint `c4c6815...122fc`；matched-update；A0/A1 × 原 LR grid；每 update 8-sample mean；slots `20001..21600` | 计划 6×200 optimizer updates、9,600 train objectives、480 held-out objectives；代码/恢复/独立重算测试完成，真实 run 尚未执行 | 只允许检验 objective aggregation 是否产生稳定候选 LR；不支持 future/OOD 结论，执行需用户显式确认 |
+| `P3-PHASE-E5-v1` | 2026-07-28 | 3 / FAILED ENGINEERING DIAGNOSTIC | prereg commit `a8245d1`；config fingerprint `c4c6815...122fc`；matched-update；A0/A1 × 原 LR grid；每 update 8-sample mean；slots `20001..21600` | 六轨迹完成 1,200 updates、9,600 train objectives、480 held-out objectives；120/120 execution checks 通过；A1@3e-4 下降 19.668%/8-of-8，A0@3e-4 仅 2.638%；三个 LR 均不 eligible | 有效负总 Gate；full-cohort aggregation 产生待新 cohort 复验的探索性 A1 信号，但不得事后选择 3e-4、扩 A2/A4 或作 future/OOD 结论 |
 
 ### `P1-FORMAL-v1` 机器证据
 
@@ -381,6 +381,7 @@
 | 2026-07-28 / Phase E v2/v3 loss gates | A1 development 未下降；固定 A0 train probe 也未下降 | 当前 100-step zero-gated 配方没有表现出稳定 loss 改善；不是 gradient 断链 | 总 Gate 保持 failed；下一步做单样本 fixed-noise overfit 和注入尺度诊断 | 否；没有 OOD/rollout，未扩 A2/A4 |
 | 2026-07-28 / Gate E.3 v1 | A0/A1 initial probe 后，在首个 final checkpoint outcome 汇总报 `initial objective loss must be positive` | 一个 held-out draw 经 BF16 得到 `timestep=1000`；官方 scheduler weight 精确为 0，官方加权 loss 合法为 0；v1 非门控 `final/initial` ratio 错误假定严格正分母 | 冻结 v1 四个工件和 frozen-backbone SHA；v2 新 Run ID 显式记录 weight，零 loss 保留在 sample mean，只排除未定义 ratio；新增端点回归测试 | 否；0 optimizer/backward/rollout，frozen SHA 前后相同；但 v1 无 Gate 结论 |
 | 2026-07-28 / Gate E.4 | 六条 diversified-flow 轨迹完整后命令返回非零 | 不是工程异常；全部 execution checks 通过，但六条 held-out reduction 仅 0.997%–1.948%，无 LR 达到共同 10%+6/8 | 保存 valid failed root result；不挑 A1@3e-4、不放宽门槛；下一诊断收缩到 objective aggregation/effective batch | 否；无 dev/OOD/success/rollout/future RGB，Fast-WAM SHA 前后相同 |
+| 2026-07-28 / Gate E.5 | 六条 full-cohort 轨迹完整后命令返回非零 | 不是执行异常；120/120 execution、全部 paired/cross/frozen checks 通过，但 A0 在三档 LR 都未达 10%，所以无 A0/A1 共同 eligible LR | 冻结 valid failed root result；保留 A1@3e-4 的 19.668%/8-of-8 为探索性复验信号，不回改门槛或 selected LR | 否；0 dev/OOD/success/rollout/future RGB，Fast-WAM SHA 前后相同 |
 
 冷启动观测：2-step smoke 中 Wan 组件装载约 `336–433 s`；20-step OOD
 三进程观测到约 `604.37 s`，Clean 单进程为 `521.74 s`。这不是单次 future
@@ -438,6 +439,10 @@ Provenance 补充核对：Fast-WAM 和 LIBERO checkout clean；LIBERO-Plus
     改为 200 个唯一 paired flow slots；六条 held-out reduction 均转为正值，但
     只有 `0.997%–1.948%`，仍无共同 eligible LR。该结果说明 flow diversification
     有工程改善但不足以进入完整训练，不构成 future 模型效应。
+22. Gate E.5 完成 1,200 次 full-cohort update 和 9,600 个 train objective，
+    其中 `A1@3e-4` held-out loss 下降 19.668%、8/8 sample 不变差；但同 LR
+    A0 仅下降 2.638%，故预注册共同门有效失败。该配对差只构成新 cohort
+    序贯复验的工程依据，不构成 future 或 OOD 效果。
 
 ### 尚未支持
 
@@ -452,9 +457,9 @@ Provenance 补充核对：Fast-WAM 和 LIBERO checkout clean；LIBERO-Plus
    formal future 指标生成前没有冻结。
 6. 20-step shadow RGB 生成成本是否等于阶段三 cached latent 或在线 Adapter
    成本；阶段三必须单独计时。
-7. 多 objective 梯度聚合后 Adapter 是否能形成达到冻结门槛的稳定 loss 改善。
-   E.4 已有效失败：diversified flow 只带来约 1%–2% held-out reduction；A2/A4
-   和任何阶段三成功率仍被锁定。
+7. `A1@3e-4` 的 full-cohort held-out 改善能否在未使用 train cohort 上复现。
+   E.5 总 Gate 已有效失败，且 3e-4 是结果后识别的探索性候选；复验与完整
+   28/4 Gate E 前，A2/A4 和任何阶段三成功率仍被锁定。
 
 ## 4. 待填论文主表
 

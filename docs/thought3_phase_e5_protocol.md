@@ -1,10 +1,15 @@
 # Thought3 Gate E.5：Full-cohort Objective Aggregation 诊断协议
 
-状态：`PREREGISTERED / IMPLEMENTED / NOT EXECUTED`
-证据等级：`ENGINEERING DIAGNOSTIC / NOT MODEL EFFECT`
+状态：`EXECUTED / VALID FAILED GATE`
+证据等级：`ENGINEERING DIAGNOSTIC / FAILED-GATE / NOT MODEL EFFECT`
 
 > 本协议在任何 E.5 loss/result 产生前冻结。代码完成后不得自动运行；真实执行
 > 仍需用户显式确认。E.5 即使通过，也不能解释为 future 改善了 OOD。
+>
+> 2026-07-28 的真实运行已完整结束。六条轨迹的 execution、pairing、frozen
+> 和 leakage checks 全部通过，但没有 A0/A1 共同 eligible LR，故 Gate 有效
+> 失败。结果与工件哈希见
+> [thought3_phase_e5_report.md](thought3_phase_e5_report.md)。
 
 ## 1. 触发依据
 
@@ -294,7 +299,9 @@ outputs/thought3/phase_e5_objective_aggregation_v1/
 - wall time 约 `110–135 分钟`；
 - 输出约 `400–470 MiB`。
 
-这些只是执行规划，不是实测结果。运行后必须以 root manifest 为准。
+以上是运行前的资源规划。实测为 114.65 分钟、model-load/train peak
+`23,679.513/13,277.440 MiB`、输出 413,198,197 bytes；权威数值仍以 root
+manifest 和结果报告为准。
 
 ## 10. 解释、通过路径与停止规则
 
@@ -319,10 +326,10 @@ outputs/thought3/phase_e5_objective_aggregation_v1/
 
 无论 pass/fail，E.5 都不能回答显式 future 是否提升 OOD。
 
-## 11. 显式授权
+## 11. 显式授权与已完成 Run ID
 
 实现、测试和 dry-run 不会启动真实模型。无确认时，公共 CLI 在创建
-`run_status.json` 或加载模型前即拒绝。只有用户明确确认后才运行：
+`run_status.json` 或加载模型前即拒绝。本次已完成运行使用的历史命令是：
 
 ```bash
 CONFIRM_THOUGHT3_PHASE_E5=YES \
@@ -330,7 +337,7 @@ THOUGHT3_GPU_ID=1 \
 bash scripts/run_thought3_phase_e5_objective_aggregation.sh
 ```
 
-中断后只用：
+运行中断时原本只允许：
 
 ```bash
 CONFIRM_THOUGHT3_PHASE_E5=YES \
@@ -339,3 +346,7 @@ bash scripts/run_thought3_phase_e5_objective_aggregation.sh --resume
 ```
 
 不得同时启动其他占用该物理 GPU 的任务。
+
+`P3-PHASE-E5-v1` 现在已有完整 valid-failed root result，**不得再运行或
+`--resume` 覆盖同一目录**。任何后续复验必须先冻结新协议、配置 fingerprint、
+Run ID 和输出目录，并重新获得用户显式授权。

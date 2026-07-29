@@ -4,7 +4,7 @@
 
 ## 1. 当前事实快照
 
-截至 2026-07-28：
+截至 2026-07-29：
 
 | 项目 | 状态 | 可用证据 |
 | --- | --- | --- |
@@ -30,7 +30,7 @@
 | 阶段三 Gate E.2 多样本诊断 | FAILED-GATE，工程轨迹完整 | A0/A1 × 三 LR 共 1,200 step；梯度/resume/checkpoint/frozen SHA/13.0 GiB 全通过；无共同 6/8 stable LR，保留负结果并定位单-flow confound |
 | 阶段三 Gate E.3 held-out flow | FAILED-GATE，320/320 probe 完整 | 执行/provenance/zero-weight checks 全通过；E.2 A1 fixed-flow 的 24.19%/40.01% 降幅在 held-out flow 变为 0.025%/−1.31%，阻止不稳定配方进入 OOD |
 | 阶段三 Gate E.4 diversified flow | FAILED-GATE，1,200 step 完整 | 200 unique paired slots、480 held-out objectives、108 execution checks 全通过；六条 reduction 转正但仅 0.997%–1.948%，继续阻止 full E/A2/A4 |
-| 阶段三 Gate E.5 objective aggregation | PREREGISTERED/IMPLEMENTED，未执行 | 冻结 matched-update 预算、8-objective arithmetic mean、1,600 paired slots/track、双层 telemetry、24 个零权重 objective 与原子恢复；等待显式 GPU 授权 |
+| 阶段三 Gate E.5 objective aggregation | FAILED-GATE，1,200 updates 完整 | 9,600 train objectives、480 held-out objectives、120 execution checks 全通过；A1@3e-4 为 19.668%/8-of-8，但同 LR A0 仅 2.638%，无共同 eligible LR |
 
 ## 2. 可以对外说明的工程亮点
 
@@ -376,8 +376,16 @@
 - 恢复：checkpoint 的 cursor 强制为 `update×8`，先原子提交两份 metrics 再保存
   Adapter-only checkpoint；恢复时截断 checkpoint 后的孤立 metrics，不允许
   partial cohort、重复或错序。
-- 边界：这是已预注册和测试、尚未运行的工程系统；9,600 train objectives、
-  loss/显存和 Gate 结果不能在真实执行前写成完成数字。
+- 执行：六条真实轨迹完成 1,200 optimizer updates、9,600 train objectives、
+  480 held-out objectives；120/120 execution、21/21 paired 和 7/7 cross
+  checks 全部通过，六条 track 工件的 30 个 root-recorded SHA 全量复算匹配。
+- 结果：A1 在 `1e-4/3e-4/1e-3` 下分别下降
+  `6.452%/19.668%/7.315%`，其中 `A1@3e-4` 为 8/8 non-worsened；对应 A0
+  只有 `1.889%/2.638%/2.890%`，因此预注册的共同 LR Gate 有效失败。
+- 资源：单卡总耗时 114.65 分钟，model-load/train peak
+  `23,679.513/13,277.440 MiB`；每个 8-objective update 平均 4.961 秒。
+- 决策：不把强 A1 配对差包装成 future 效果，也不事后选择 3e-4；下一步先在
+  未使用 train cohort 上做披露 post-selection 的 A0/A1 序贯复验。
 
 ## 4. 简历表达素材
 
@@ -429,6 +437,10 @@
   zero-weight 审计、Adapter-only checkpoint 和 108 项 execution gate 隔离单一
   优化变量；发现跨 flow 退化虽被缓解但绝对降幅仅 0.997%–1.948%，据此拒绝将
   小幅工程改善包装成 future/OOD 收益。
+- 将每次 Adapter 更新扩展为完整 8-sample/8-objective 算术均值，并建立
+  micro-contribution、梯度抵消率和双 JSONL 原子恢复审计；在单卡完成 9,600
+  个真实 train objective，识别出 A1@3e-4 的 19.668%/8-of-8 held-out 候选
+  信号，同时因 A0 未过预注册共同门而保持 fail-closed、未启动 OOD。
 
 ### 可直接使用的量化表述
 

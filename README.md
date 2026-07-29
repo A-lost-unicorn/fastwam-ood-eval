@@ -46,7 +46,8 @@ Clean `97.25%`、OOD `47.70%`，绝对下降 `49.55` 个百分点，0 exception�
 真机结论。阶段三已在独立 namespace 完成 Phase A–D 与 E.1–E.6 的真实工程
 诊断；Gate E.5 六条轨迹完整，但没有 A0/A1 共同 eligible LR。E.6 已在
 未使用 train cohort 完成 A0/A1@3e-4 序贯复验：A1 信号复现，但 A0 仅 4/8
-样本不变差，故总 Gate 有效失败。因此
+样本不变差，故总 Gate 有效失败。E.7 的只读 step-50/100/150/200 trajectory
+诊断已经预注册、尚未运行。因此
 完整 Gate E、A2/A4 和在线成功率评测仍未启动。未运行的实验不会填入虚构结果。
 
 当前 pinned Fast-WAM 代码与 release 权重带来四个结论边界：
@@ -77,6 +78,7 @@ Clean `97.25%`、OOD `47.70%`，绝对下降 `49.55` 个百分点，0 exception�
 - [思考点三 Gate E.5 结果](docs/thought3_phase_e5_report.md)：full-cohort 六轨迹结果、有效失败原因、工件哈希和下一复验边界。
 - [思考点三 Gate E.6 预注册](docs/thought3_phase_e6_protocol.md)：未使用 cohort、全新 flow slots、post-selection 披露和冻结门槛。
 - [思考点三 Gate E.6 结果](docs/thought3_phase_e6_report.md)：两轨迹完整结果、唯一失败门槛、逐样本对照和工件哈希。
+- [思考点三 Gate E.7 预注册](docs/thought3_phase_e7_protocol.md)：只读 checkpoint trajectory、新 primary flow、冻结分类与无训练边界。
 - [思考点三设计与数据协议](docs/thought3_design.md)、[训练手册](docs/thought3_training.md)、[在线评测手册](docs/thought3_evaluation.md)。
 - [思考点三最终目标完成度](docs/thought3_completion_audit.md)：已证明、未证明与通往正式 OOD 对照的依赖链。
 - [工程亮点、难点与阻碍台账](docs/engineering_highlights.md)：工程复盘、未解决风险和简历素材。
@@ -432,7 +434,9 @@ fastwam-ood thought3-counterfactual --config configs/thought3/train_a1_smoke.yam
 以上命令是 Phase B 的 `TEST` 工程链路，不能解释为 OOD 提升。真实 Phase C/D
 现已通过；E.6 也已在未使用 cohort 完成 400 updates、3,200 train objectives
 和 160 held-out objectives。A1 下降 14.842%/7-of-8，但 A0 仅 4/8 不变差，
-所以总 Gate 有效失败。见 [Gate E.6 报告](docs/thought3_phase_e6_report.md)。
+所以总 Gate 有效失败。E.7 已冻结为只读诊断，尚无 trajectory 结果。见
+[Gate E.6 报告](docs/thought3_phase_e6_report.md)与
+[Gate E.7 协议](docs/thought3_phase_e7_protocol.md)。
 
 ## 14. 查看失败视频
 
@@ -460,17 +464,18 @@ fastwam-ood review-failures --experiment-dir outputs/ood_full
 ## 17. 下一阶段路线
 
 阶段一与阶段二正式计算已完成；阶段三 Phase A–D 与 E.1–E.6 已完成，E.6
-为有效负 Gate。当前
+为有效负 Gate，E.7 已预注册但未运行。当前
 路线是：
 
 1. 保留 E.5 为有效负总 Gate，不覆盖 Run ID、不放宽共同门槛；
 2. 保留 E.6 failed Run ID，不 resume、不把 A0 的 6/8 门槛降为 4/8；
-3. 先预注册只读 step-50/100/150/200 checkpoint trajectory，诊断 A0 是否晚期过拟合；
+3. 按已冻结 E.7 协议只读评估 step-50/100/150/200，诊断 A0 是否晚期退化；
 4. 只有形成并独立验证稳定配方后才冻结新的完整 28-train/4-development Gate E；
 5. 完整 Gate E 通过后才训练 A2/A4，并实现真实 online no-cache evaluator；
 6. Phase F 技术 pilot 后冻结分析协议，再解锁正式 ID/OOD 六组对照。
 
 最近结果、停止条件和完整依赖链见
+[Gate E.7 预注册](docs/thought3_phase_e7_protocol.md)、
 [Gate E.6 结果](docs/thought3_phase_e6_report.md)、
 [Gate E.6 预注册](docs/thought3_phase_e6_protocol.md)、
 [Gate E.5 报告](docs/thought3_phase_e5_report.md) 与

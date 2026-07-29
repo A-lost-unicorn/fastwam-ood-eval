@@ -41,6 +41,8 @@
 | `P3-PHASE-E3-v2` | 2026-07-28 | 3 / FAILED ENGINEERING DIAGNOSTIC | prereg commit `139742f`；8 samples、6 E.2 checkpoints、held-out flow `1..5`；320 forward、0 optimizer/backward | 全部 execution/provenance/zero-weight checks 通过；A0 最好下降 1.35%/2-of-8，A1 最好下降 0.025%/2-of-8；三个 LR 均不 eligible | 有效负 Gate；E.2 的 fixed-flow 降幅未迁移到 held-out flow；不能解释为 future 无效，不扩 A2/A4/Phase F |
 | `P3-PHASE-E4-v1` | 2026-07-28 | 3 / FAILED ENGINEERING DIAGNOSTIC | prereg commit `07d949d`；8 samples；A0/A1 × 原 LR grid；唯一 paired slot `10001..10200`；held-out flow `1..5` | 六轨迹 1,200 step、480 held-out objectives 和 108 execution checks 完整；六条 reduction 均为正但仅 0.997%–1.948%；只有 A1@3e-4 达 7/8，三个 LR 均不 eligible | 有效负 Gate；diversified flow 缓解 fixed-flow 退化但不足 10%；不进入 full E、A2/A4 或 Phase F |
 | `P3-PHASE-E5-v1` | 2026-07-28 | 3 / FAILED ENGINEERING DIAGNOSTIC | prereg commit `a8245d1`；config fingerprint `c4c6815...122fc`；matched-update；A0/A1 × 原 LR grid；每 update 8-sample mean；slots `20001..21600` | 六轨迹完成 1,200 updates、9,600 train objectives、480 held-out objectives；120/120 execution checks 通过；A1@3e-4 下降 19.668%/8-of-8，A0@3e-4 仅 2.638%；三个 LR 均不 eligible | 有效负总 Gate；full-cohort aggregation 产生待新 cohort 复验的探索性 A1 信号，但不得事后选择 3e-4、扩 A2/A4 或作 future/OOD 结论 |
+| `P3-PHASE-E6-v1` | 2026-07-29 | 3 / FAILED ENGINEERING DIAGNOSTIC | prereg commit `cb6f311`；新 train cohort 9–16；A0/A1@3e-4；slots `31001..32600` | 两轨迹完成 400 updates、3,200 train objectives、160 held-out objectives；A1 下降 14.842%/7-of-8；A0 下降 1.191%/4-of-8 | 有效负 Gate；A1 absolute/paired superiority 复现，但 A0 stability 未过门；不解锁 full E/A2/A4/OOD |
+| `P3-PHASE-E7-PREREG-v1` | 2026-07-29 | 3 / PRE-REGISTERED DIAGNOSTIC | `phase_e7_checkpoint_trajectory.yaml`；E.6 step 50/100/150/200；primary flow `6..10` | 冻结预算为 8 checkpoints、800 forward objectives、0 backward/optimizer/新训练；**尚未运行** | 只诊断 A0 instability 是否符合晚期退化；无 trajectory outcome，不产生正式 checkpoint selection |
 
 ### `P1-FORMAL-v1` 机器证据
 
@@ -384,6 +386,7 @@
 | 2026-07-28 / Gate E.5 | 六条 full-cohort 轨迹完整后命令返回非零 | 不是执行异常；120/120 execution、全部 paired/cross/frozen checks 通过，但 A0 在三档 LR 都未达 10%，所以无 A0/A1 共同 eligible LR | 冻结 valid failed root result；保留 A1@3e-4 的 19.668%/8-of-8 为探索性复验信号，不回改门槛或 selected LR | 否；0 dev/OOD/success/rollout/future RGB，Fast-WAM SHA 前后相同 |
 | 2026-07-29 / Gate E.6 预注册 | E.5 后只复验 A0/A1@3e-4，存在结果后选择污染风险 | 明确登记为 post-selection sequential replication；冻结未使用 train 排序 9–16、slots 31001–32600、A1 绝对/A0 稳定/A1-vs-A0 三组门槛 | 配置、编排器、resume provenance、CLI、单卡 runner 和测试已实现；尚未运行、无 E.6 outcome | 否；预注册阶段只读 Phase D/E.5，运行仍锁定 dev/OOD/success/rollout/future RGB |
 | 2026-07-29 / Gate E.6 结果 | 命令在两条轨迹完整后以 hard checks failed 返回 | 有效负门禁而非工程崩溃；唯一 false check 是 A0 non-worsened 4/8 < 6/8。A1 降 14.842%/7-of-8，A1 final mean 比 A0 低 13.815%/6-of-8 | 冻结 failed Run ID，不 resume、不放宽门槛；下一步先做只读 intermediate-checkpoint trajectory 诊断 | 否；400 updates/3,200 objectives 完整，全部 execution/paired/frozen/leakage checks 通过 |
+| 2026-07-29 / Gate E.7 预注册 | 已知 E.6 step-200 A0 不稳定，若复用同一 flow 后挑中间 checkpoint 会产生结果后选择 | 将旧 flow `1..5` 降为 continuity-only；新 primary flow 固定为 `6..10`，冻结四种 A0 分类、最早稳定点比较和 post-run-only joint candidate | 8 个 checkpoint 的三文件 SHA、两套 probe identity SHA、只读/clean-repo gate、CLI、单卡 runner 和测试已实现；尚未加载模型或查看中间 outcome | 否；复用 E.6 cohort 但不训练、不消耗剩余 cohort，0 dev/OOD/success/rollout/future RGB |
 
 冷启动观测：2-step smoke 中 Wan 组件装载约 `336–433 s`；20-step OOD
 三进程观测到约 `604.37 s`，Clean 单进程为 `521.74 s`。这不是单次 future
@@ -463,9 +466,9 @@ Provenance 补充核对：Fast-WAM 和 LIBERO checkout clean；LIBERO-Plus
    formal future 指标生成前没有冻结。
 6. 20-step shadow RGB 生成成本是否等于阶段三 cached latent 或在线 Adapter
    成本；阶段三必须单独计时。
-7. `A1@3e-4` 的 full-cohort held-out 改善能否在未使用 train cohort 上复现。
-   E.5 总 Gate 已有效失败，且 3e-4 是结果后识别的探索性候选；复验与完整
-   28/4 Gate E 前，A2/A4 和任何阶段三成功率仍被锁定。
+7. A0 的 `4/8` 样本稳定性失败是否主要来自训练后期。E.7 已预注册但尚未
+   运行；在只读 trajectory 结果和后续独立复验前，任何中间 checkpoint 都不
+   是正式选择，A2/A4 和阶段三成功率仍被锁定。
 
 ## 4. 待填论文主表
 

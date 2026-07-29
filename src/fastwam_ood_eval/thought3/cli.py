@@ -450,6 +450,15 @@ def dispatch(args: Any) -> int:
             cfg,
             resume=args.resume,
         )
+    elif args.command == "thought3-diagnose-checkpoint-trajectory":
+        from fastwam_ood_eval.thought3.phase_e7_checkpoint_trajectory import (
+            run_phase_e7_checkpoint_trajectory,
+        )
+
+        result = run_phase_e7_checkpoint_trajectory(
+            cfg,
+            resume=args.resume,
+        )
     elif args.command == "thought3-plan-cache":
         from fastwam_ood_eval.thought3.cache_planner import write_cache_plan
 

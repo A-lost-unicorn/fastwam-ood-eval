@@ -2391,26 +2391,28 @@ def evaluate_fixed_subset_probe(
     }
 
 
-def aggregate_multiflow_probe_rows(
+def aggregate_multiflow_probe_grid_rows(
     rows: Sequence[Mapping[str, Any]],
     *,
     sample_ids: Sequence[str],
     flow_steps: Sequence[int],
     variant: str,
 ) -> dict[str, Any]:
-    """Aggregate a complete sample × held-out-flow objective grid."""
+    """Aggregate a complete eight-sample × five-flow objective grid."""
 
     normalized_ids = tuple(str(value) for value in sample_ids)
     normalized_steps = tuple(int(value) for value in flow_steps)
     if (
         len(normalized_ids) != 8
         or len(set(normalized_ids)) != 8
-        or normalized_steps != (1, 2, 3, 4, 5)
+        or len(normalized_steps) != 5
+        or len(set(normalized_steps)) != 5
+        or any(value < 1 for value in normalized_steps)
         or variant not in {"A0", "A1"}
     ):
         raise RealTrainingError(
-            "Gate E.3 requires 8 unique samples and held-out "
-            "flow steps 1..5"
+            "multiflow grid requires 8 unique samples and 5 unique "
+            "positive flow steps"
         )
     expected_pairs = {
         (base_sample_id, flow_step)
@@ -2558,8 +2560,29 @@ def aggregate_multiflow_probe_rows(
     }
 
 
+def aggregate_multiflow_probe_rows(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    sample_ids: Sequence[str],
+    flow_steps: Sequence[int],
+    variant: str,
+) -> dict[str, Any]:
+    """Aggregate the frozen Gate E.3 flow-1..5 objective grid."""
+
+    if tuple(int(value) for value in flow_steps) != (1, 2, 3, 4, 5):
+        raise RealTrainingError(
+            "Gate E.3 requires held-out flow steps 1..5"
+        )
+    return aggregate_multiflow_probe_grid_rows(
+        rows,
+        sample_ids=sample_ids,
+        flow_steps=flow_steps,
+        variant=variant,
+    )
+
+
 @torch.no_grad()
-def evaluate_multiflow_subset_probe(
+def evaluate_multiflow_probe_grid(
     cfg: Thought3Config,
     model: Any,
     adapter: FutureToActionAdapter,
@@ -2569,17 +2592,20 @@ def evaluate_multiflow_subset_probe(
     flow_steps: Sequence[int],
     device: str,
 ) -> dict[str, Any]:
-    """Evaluate held-out deterministic action-flow draws without training."""
+    """Evaluate an explicit five-flow grid without training."""
 
     sample_ids = [sample.base_sample_id for sample in samples]
     normalized_steps = tuple(int(value) for value in flow_steps)
     if (
         len(samples) != 8
         or len(set(sample_ids)) != 8
-        or normalized_steps != (1, 2, 3, 4, 5)
+        or len(normalized_steps) != 5
+        or len(set(normalized_steps)) != 5
+        or any(value < 1 for value in normalized_steps)
     ):
         raise RealTrainingError(
-            "Gate E.3 multiflow probe requires 8 samples and steps 1..5"
+            "multiflow probe requires 8 unique samples and 5 unique "
+            "positive flow steps"
         )
     was_training = adapter.training
     adapter.eval()
@@ -2660,7 +2686,7 @@ def evaluate_multiflow_subset_probe(
                 del loss
     finally:
         adapter.train(was_training)
-    result = aggregate_multiflow_probe_rows(
+    result = aggregate_multiflow_probe_grid_rows(
         objective_rows,
         sample_ids=sample_ids,
         flow_steps=normalized_steps,
@@ -2684,22 +2710,61 @@ def evaluate_multiflow_subset_probe(
     return result
 
 
-def multiflow_subset_outcome(
+@torch.no_grad()
+def evaluate_multiflow_subset_probe(
+    cfg: Thought3Config,
+    model: Any,
+    adapter: FutureToActionAdapter,
+    injector: ActionEncoderFutureInjector,
+    samples: Sequence[RealTrainingSample],
+    *,
+    flow_steps: Sequence[int],
+    device: str,
+) -> dict[str, Any]:
+    """Evaluate the frozen Gate E.3 flow-1..5 grid."""
+
+    if tuple(int(value) for value in flow_steps) != (1, 2, 3, 4, 5):
+        raise RealTrainingError(
+            "Gate E.3 multiflow probe requires flow steps 1..5"
+        )
+    return evaluate_multiflow_probe_grid(
+        cfg,
+        model,
+        adapter,
+        injector,
+        samples,
+        flow_steps=flow_steps,
+        device=device,
+    )
+
+
+def multiflow_probe_grid_outcome(
     initial_probe: Mapping[str, Any],
     final_probe: Mapping[str, Any],
+    *,
+    expected_flow_steps: Sequence[int],
 ) -> dict[str, Any]:
-    """Compare two complete Gate E.3 held-out objective grids."""
+    """Compare two complete explicit five-flow objective grids."""
 
+    normalized_expected = [
+        int(value) for value in expected_flow_steps
+    ]
+    expected_objective_count = 8 * len(normalized_expected)
     if (
         list(initial_probe.get("flow_steps", []))
-        != [1, 2, 3, 4, 5]
+        != normalized_expected
         or list(final_probe.get("flow_steps", []))
-        != [1, 2, 3, 4, 5]
-        or int(initial_probe.get("flow_objective_count", -1)) != 40
-        or int(final_probe.get("flow_objective_count", -1)) != 40
+        != normalized_expected
+        or len(normalized_expected) != 5
+        or len(set(normalized_expected)) != 5
+        or any(value < 1 for value in normalized_expected)
+        or int(initial_probe.get("flow_objective_count", -1))
+        != expected_objective_count
+        or int(final_probe.get("flow_objective_count", -1))
+        != expected_objective_count
     ):
         raise RealTrainingError(
-            "Gate E.3 probe does not cover the frozen held-out grid"
+            "multiflow probe does not cover the exact expected flow grid"
         )
     initial_objectives = {
         (
@@ -2716,7 +2781,7 @@ def multiflow_subset_outcome(
         for row in final_probe["per_objective"]
     }
     if (
-        len(initial_objectives) != 40
+        len(initial_objectives) != expected_objective_count
         or set(initial_objectives) != set(final_objectives)
     ):
         raise RealTrainingError(
@@ -2726,7 +2791,7 @@ def multiflow_subset_outcome(
         (initial_probe, "initial"),
         (final_probe, "final"),
     ):
-        recomputed = aggregate_multiflow_probe_rows(
+        recomputed = aggregate_multiflow_probe_grid_rows(
             probe["per_objective"],
             sample_ids=probe["sample_ids"],
             flow_steps=probe["flow_steps"],
@@ -2791,8 +2856,8 @@ def multiflow_subset_outcome(
         )
     return {
         **outcome,
-        "flow_objective_count": 40,
-        "flow_steps": [1, 2, 3, 4, 5],
+        "flow_objective_count": expected_objective_count,
+        "flow_steps": normalized_expected,
         "max_objective_gated_delta_to_action_hidden_ratio": float(
             final_probe[
                 "max_objective_gated_delta_to_action_hidden_ratio"
@@ -2816,6 +2881,19 @@ def multiflow_subset_outcome(
             initial_probe["zero_weight_objective_count"]
         ),
     }
+
+
+def multiflow_subset_outcome(
+    initial_probe: Mapping[str, Any],
+    final_probe: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Compare the frozen Gate E.3 held-out objective grids."""
+
+    return multiflow_probe_grid_outcome(
+        initial_probe,
+        final_probe,
+        expected_flow_steps=(1, 2, 3, 4, 5),
+    )
 
 
 def fixed_subset_outcome(

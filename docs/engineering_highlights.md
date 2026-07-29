@@ -9,7 +9,7 @@
 | 项目 | 状态 | 可用证据 |
 | --- | --- | --- |
 | 配置、planner、adapter、分片、resume、聚合 | 已实现 | `src/`、`configs/`、`tests/` |
-| 自动化测试 | 已通过 | `pytest -q`：314 passed、5 warnings；覆盖阶段一/二回归与 Thought3 配置、cache、Adapter、resume、泄漏和真实 Gate 编排 |
+| 自动化测试 | 已通过 | `pytest -q`：328 passed、5 warnings；覆盖阶段一/二回归与 Thought3 配置、cache、Adapter、resume、泄漏和真实 Gate 编排 |
 | Conda 环境与激活入口 | 已配置 | `scripts/create_env.sh`、`scripts/activate_env.sh` |
 | checkpoint/stats | 已下载并人工校验 | checkpoint SHA-256 `1000437c...a49579`；stats SHA-256 `30f81ad7...68638` |
 | FastWAM 公共运行时模型 | 已下载并逐文件校验 | `scripts/download_fastwam_runtime_models.sh`；T5、VAE、tokenizer 共约 11.9 GiB |
@@ -32,6 +32,7 @@
 | 阶段三 Gate E.4 diversified flow | FAILED-GATE，1,200 step 完整 | 200 unique paired slots、480 held-out objectives、108 execution checks 全通过；六条 reduction 转正但仅 0.997%–1.948%，继续阻止 full E/A2/A4 |
 | 阶段三 Gate E.5 objective aggregation | FAILED-GATE，1,200 updates 完整 | 9,600 train objectives、480 held-out objectives、120 execution checks 全通过；A1@3e-4 为 19.668%/8-of-8，但同 LR A0 仅 2.638%，无共同 eligible LR |
 | 阶段三 Gate E.6 fresh-cohort replication | FAILED-GATE，400 updates 完整 | 新 8-sample cohort、3,200 train objectives、160 held-out objectives；A1 降 14.842%/7-of-8 且相对 A0 final mean 低 13.815%，但 A0 仅 4/8 stable |
+| 阶段三 Gate E.7 checkpoint trajectory | PRE-REGISTERED，尚未运行 | 8 个既有 checkpoint、primary/continuity 双 panel、800 只读 objectives、0 backward/optimizer/新训练；中间 checkpoint outcome 尚未查看 |
 
 ## 2. 可以对外说明的工程亮点
 
@@ -403,6 +404,23 @@
 - 执行结果：单卡 43.89 分钟完成 400 updates/3,200 objectives；所有工程检查
   通过。A1 absolute 与 paired superiority 复现，但 A0 只有 4/8 不变差，冻结
   Gate 有效失败；结果只支持工程可重复性，不支持 future/OOD 效果。
+
+### 3.29 把中间 checkpoint 诊断与结果后选择隔离
+
+- 污染边界：E.6 step-200 和旧 held-out flow `1..5` 已知，step
+  `50/100/150` outcome 未查看；因此旧 flow 只允许做 continuity reproduction。
+- 新主 panel：冻结 flow `6..10` 的 40-objective 网格，完整 RNG identity SHA
+  为 `3361f170...2f68`，与训练 namespace 和旧 probe 都不重叠。
+- 只读证明：启动前后重算 E.6 root 与八个 checkpoint 的三文件 SHA；运行代码
+  位于 `torch.inference_mode()`，不创建 optimizer、不调用 backward、不写
+  checkpoint，并检查 Adapter/Fast-WAM grad 为空。
+- 判定防漂移：预先冻结“最早稳定 checkpoint”比较、至少下降 2 条 sample 与
+  mean loss 增加的 late-degradation 条件，以及三个明确的 not-supported
+  分支；不允许结果后挑“最好”的早期 step。
+- 候选边界：A0/A1/paired 三门同时满足时只登记
+  `post_run_diagnostic_candidate_only`，仍需未使用 cohort 复验。
+- 状态：配置、编排器、CLI、runner、父工件/checkpoint hash 校验和单元测试已
+  完成；真实 800-objective probe 尚未运行，无 trajectory 结论。
 
 ## 4. 简历表达素材
 

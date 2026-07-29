@@ -442,3 +442,21 @@ E.6 已于 2026-07-29 按预注册协议完成真实单卡运行：
 冻结的 6/8。因此 E.6 是执行完整的有效负 Gate，仍不解锁完整 E、A2/A4 或
 OOD。详见 [协议](thought3_phase_e6_protocol.md) 与
 [结果报告](thought3_phase_e6_report.md)。
+
+### 11.8 Gate E.7 只读 checkpoint trajectory
+
+E.7 已于 2026-07-29 完成预注册，尚未运行。它不训练模型，而是只读 E.6
+的 A0/A1 step `50/100/150/200` Adapter-only checkpoint：
+
+- 复用 E.6 train 排序 9–16，不消耗剩余 train cohort；
+- primary panel 使用未评估的 action-flow `6..10`，identity SHA 为
+  `3361f170...2f68`；
+- continuity panel 使用已知的 `1..5`，只做 E.6 step-200 exact reproduction
+  和描述性轨迹，不参与主要分类；
+- 总计 800 forward objectives、0 backward、0 optimizer、0 新 checkpoint；
+- A0 late-overtraining 分类、A1 absolute 和 joint diagnostic candidate
+  规则均在结果前冻结；
+- 任一候选仍是 post-run diagnostic only，不能直接解锁 full E、A2/A4 或 OOD。
+
+完整已知/未知披露、父 checkpoint SHA、四种互斥分类与命令见
+[thought3_phase_e7_protocol.md](thought3_phase_e7_protocol.md)。

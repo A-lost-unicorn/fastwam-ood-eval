@@ -20,6 +20,7 @@ Gate E.3 v2          valid failed gate; 320/320 probes complete
 Gate E.4             valid failed gate; 1,200 steps complete
 Gate E.5             valid failed gate; 1,200 updates/9,600 objectives complete
 Gate E.6             valid failed gate; 400 updates/3,200 objectives complete
+Gate E.7             preregistered read-only diagnosis; not run
 full 28/4 Gate E     not passed
 A2/A4 real training  not started
 Phase F real pilot   not started
@@ -39,6 +40,8 @@ paper claim          unavailable
   六轨迹验证；A1@3e-4 出现 19.668%/8-of-8 候选信号，但没有共同 eligible LR。
 - E.6 在未使用 cohort 和全新 flow slots 上复现 A1 信号：14.842%/7-of-8，
   相对 A0 final mean 低 13.815%；但 A0 仅 4/8 不变差，故总 Gate 有效失败。
+- E.7 已冻结八个既有 checkpoint、未使用 primary flow `6..10` 和四种 A0
+  trajectory 分类；这只证明诊断设计可执行，尚无真实 trajectory outcome。
 
 尚无证据证明：
 
@@ -107,6 +110,7 @@ Phase D cache 只能用于训练；不得把它接入 Phase F/G 在线 policy。
 | E.4 | valid failed gate | 1,200 optimizer steps、480 held-out objectives、108 execution checks 完整；六条 reduction 仅 0.997%–1.948%，无共同 LR |
 | E.5 | valid failed gate | 1,200 updates、9,600 train objectives、480 held-out objectives、120 execution checks 完整；A1@3e-4 单条过门，A0@3e-4 仅 2.638%，无共同 LR |
 | E.6 | valid failed gate | 新 cohort 上 400 updates、3,200 train objectives、160 held-out objectives 完整；A1 absolute/paired superiority 通过，A0 4/8 stability 未过门 |
+| E.7 | preregistered / not run | 将只读评估 E.6 step 50/100/150/200；800 forward、0 backward/optimizer/新训练；不得填入虚构 trajectory 结果 |
 | full E | not passed | 仍缺新的 28 train / 4 development 完整闭环 |
 
 在 full E 通过前：
@@ -161,16 +165,16 @@ CPU/mock；`thought3-counterfactual` 在 Fast-WAM backend 上仍返回
 | 独立分支/目录/CLI/schema | `feature/thought3-partial-future-adapter` 与 Thought3 namespace | **Satisfied** |
 | 不修改 `third_party/FastWAM` | worktree/status checks | **Satisfied to current commit** |
 | 不修改 Thought1/2 outputs | path guards + status/hash checks | **Satisfied to current commit** |
-| 旧 CLI 行为不变 | old CLI regression；完整测试 314 passed | **Satisfied to current commit** |
+| 旧 CLI 行为不变 | old CLI regression；完整测试 328 passed | **Satisfied to current commit** |
 | 正式运行前 dirty=false | Phase F/G 未到运行点 | **Pending** |
 | 三 GPU shard union/intersection | 纯函数测试存在，真实 run 缺失 | **Partial** |
 
 ## 9. 完成最终 Goal 的依赖链
 
 ```text
-preregister read-only E.6 checkpoint-trajectory diagnosis
+Gate E.7 read-only checkpoint-trajectory protocol frozen
   ↓
-evaluate frozen step 50/100/150/200 A0/A1 checkpoints without new training data
+run frozen step 50/100/150/200 A0/A1 diagnosis without new training
   ↓
 if a stable recipe is independently replicated: freeze full 28/4 Gate E
   ↓
@@ -205,9 +209,11 @@ paired、frozen、schedule、memory、checkpoint 和 leakage checks 通过。
 1.191%，但只有 4/8 sample 不变差，未达到冻结的 6/8，故总 Gate 必须保持
 failed。这不能写成 future/OOD 效果，也不能解锁完整 Gate E。
 
-下一步应先冻结只读 step-50/100/150/200 checkpoint trajectory 诊断，判断 A0
-不稳定是否来自晚期训练；在该诊断前不消耗剩余未使用 train cohort。
+E.7 只读 step-50/100/150/200 checkpoint trajectory 已完成预注册但尚未运行。
+下一步只能按冻结的 primary flow `6..10` 和四种分类执行，判断 A0 不稳定是否
+符合晚期退化；不消耗剩余未使用 train cohort，也不提前查看中间 outcome。
 相关协议、结果与父结果见
+[thought3_phase_e7_protocol.md](thought3_phase_e7_protocol.md)、
 [thought3_phase_e6_report.md](thought3_phase_e6_report.md)、
 [thought3_phase_e6_protocol.md](thought3_phase_e6_protocol.md)、
 [thought3_phase_e5_protocol.md](thought3_phase_e5_protocol.md)、

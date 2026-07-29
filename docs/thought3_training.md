@@ -445,8 +445,8 @@ OOD。详见 [协议](thought3_phase_e6_protocol.md) 与
 
 ### 11.8 Gate E.7 只读 checkpoint trajectory
 
-E.7 已于 2026-07-29 完成预注册，尚未运行。它不训练模型，而是只读 E.6
-的 A0/A1 step `50/100/150/200` Adapter-only checkpoint：
+E.7 已于 2026-07-29 按预注册协议完成。它不训练模型，而是只读 E.6 的
+A0/A1 step `50/100/150/200` Adapter-only checkpoint：
 
 - 复用 E.6 train 排序 9–16，不消耗剩余 train cohort；
 - primary panel 使用未评估的 action-flow `6..10`，identity SHA 为
@@ -458,5 +458,19 @@ E.7 已于 2026-07-29 完成预注册，尚未运行。它不训练模型，而�
   规则均在结果前冻结；
 - 任一候选仍是 post-run diagnostic only，不能直接解锁 full E、A2/A4 或 OOD。
 
-完整已知/未知披露、父 checkpoint SHA、四种互斥分类与命令见
-[thought3_phase_e7_protocol.md](thought3_phase_e7_protocol.md)。
+实际 800/800 objectives 完成，全部 frozen/RNG/provenance/leakage checks
+通过，0 backward/optimizer/checkpoint write。Primary 上 A0 step 50/100
+通过稳定性门槛，150/200 只有 5/8 不变差；但 step-200 mean 比 step 50
+低 5.651%，non-worsened 只下降 1，因此冻结分类为
+`not_supported_no_material_late_degradation`。A1 step 150/200 通过 absolute
+gate，step 200 也通过相对 A0 的 paired gate，但同 step A0 不稳定，最终
+`diagnostic_candidate_steps=[]`。
+
+Continuity panel 同样显示 A0 50/100 pass、150/200 fail，但因 endpoint mean
+微增 0.154% 且 non-worsened `7→4`，描述性分类支持 late overtraining。该
+panel 的 endpoint 在预注册前已知，不能覆盖 primary；两者分歧应解释为
+flow-panel sensitivity，而不是事后选择 checkpoint。
+
+完整已知/未知披露、父 checkpoint SHA、四种互斥分类、命令与结果见
+[协议](thought3_phase_e7_protocol.md)和
+[结果报告](thought3_phase_e7_report.md)。

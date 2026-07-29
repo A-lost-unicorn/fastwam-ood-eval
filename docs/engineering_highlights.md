@@ -32,7 +32,7 @@
 | 阶段三 Gate E.4 diversified flow | FAILED-GATE，1,200 step 完整 | 200 unique paired slots、480 held-out objectives、108 execution checks 全通过；六条 reduction 转正但仅 0.997%–1.948%，继续阻止 full E/A2/A4 |
 | 阶段三 Gate E.5 objective aggregation | FAILED-GATE，1,200 updates 完整 | 9,600 train objectives、480 held-out objectives、120 execution checks 全通过；A1@3e-4 为 19.668%/8-of-8，但同 LR A0 仅 2.638%，无共同 eligible LR |
 | 阶段三 Gate E.6 fresh-cohort replication | FAILED-GATE，400 updates 完整 | 新 8-sample cohort、3,200 train objectives、160 held-out objectives；A1 降 14.842%/7-of-8 且相对 A0 final mean 低 13.815%，但 A0 仅 4/8 stable |
-| 阶段三 Gate E.7 checkpoint trajectory | PRE-REGISTERED，尚未运行 | 8 个既有 checkpoint、primary/continuity 双 panel、800 只读 objectives、0 backward/optimizer/新训练；中间 checkpoint outcome 尚未查看 |
+| 阶段三 Gate E.7 checkpoint trajectory | COMPLETED READ-ONLY DIAGNOSTIC | 8 个既有 checkpoint、800/800 objectives、0 backward/optimizer/write；工程 Gate 通过，primary 不支持实质晚期退化且无 joint candidate |
 
 ## 2. 可以对外说明的工程亮点
 
@@ -419,8 +419,12 @@
   分支；不允许结果后挑“最好”的早期 step。
 - 候选边界：A0/A1/paired 三门同时满足时只登记
   `post_run_diagnostic_candidate_only`，仍需未使用 cohort 复验。
-- 状态：配置、编排器、CLI、runner、父工件/checkpoint hash 校验和单元测试已
-  完成；真实 800-objective probe 尚未运行，无 trajectory 结论。
+- 执行结果：单卡 13.98 分钟完成 800/800 objectives；所有
+  frozen/RNG/provenance/leakage 检查通过，0 backward/optimizer/write。
+  Primary 上 A0 50/100 pass、150/200 fail，但 endpoint mean 比 step 50
+  低 5.651%，故不支持实质晚期退化；A1 信号随 step 增强，但无 joint
+  candidate。Continuity 的不同 materiality 分类被保留为描述性证据，未覆盖
+  primary。
 
 ## 4. 简历表达素材
 
@@ -476,6 +480,10 @@
   micro-contribution、梯度抵消率和双 JSONL 原子恢复审计；在单卡完成 9,600
   个真实 train objective，识别出 A1@3e-4 的 19.668%/8-of-8 held-out 候选
   信号，同时因 A0 未过预注册共同门而保持 fail-closed、未启动 OOD。
+- 建立只读 checkpoint-trajectory 诊断，将已知 endpoint 的 continuity panel
+  与新 primary flow 隔离；单卡完成 8 个 checkpoint、800 个 forward objective，
+  以 0 backward/optimizer/write 和全量 SHA 证明未改模型，并识别出 pooled
+  mean 改善与逐样本稳定性下降之间的 flow-sensitive trade-off。
 
 ### 可直接使用的量化表述
 

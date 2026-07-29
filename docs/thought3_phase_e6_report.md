@@ -143,8 +143,10 @@ A0 的四个变差幅度分别约为 `0.23%`、`13.15%`、`1.41%`、`10.32%`；�
 最省算力且不消耗剩余 train cohort 的下一步，是只读 checkpoint trajectory
 诊断：在同一 E.6 cohort 上离线评估已保存的 step 50/100/150/200 A0/A1
 checkpoint。为避免复用已知 step-200 outcome，主要判断使用新 flow `6..10`；
-旧 flow `1..5` 只做 continuity reproduction。该 E.7 协议已预注册、尚未运行，
-详见 [thought3_phase_e7_protocol.md](thought3_phase_e7_protocol.md)。
+旧 flow `1..5` 只做 continuity reproduction。该 E.7 已按预注册协议完成：
+primary 不支持实质晚期退化，且没有 joint candidate；详见
+[协议](thought3_phase_e7_protocol.md)与
+[结果报告](thought3_phase_e7_report.md)。
 
 该分析只能是 post-run engineering diagnosis；若据此选择 checkpoint，仍须在
 尚未使用的样本上重新预注册验证，不能在 E.6 上自证。

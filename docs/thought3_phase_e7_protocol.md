@@ -1,6 +1,6 @@
 # Thought3 Gate E.7：只读 Checkpoint-Trajectory 诊断预注册
 
-状态：**PRE-REGISTERED / NOT RUN**
+状态：**已按协议运行；工程 Gate 通过；主要分类不支持实质晚期退化**
 
 冻结日期：2026-07-29
 
@@ -12,6 +12,12 @@
 > 预注册权威版本是首次包含本文、冻结配置、编排器、runner 和测试的 clean git
 > commit。正式运行会记录精确 project HEAD，并在 project 或 FastWAM worktree
 > dirty 时拒绝启动。预注册本身不加载模型、不运行 GPU probe。
+
+> 2026-07-29 结果更新：primary flow 上 A0 step 50/100 stable、150/200
+> unstable，但 step-200 mean 比 step 50 更低且 non-worsened 只下降 1，故冻结
+> 分类为 `not_supported_no_material_late_degradation`。没有 joint diagnostic
+> candidate；全部工程检查通过。原协议和门槛不追溯修改。详见
+> [thought3_phase_e7_report.md](thought3_phase_e7_report.md)。
 
 ## 1. 研究问题与结论边界
 

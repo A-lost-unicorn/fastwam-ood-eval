@@ -20,7 +20,7 @@ Gate E.3 v2          valid failed gate; 320/320 probes complete
 Gate E.4             valid failed gate; 1,200 steps complete
 Gate E.5             valid failed gate; 1,200 updates/9,600 objectives complete
 Gate E.6             valid failed gate; 400 updates/3,200 objectives complete
-Gate E.7             preregistered read-only diagnosis; not run
+Gate E.7             valid read-only diagnosis; primary hypothesis not supported
 full 28/4 Gate E     not passed
 A2/A4 real training  not started
 Phase F real pilot   not started
@@ -40,8 +40,10 @@ paper claim          unavailable
   六轨迹验证；A1@3e-4 出现 19.668%/8-of-8 候选信号，但没有共同 eligible LR。
 - E.6 在未使用 cohort 和全新 flow slots 上复现 A1 信号：14.842%/7-of-8，
   相对 A0 final mean 低 13.815%；但 A0 仅 4/8 不变差，故总 Gate 有效失败。
-- E.7 已冻结八个既有 checkpoint、未使用 primary flow `6..10` 和四种 A0
-  trajectory 分类；这只证明诊断设计可执行，尚无真实 trajectory outcome。
+- E.7 以 800 个只读 objective 完成八个 checkpoint 的冻结诊断；primary 上
+  A0 step 50/100 稳定、150/200 不稳定，但 endpoint mean 比 step 50 低
+  5.651%，故不支持预注册的实质晚期退化模式；A1 随 step 增强但无 joint
+  checkpoint candidate。
 
 尚无证据证明：
 
@@ -110,7 +112,7 @@ Phase D cache 只能用于训练；不得把它接入 Phase F/G 在线 policy。
 | E.4 | valid failed gate | 1,200 optimizer steps、480 held-out objectives、108 execution checks 完整；六条 reduction 仅 0.997%–1.948%，无共同 LR |
 | E.5 | valid failed gate | 1,200 updates、9,600 train objectives、480 held-out objectives、120 execution checks 完整；A1@3e-4 单条过门，A0@3e-4 仅 2.638%，无共同 LR |
 | E.6 | valid failed gate | 新 cohort 上 400 updates、3,200 train objectives、160 held-out objectives 完整；A1 absolute/paired superiority 通过，A0 4/8 stability 未过门 |
-| E.7 | preregistered / not run | 将只读评估 E.6 step 50/100/150/200；800 forward、0 backward/optimizer/新训练；不得填入虚构 trajectory 结果 |
+| E.7 | valid read-only diagnosis | 800 forward、0 backward/optimizer/write；primary 分类 `not_supported_no_material_late_degradation`，continuity 描述性分类相反；无 joint candidate |
 | full E | not passed | 仍缺新的 28 train / 4 development 完整闭环 |
 
 在 full E 通过前：
@@ -172,9 +174,11 @@ CPU/mock；`thought3-counterfactual` 在 Fast-WAM backend 上仍返回
 ## 9. 完成最终 Goal 的依赖链
 
 ```text
-Gate E.7 read-only checkpoint-trajectory protocol frozen
+Gate E.7 completed: primary no material late degradation; no candidate
   ↓
-run frozen step 50/100/150/200 A0/A1 diagnosis without new training
+preregister a larger entirely new flow replication panel
+  ↓
+if a candidate emerges, replicate it on an unused train cohort
   ↓
 if a stable recipe is independently replicated: freeze full 28/4 Gate E
   ↓
@@ -200,19 +204,22 @@ shuffle、在线 no-cache 或统计冻结要求。
 
 ## 10. 当前最近一步
 
-E.6 已按冻结协议完整运行并有效失败。A0/A1 两条轨迹完成 400 optimizer
-updates、3,200 train objectives 和 160 held-out objectives；所有 execution、
-paired、frozen、schedule、memory、checkpoint 和 leakage checks 通过。
+E.7 已按冻结协议完整运行，工程 Gate 通过。八个既有 A0/A1
+step-50/100/150/200 checkpoint 共完成 800 forward objectives，0
+backward/optimizer/checkpoint write；所有 frozen、RNG、paired、provenance、
+memory 和 leakage checks 通过。
 
-`A1@3e-4` held-out mean loss 下降 14.842%、7/8 sample 不变差，且 final mean
-比 A0 低 13.815%、6/8 sample 占优，两个 A1 门槛均复现。A0 mean 下降
-1.191%，但只有 4/8 sample 不变差，未达到冻结的 6/8，故总 Gate 必须保持
-failed。这不能写成 future/OOD 效果，也不能解锁完整 Gate E。
+Primary flow `6..10` 上，A0 step 50/100 通过，150/200 因 5/8 sample
+不变差而失败；但 step-200 mean 比 step 50 低 5.651%，non-worsened 只下降
+1，因此冻结分类为 `not_supported_no_material_late_degradation`。A1 step
+150/200 通过 absolute gate，step 200 也通过 paired gate，但 matched A0
+未通过，所以没有 joint candidate。Continuity 描述性 panel 满足 late
+overtraining rule，但不得覆盖 primary；分歧提示 flow-panel 方差仍未解决。
 
-E.7 只读 step-50/100/150/200 checkpoint trajectory 已完成预注册但尚未运行。
-下一步只能按冻结的 primary flow `6..10` 和四种分类执行，判断 A0 不稳定是否
-符合晚期退化；不消耗剩余未使用 train cohort，也不提前查看中间 outcome。
-相关协议、结果与父结果见
+下一步应先预注册全新、更大的 flow replication panel，而不是挑 step 100/200、
+改 optimizer 或解锁 OOD。即使新 panel 形成候选，也必须在尚未使用的 train
+cohort 上独立复验。相关协议、结果与父结果见
+[thought3_phase_e7_report.md](thought3_phase_e7_report.md)、
 [thought3_phase_e7_protocol.md](thought3_phase_e7_protocol.md)、
 [thought3_phase_e6_report.md](thought3_phase_e6_report.md)、
 [thought3_phase_e6_protocol.md](thought3_phase_e6_protocol.md)、

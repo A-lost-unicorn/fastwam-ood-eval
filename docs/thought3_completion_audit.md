@@ -22,7 +22,8 @@ Gate E.5             valid failed gate; 1,200 updates/9,600 objectives complete
 Gate E.6             valid failed gate; 400 updates/3,200 objectives complete
 Gate E.7             valid read-only diagnosis; primary hypothesis not supported
 Gate E.8             valid read-only diagnosis; mixed/inconclusive classification
-Gate E.9a            preregistered; real four-track run not started
+Gate E.9a-v1         invalid engineering run; 0 objectives/updates
+Gate E.9a-v2         preregistered; real four-track run not started
 full 28/4 Gate E     not passed
 A2/A4 real training  not started
 Phase F real pilot   not started
@@ -50,8 +51,9 @@ paper claim          unavailable
   bootstrap 完成真实诊断；step-200 pooled mean 改善 3.728%，但只有 1/3
   预识别 target 被确认恶化，另有一条非 target 确认恶化，故分类为
   `mixed_or_inconclusive`。
-- E.9a 已把 raw/normalized × A0/A1、固定 sample weights、新 train/held-out
-  flow、原门槛和 FWER tail 分类冻结为可执行协议；这只证明设计与无模型门禁，
+- E.9a-v1 在 objective 1 前工程失效；v2 已把 raw/normalized × A0/A1、固定
+  sample weights、新 train/held-out flow、原门槛、FWER tail 分类和
+  `75..106` evaluator 回归冻结为可执行协议。这只证明设计与无模型门禁，
   不证明 mitigation 有效。
 
 尚无证据证明：
@@ -123,7 +125,8 @@ Phase D cache 只能用于训练；不得把它接入 Phase F/G 在线 policy。
 | E.6 | valid failed gate | 新 cohort 上 400 updates、3,200 train objectives、160 held-out objectives 完整；A1 absolute/paired superiority 通过，A0 4/8 stability 未过门 |
 | E.7 | valid read-only diagnosis | 800 forward、0 backward/optimizer/write；primary 分类 `not_supported_no_material_late_degradation`，continuity 描述性分类相反；无 joint candidate |
 | E.8 | valid read-only diagnosis | A0 step 100/200、flows 11–74、双 32-flow block、1,536 forward、20k bootstrap + 20k five-flow sensitivity；工程通过，分类 `mixed_or_inconclusive` |
-| E.9a | preregistered / not run | 四轨 matched 单变量 sample normalization、6,400 train + 2,048 held-out objectives 预算、排序 17–28 identity-only reserve 已冻结；无真实结果 |
+| E.9a-v1 | invalid engineering run | raw/A0 initial probe 前被旧 `1..5` flow 硬编码拒绝；0 training objective、0 optimizer update、无 checkpoint/result；frozen SHA 未变 |
+| E.9a-v2 | preregistered / not run | generic flow evaluator、`75..106` 完整回归、initial-probe failed-status 落盘及全新输出已实现；四轨 6,400 train + 2,048 held-out objectives 预算和排序 17–28 reserve 不变；无真实结果 |
 | full E | not passed | 仍缺新的 28 train / 4 development 完整闭环 |
 
 在 full E 通过前：
@@ -178,7 +181,7 @@ CPU/mock；`thought3-counterfactual` 在 Fast-WAM backend 上仍返回
 | 独立分支/目录/CLI/schema | `feature/thought3-partial-future-adapter` 与 Thought3 namespace | **Satisfied** |
 | 不修改 `third_party/FastWAM` | worktree/status checks | **Satisfied to current commit** |
 | 不修改 Thought1/2 outputs | path guards + status/hash checks | **Satisfied to current commit** |
-| 旧 CLI 行为不变 | old CLI regression；完整测试 351 passed | **Satisfied to current commit** |
+| 旧 CLI 行为不变 | old CLI regression；完整测试 360 passed | **Satisfied to current commit** |
 | 正式运行前 dirty=false | Phase F/G 未到运行点 | **Pending** |
 | 三 GPU shard union/intersection | 纯函数测试存在，真实 run 缺失 | **Partial** |
 
@@ -189,9 +192,11 @@ Gate E.7 completed: primary no material late degradation; no candidate
   ↓
 Gate E.8 completed: pooled improvement + confirmed sample harm; mixed result
   ↓
-Gate E.9a preregistered: raw/normalized × matched A0/A1; not run
+Gate E.9a-v1 invalid: evaluator rejected 75..106 before objective 1
   ↓
-run E.9a once on used cohort; if candidate, read-only replicate once on
+Gate E.9a-v2 preregistered: raw/normalized × matched A0/A1; not run
+  ↓
+run E.9a-v2 once on used cohort; if candidate, read-only replicate once on
 unused train positions 17–28
   ↓
 if a stable recipe is independently replicated: freeze full 28/4 Gate E
@@ -228,15 +233,17 @@ step 200 的 full/Block A/Block B pooled loss 均改善
 `episode_000000` 非 target 确认恶化。因此 tail-risk 的 `2/3` 门槛与纯
 five-flow variance 条件都不满足，冻结分类为 `mixed_or_inconclusive`。
 
-下一步已经从“设计协议”推进为 **E.9a 已预注册、等待一次真实四轨运行**。
+E.9a-v1 已冻结为 **0-objective invalid engineering run**，不能用于科学
+判断。下一步是按新的 clean commit 执行 **E.9a-v2 一次真实四轨运行**。
 唯一处理变量是由 E.8 zero-gate initial loss 冻结的 sample weight；raw 与
 normalized A0/A1 使用同一新 schedule。排序 17–28 的身份和 flows 已冻结，
-E.9a 不读取；只有 E.9a candidate 才解锁一次性 E.9b。不能选 step 100、降低
+E.9a-v2 不读取；只有 E.9a-v2 candidate 才解锁一次性 E.9b。不能选 step 100、降低
 旧门槛或提前启动 full E/A2/A4/OOD。
 相关协议、结果与父结果见
 [thought3_phase_e8_protocol.md](thought3_phase_e8_protocol.md)、
 [thought3_phase_e8_report.md](thought3_phase_e8_report.md)、
-[thought3_phase_e9_protocol.md](thought3_phase_e9_protocol.md)、
+[thought3_phase_e9_v1_failure_report.md](thought3_phase_e9_v1_failure_report.md)、
+[thought3_phase_e9_v2_protocol.md](thought3_phase_e9_v2_protocol.md)、
 [thought3_phase_e7_report.md](thought3_phase_e7_report.md)、
 [thought3_phase_e7_protocol.md](thought3_phase_e7_protocol.md)、
 [thought3_phase_e6_report.md](thought3_phase_e6_report.md)、

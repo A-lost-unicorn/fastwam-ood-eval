@@ -8,7 +8,12 @@ from pathlib import Path
 import pytest
 import torch
 
+from fastwam_ood_eval.thought3 import objective_aggregation_training
 from fastwam_ood_eval.thought3.config import load_thought3_config
+from fastwam_ood_eval.thought3.io_utils import (
+    atomic_write_json,
+    load_json,
+)
 from fastwam_ood_eval.thought3.objective_aggregation_training import (
     OBJECTIVE_AGGREGATION_UPDATES,
     OBJECTIVES_PER_UPDATE,
@@ -45,6 +50,7 @@ from fastwam_ood_eval.thought3.phase_e9_sample_tail_mitigation import (
     probe_identity_schedule_sha256,
     run_phase_e9_sample_tail_mitigation,
     verify_frozen_phase_e8,
+    verify_frozen_phase_e9_v1_failure,
     verify_reserved_replication_cohort,
 )
 from fastwam_ood_eval.thought3.phase_e2_eight_sample import (
@@ -52,10 +58,13 @@ from fastwam_ood_eval.thought3.phase_e2_eight_sample import (
 )
 from fastwam_ood_eval.thought3.real_training import (
     _flow_objective_identity,
+    aggregate_multiflow_probe_grid_rows,
+    evaluate_multiflow_subset_probe,
+    multiflow_probe_grid_outcome,
 )
 
 
-CONFIG = "configs/thought3/phase_e9_sample_tail_mitigation.yaml"
+CONFIG = "configs/thought3/phase_e9_sample_tail_mitigation_v2.yaml"
 
 
 @pytest.fixture(scope="module")
@@ -97,13 +106,24 @@ def test_phase_e9_scope_and_result_conditioned_parent_are_frozen(
     _assert_phase_e9_scope(cfg)
     assert cfg.fingerprint == PHASE_E9_CONFIG_FINGERPRINT
     assert cfg.experiment.output_dir == PHASE_E9_ROOT
-    assert PHASE_E9_SCHEMA == "thought3.phase_e9.sample_tail_mitigation.v1"
+    assert PHASE_E9_SCHEMA == "thought3.phase_e9.sample_tail_mitigation.v2"
     assert frozen_parent["classification"] == "mixed_or_inconclusive"
     assert frozen_parent["known_before_e9"] == {
         "all_e8_results_read": True,
         "mitigation_selected_after_e8": True,
         "not_independent_confirmatory": True,
     }
+
+
+def test_phase_e9_v1_failure_is_frozen_before_v2() -> None:
+    frozen = verify_frozen_phase_e9_v1_failure()
+    assert frozen["failure_classification"] == (
+        "invalid_engineering_run"
+    )
+    assert frozen["training_objectives"] == 0
+    assert frozen["optimizer_updates"] == 0
+    assert frozen["result_written"] is False
+    assert frozen["frozen_fastwam_unchanged"] is True
 
 
 def test_fixed_inverse_initial_loss_weights_are_exact(
@@ -209,6 +229,115 @@ def test_new_train_and_heldout_flow_namespaces_are_frozen(
         frozen_parent["sample_ids"],
         PHASE_E9_HELDOUT_FLOW_STEPS,
     ) == PHASE_E9_HELDOUT_ZERO_WEIGHT_POSITIONS
+
+
+def _complete_multiflow_probe(
+    *,
+    action_loss: float,
+    ratio: float,
+) -> dict:
+    sample_ids = [f"sample-{index}" for index in range(8)]
+    rows = [
+        {
+            "action_hidden_norm": 10.0,
+            "action_loss": action_loss,
+            "action_weight": 1.0,
+            "attention_residual_norm": 2.0,
+            "base_sample_id": base_sample_id,
+            "flow_step": flow_step,
+            "gated_delta_nonzero_fraction": (
+                0.0 if ratio == 0 else 1.0
+            ),
+            "gated_delta_norm": ratio * 10.0,
+            "gated_delta_to_action_hidden_ratio": ratio,
+            "latency_ms": 5.0,
+            "peak_memory_mib": 100.0,
+            "timestep": 100.0 + flow_step,
+        }
+        for base_sample_id in sample_ids
+        for flow_step in PHASE_E9_HELDOUT_FLOW_STEPS
+    ]
+    return aggregate_multiflow_probe_grid_rows(
+        rows,
+        sample_ids=sample_ids,
+        flow_steps=PHASE_E9_HELDOUT_FLOW_STEPS,
+        variant="A0",
+    )
+
+
+def test_multiflow_evaluator_accepts_protocol_flows_75_to_106(
+    monkeypatch,
+) -> None:
+    observed = {}
+
+    def fake_grid(*args, flow_steps, device):
+        observed["flow_steps"] = flow_steps
+        observed["device"] = device
+        return {"accepted": True}
+
+    monkeypatch.setattr(
+        "fastwam_ood_eval.thought3.real_training."
+        "evaluate_multiflow_probe_grid",
+        fake_grid,
+    )
+    result = evaluate_multiflow_subset_probe(
+        object(),
+        object(),
+        object(),
+        object(),
+        (),
+        flow_steps=PHASE_E9_HELDOUT_FLOW_STEPS,
+        device="cuda:0",
+    )
+    assert result == {"accepted": True}
+    assert observed == {
+        "device": "cuda:0",
+        "flow_steps": tuple(range(75, 107)),
+    }
+
+
+def test_multiflow_75_to_106_grid_and_outcome_are_complete() -> None:
+    initial = _complete_multiflow_probe(
+        action_loss=1.0,
+        ratio=0.0,
+    )
+    final = _complete_multiflow_probe(
+        action_loss=0.9,
+        ratio=0.2,
+    )
+    outcome = multiflow_probe_grid_outcome(
+        initial,
+        final,
+        expected_flow_steps=PHASE_E9_HELDOUT_FLOW_STEPS,
+    )
+    assert initial["flow_steps"] == list(range(75, 107))
+    assert initial["flow_objective_count"] == 8 * 32
+    assert len(initial["per_objective"]) == 8 * 32
+    assert outcome["flow_steps"] == list(range(75, 107))
+    assert outcome["flow_objective_count"] == 8 * 32
+    assert outcome["non_worsened_sample_count"] == 8
+    assert math.isclose(
+        outcome["loss_reduction_fraction"],
+        0.1,
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    )
+
+
+@pytest.mark.parametrize(
+    "flow_steps",
+    [(), (0,), (75, 75), (True,), (75.0,)],
+)
+def test_multiflow_rejects_non_positive_or_non_integer_flow_sets(
+    flow_steps,
+) -> None:
+    with pytest.raises(RuntimeError, match="positive integers"):
+        aggregate_multiflow_probe_grid_rows(
+            [],
+            sample_ids=[f"sample-{index}" for index in range(8)],
+            flow_steps=flow_steps,
+            variant="A0",
+        )
 
 
 def test_training_zero_weight_schedule_is_frozen(frozen_parent) -> None:
@@ -369,24 +498,95 @@ def test_e9_refuses_before_model_load_or_run_state_write(
     monkeypatch,
 ) -> None:
     cfg = load_thought3_config(CONFIG)
-    monkeypatch.delenv("CONFIRM_THOUGHT3_PHASE_E9A", raising=False)
+    monkeypatch.delenv(
+        "CONFIRM_THOUGHT3_PHASE_E9A_V2",
+        raising=False,
+    )
 
     def forbidden(*args, **kwargs):
-        raise AssertionError("E.9a loaded model without confirmation")
+        raise AssertionError("E.9a-v2 loaded model without confirmation")
 
     monkeypatch.setattr(
         "fastwam_ood_eval.thought3.phase_e9_sample_tail_mitigation."
         "_load_upstream_model",
         forbidden,
     )
-    with pytest.raises(RuntimeError, match="CONFIRM_THOUGHT3_PHASE_E9A"):
+    with pytest.raises(
+        RuntimeError,
+        match="CONFIRM_THOUGHT3_PHASE_E9A_V2",
+    ):
         _run_phase_e9(
             cfg,
             resume=False,
             execution_repository={},
         )
-    with pytest.raises(RuntimeError, match="CONFIRM_THOUGHT3_PHASE_E9A"):
+    with pytest.raises(
+        RuntimeError,
+        match="CONFIRM_THOUGHT3_PHASE_E9A_V2",
+    ):
         run_phase_e9_sample_tail_mitigation(cfg)
+
+
+def test_initial_probe_failure_writes_failed_track_status(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    cfg = load_thought3_config(CONFIG)
+    track_root = tmp_path / "thought3" / "raw-a0"
+
+    def fake_output_path(path):
+        return track_root
+
+    def fail_during_initial_probe(
+        cfg,
+        *,
+        invocation_id,
+        **kwargs,
+    ):
+        track_root.mkdir(parents=True)
+        atomic_write_json(
+            track_root / "run_status.json",
+            {
+                "invocation_id": invocation_id,
+                "started_at_unix_s": 123.0,
+                "status": "running",
+            },
+        )
+        raise RuntimeError("synthetic initial-probe failure")
+
+    monkeypatch.setattr(
+        objective_aggregation_training,
+        "ensure_thought3_output_path",
+        fake_output_path,
+    )
+    monkeypatch.setattr(
+        objective_aggregation_training,
+        "_run_full_cohort_objective_aggregation_impl",
+        fail_during_initial_probe,
+    )
+    with pytest.raises(
+        RuntimeError,
+        match="synthetic initial-probe failure",
+    ):
+        objective_aggregation_training.run_full_cohort_objective_aggregation(
+            cfg,
+            model=object(),
+            prepared=object(),
+            frozen_parameter_sha256="frozen",
+            resume=False,
+            device="cuda:0",
+            protocol=PHASE_E9_RAW_PROTOCOL,
+        )
+    status = load_json(track_root / "run_status.json")
+    assert status["status"] == "failed"
+    assert status["failure_stage"] == "initial_probe_or_setup"
+    assert status["completed_objectives"] == 0
+    assert status["gate_label"] == PHASE_E9_RAW_PROTOCOL.gate_label
+    assert status["invocation_id"]
+    assert status["started_at_unix_s"] == 123.0
+    assert status["error"] == (
+        "RuntimeError: synthetic initial-probe failure"
+    )
 
 
 def test_e9_source_and_runner_keep_locked_stages_out() -> None:
@@ -395,11 +595,17 @@ def test_e9_source_and_runner_keep_locked_stages_out() -> None:
     assert '"A4"' not in source
     assert "run_rollout" not in source
     runner = Path(
-        "scripts/run_thought3_phase_e9_sample_tail_mitigation.sh"
+        "scripts/run_thought3_phase_e9_sample_tail_mitigation_v2.sh"
     ).read_text(encoding="utf-8")
     assert "single-GPU only" in runner
-    assert "CONFIRM_THOUGHT3_PHASE_E9A" in runner
+    assert "CONFIRM_THOUGHT3_PHASE_E9A_V2" in runner
     assert "THOUGHT3_GPU_ID" in runner
+    assert "phase_e9_sample_tail_mitigation_v2" in runner
+    archived_v1 = Path(
+        "scripts/run_thought3_phase_e9_sample_tail_mitigation.sh"
+    ).read_text(encoding="utf-8")
+    assert "archived as an invalid engineering run" in archived_v1
+    assert "exit 2" in archived_v1
 
 
 def test_scope_rejects_learning_rate_or_step_selection_drift() -> None:

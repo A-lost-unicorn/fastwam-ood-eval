@@ -1,4 +1,4 @@
-"""Gate E.9a: matched single-variable sample-tail mitigation.
+"""Gate E.9a-v2: matched single-variable sample-tail mitigation.
 
 E.9a is a result-conditioned sequential engineering experiment.  Four tracks
 share the E.6 cohort, a new training-flow namespace, and a new held-out flow
@@ -75,23 +75,48 @@ from fastwam_ood_eval.thought3.phase_e_training_smoke import (
 from fastwam_ood_eval.thought3.real_training import (
     _flow_objective_identity,
     _training_order_key,
-    multiflow_subset_outcome,
+    multiflow_probe_grid_outcome,
     prepare_real_training_data,
 )
 from fastwam_ood_eval.thought3.safety import ensure_thought3_output_path
 
 
-PHASE_E9_SCHEMA = "thought3.phase_e9.sample_tail_mitigation.v1"
+PHASE_E9_SCHEMA = "thought3.phase_e9.sample_tail_mitigation.v2"
 PHASE_E9_CONFIG = Path(
-    "configs/thought3/phase_e9_sample_tail_mitigation.yaml"
+    "configs/thought3/phase_e9_sample_tail_mitigation_v2.yaml"
 )
-PHASE_E9_EXPERIMENT_NAME = "thought3_phase_e9_sample_tail_mitigation"
+PHASE_E9_EXPERIMENT_NAME = (
+    "thought3_phase_e9_sample_tail_mitigation_v2"
+)
 PHASE_E9_ROOT = Path(
-    "outputs/thought3/phase_e9_sample_tail_mitigation_v1"
+    "outputs/thought3/phase_e9_sample_tail_mitigation_v2"
 )
 PHASE_E9_CONFIG_FINGERPRINT = (
-    "d4828d22224ce50c1c4d51b70bc9ce8c1c2a88a13b8d69560a4037de5fff512c"
+    "afcd6a7fdad6338a2a09a0d881494ea9e5e2a0c9fd9495d712fcafeb5507097a"
 )
+PHASE_E9_V1_ROOT = Path(
+    "outputs/thought3/phase_e9_sample_tail_mitigation_v1"
+)
+PHASE_E9_V1_PREREG_COMMIT = (
+    "94255fa98499070cf89d20b48d101ba3696f3462"
+)
+PHASE_E9_V1_FROZEN_ARTIFACTS = {
+    "run_status.json": (
+        "0542dc8b535e640cdde5be7ffa9021f312b78dbeb43e0e4f7da55ebef78b4658"
+    ),
+    "pre_validation_result.json": (
+        "e325211ac58f2021c6f5815325b1c205ad77145535147fa16c98f1d7e90dbe4f"
+    ),
+    "data_preparation.json": (
+        "f7c779eceaaff3eb0dfeab03757ab8c6aacf2004227396fd708f7aaf7f74695b"
+    ),
+    "tracks/raw/a0/run_status.json": (
+        "336c65b89f67c509d28038a8781ec96d2752966ce49ea3941308e8a20fb137f0"
+    ),
+    "logs/phase_e9a.log": (
+        "76db28f18b4f67dcd73263f02f32eabd809a2f015893cebd14d1b9bfb3485bfd"
+    ),
+}
 PHASE_E9_FLOW_SLOT_OFFSET = 40_000
 PHASE_E9_TRAIN_FLOW_START = 40_001
 PHASE_E9_TRAIN_FLOW_END = 41_600
@@ -250,15 +275,15 @@ PHASE_E9B_ZERO_WEIGHT_POSITIONS = (
 
 
 PHASE_E9_RAW_PROTOCOL = ObjectiveAggregationProtocol(
-    gate_label="Gate E.9a raw control",
-    checkpoint_marker_key="gate_e9a_raw_control",
+    gate_label="Gate E.9a-v2 raw control",
+    checkpoint_marker_key="gate_e9a_v2_raw_control",
     flow_slot_offset=PHASE_E9_FLOW_SLOT_OFFSET,
     expected_zero_weight_slots=PHASE_E9_EXPECTED_ZERO_WEIGHT_SLOTS,
     heldout_flow_steps=PHASE_E9_HELDOUT_FLOW_STEPS,
 )
 PHASE_E9_NORMALIZED_PROTOCOL = ObjectiveAggregationProtocol(
-    gate_label="Gate E.9a sample-normalized treatment",
-    checkpoint_marker_key="gate_e9a_sample_normalized",
+    gate_label="Gate E.9a-v2 sample-normalized treatment",
+    checkpoint_marker_key="gate_e9a_v2_sample_normalized",
     flow_slot_offset=PHASE_E9_FLOW_SLOT_OFFSET,
     expected_zero_weight_slots=PHASE_E9_EXPECTED_ZERO_WEIGHT_SLOTS,
     heldout_flow_steps=PHASE_E9_HELDOUT_FLOW_STEPS,
@@ -287,7 +312,7 @@ def _progress(
     print(
         json.dumps(
             {
-                "phase": "E.9a",
+                "phase": "E.9a-v2",
                 "stage": stage,
                 "time": _utc_now(),
                 **payload,
@@ -327,9 +352,9 @@ def _assert_phase_e9_scope(cfg: Thought3Config) -> None:
 
 
 def _require_phase_e9_confirmation() -> None:
-    if os.environ.get("CONFIRM_THOUGHT3_PHASE_E9A") != "YES":
+    if os.environ.get("CONFIRM_THOUGHT3_PHASE_E9A_V2") != "YES":
         raise PhaseE9GateError(
-            "set CONFIRM_THOUGHT3_PHASE_E9A=YES for real E.9a training"
+            "set CONFIRM_THOUGHT3_PHASE_E9A_V2=YES for real E.9a-v2 training"
         )
 
 
@@ -351,6 +376,69 @@ def _verify_execution_repository() -> dict[str, Any]:
             "the frozen FastWAM commit"
         )
     return provenance
+
+
+def verify_frozen_phase_e9_v1_failure() -> dict[str, Any]:
+    """Freeze the no-objective E.9a-v1 implementation failure."""
+
+    artifact_sha256 = {}
+    for name, expected in PHASE_E9_V1_FROZEN_ARTIFACTS.items():
+        path = PHASE_E9_V1_ROOT / name
+        if not path.is_file() or sha256_file(path) != expected:
+            raise PhaseE9GateError(
+                f"frozen Gate E.9a-v1 artifact changed/missing: {path}"
+            )
+        artifact_sha256[str(path)] = expected
+    status = load_json(PHASE_E9_V1_ROOT / "run_status.json")
+    prevalidation = load_json(
+        PHASE_E9_V1_ROOT / "pre_validation_result.json"
+    )
+    track_status = load_json(
+        PHASE_E9_V1_ROOT / "tracks/raw/a0/run_status.json"
+    )
+    forbidden = (
+        PHASE_E9_V1_ROOT / "gate_e9a_result.json",
+        PHASE_E9_V1_ROOT
+        / "tracks/raw/a0/training_manifest.json",
+        PHASE_E9_V1_ROOT
+        / "tracks/raw/a0/training_state.json",
+        PHASE_E9_V1_ROOT
+        / "tracks/raw/a0/train_objective_metrics.jsonl",
+        PHASE_E9_V1_ROOT
+        / "tracks/raw/a0/train_update_metrics.jsonl",
+        PHASE_E9_V1_ROOT / "tracks/raw/a0/checkpoints",
+    )
+    expected_error = (
+        "Gate E.3 multiflow probe requires flow steps 1..5"
+    )
+    if (
+        status.get("schema_version")
+        != "thought3.phase_e9.sample_tail_mitigation.v1"
+        or status.get("status") != "failed"
+        or status.get("gate_e9a_passed") is not False
+        or status.get("result") is not None
+        or expected_error
+        not in str(prevalidation.get("execution_error", ""))
+        or prevalidation.get("tracks") != {}
+        or prevalidation["frozen_parameter_sha256_before"]
+        != prevalidation["frozen_parameter_sha256_after"]
+        or track_status.get("status") != "running"
+        or any(path.exists() for path in forbidden)
+    ):
+        raise PhaseE9GateError(
+            "Gate E.9a-v1 is not the frozen pre-objective invalid run"
+        )
+    return {
+        "artifact_sha256": artifact_sha256,
+        "failure_classification": "invalid_engineering_run",
+        "failure_reason": expected_error,
+        "frozen_fastwam_unchanged": True,
+        "optimizer_updates": 0,
+        "preregistration_commit": PHASE_E9_V1_PREREG_COMMIT,
+        "result_written": False,
+        "root": str(PHASE_E9_V1_ROOT),
+        "training_objectives": 0,
+    }
 
 
 def probe_identity_schedule_sha256(
@@ -619,7 +707,9 @@ def derive_e9_track_config(
         variant=variant,
         experiment=replace(
             cfg.experiment,
-            name=f"thought3_phase_e9a_{recipe}_{variant.lower()}",
+            name=(
+                f"thought3_phase_e9a_v2_{recipe}_{variant.lower()}"
+            ),
             output_dir=(
                 cfg.experiment.output_dir
                 / "tracks"
@@ -869,9 +959,10 @@ def _track_checks(
         objective_rows,
         flow_slot_offset=PHASE_E9_FLOW_SLOT_OFFSET,
     )
-    recomputed = multiflow_subset_outcome(
+    recomputed = multiflow_probe_grid_outcome(
         result["initial_probe"],
         result["final_probe"],
+        expected_flow_steps=PHASE_E9_HELDOUT_FLOW_STEPS,
     )
     zero_slots = tuple(
         (
@@ -1081,6 +1172,7 @@ def _run_phase_e9(
 
     output = ensure_thought3_output_path(cfg.experiment.output_dir)
     output.mkdir(parents=True, exist_ok=True)
+    phase_e9_v1 = verify_frozen_phase_e9_v1_failure()
     e8 = verify_frozen_phase_e8()
     e5 = verify_frozen_phase_e5()
     cohort = verify_frozen_fresh_cohort(
@@ -1115,6 +1207,9 @@ def _run_phase_e9(
     _progress(
         "frozen_inputs_verified",
         e8_sha256=PHASE_E8_FROZEN_ARTIFACTS["gate_e8_result.json"],
+        e9a_v1_status_sha256=PHASE_E9_V1_FROZEN_ARTIFACTS[
+            "run_status.json"
+        ],
         heldout_identity_sha256=design[
             "heldout_identity_schedule_sha256"
         ],
@@ -1218,6 +1313,7 @@ def _run_phase_e9(
         "frozen_parameter_sha256_before": frozen_before,
         "model_load": model_report,
         "phase_d_frozen": phase_d,
+        "phase_e9_v1_frozen": phase_e9_v1,
         "reserved_e9b_cohort": reserved,
         "schema_version": PHASE_E9_SCHEMA,
         "tracks": {key: dict(value) for key, value in results.items()},
@@ -1362,6 +1458,7 @@ def _run_phase_e9(
         "paired_checks": paired_checks,
         "phase_d_frozen": phase_d,
         "phase_e8_frozen": e8,
+        "phase_e9_v1_frozen": phase_e9_v1,
         "post_selection_disclosure": {
             "e8_results_known_before_recipe_choice": True,
             "independent_confirmatory_test": False,

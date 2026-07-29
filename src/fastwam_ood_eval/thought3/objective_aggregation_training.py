@@ -13,6 +13,7 @@ import hashlib
 import math
 import statistics
 import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -51,7 +52,7 @@ from fastwam_ood_eval.thought3.real_training import (
     adapter_gradient_groups,
     build_real_adapter,
     evaluate_multiflow_subset_probe,
-    multiflow_subset_outcome,
+    multiflow_probe_grid_outcome,
 )
 from fastwam_ood_eval.thought3.safety import (
     ensure_thought3_output_path,
@@ -528,7 +529,7 @@ def _validate_resume_metric_provenance(
         )
 
 
-def run_full_cohort_objective_aggregation(
+def _run_full_cohort_objective_aggregation_impl(
     cfg: Thought3Config,
     *,
     model: Any,
@@ -541,6 +542,7 @@ def run_full_cohort_objective_aggregation(
         PHASE_E5_OBJECTIVE_AGGREGATION_PROTOCOL
     ),
     sample_loss_weights: Mapping[str, float] | None = None,
+    invocation_id: str,
 ) -> dict[str, Any]:
     """Train one frozen track with eight mean-aggregated objectives/update."""
 
@@ -584,7 +586,9 @@ def run_full_cohort_objective_aggregation(
     atomic_write_json(
         status_path,
         {
+            "gate_label": protocol.gate_label,
             "gradient_accumulation_steps": OBJECTIVES_PER_UPDATE,
+            "invocation_id": invocation_id,
             "learning_rate": cfg.training.learning_rate,
             "loss_reduction": protocol.gradient_reduction,
             "sample_loss_weights_sha256": (
@@ -1327,9 +1331,10 @@ def run_full_cohort_objective_aggregation(
             }
             probe_rows.append(final_probe)
             atomic_write_jsonl(probe_path, probe_rows)
-        final_outcome = multiflow_subset_outcome(
+        final_outcome = multiflow_probe_grid_outcome(
             initial_probe,
             final_probe,
+            expected_flow_steps=protocol.heldout_flow_steps,
         )
         latest_checkpoint = find_latest_checkpoint(checkpoints_root)
         if latest_checkpoint is None:
@@ -1453,6 +1458,8 @@ def run_full_cohort_objective_aggregation(
                 "completed_objectives": len(all_objectives),
                 "completed_steps": OBJECTIVE_AGGREGATION_UPDATES,
                 "finished_at_unix_s": time.time(),
+                "gate_label": protocol.gate_label,
+                "invocation_id": invocation_id,
                 "learning_rate": cfg.training.learning_rate,
                 "status": "complete",
                 "variant": cfg.variant,
@@ -1465,6 +1472,8 @@ def run_full_cohort_objective_aggregation(
             {
                 "error": f"{type(exc).__name__}: {exc}",
                 "finished_at_unix_s": time.time(),
+                "gate_label": protocol.gate_label,
+                "invocation_id": invocation_id,
                 "learning_rate": cfg.training.learning_rate,
                 "status": "failed",
                 "variant": cfg.variant,
@@ -1475,3 +1484,83 @@ def run_full_cohort_objective_aggregation(
         injector.close()
         del optimizer, adapter
         torch.cuda.empty_cache()
+
+
+def run_full_cohort_objective_aggregation(
+    cfg: Thought3Config,
+    *,
+    model: Any,
+    prepared: PreparedRealTrainingData,
+    frozen_parameter_sha256: str,
+    resume: bool,
+    device: str,
+    progress: ProgressCallback | None = None,
+    protocol: ObjectiveAggregationProtocol = (
+        PHASE_E5_OBJECTIVE_AGGREGATION_PROTOCOL
+    ),
+    sample_loss_weights: Mapping[str, float] | None = None,
+) -> dict[str, Any]:
+    """Run one track and fail-close status even before its initial probe."""
+
+    invocation_id = uuid.uuid4().hex
+    try:
+        return _run_full_cohort_objective_aggregation_impl(
+            cfg,
+            model=model,
+            prepared=prepared,
+            frozen_parameter_sha256=frozen_parameter_sha256,
+            resume=resume,
+            device=device,
+            progress=progress,
+            protocol=protocol,
+            sample_loss_weights=sample_loss_weights,
+            invocation_id=invocation_id,
+        )
+    except BaseException as exc:
+        try:
+            output = ensure_thought3_output_path(
+                cfg.experiment.output_dir
+            )
+            status_path = output / "run_status.json"
+            if status_path.is_file():
+                status = load_json(status_path)
+                if (
+                    status.get("status") == "running"
+                    and status.get("invocation_id") == invocation_id
+                ):
+                    state_path = output / "training_state.json"
+                    objective_path = (
+                        output / "train_objective_metrics.jsonl"
+                    )
+                    completed_objectives = 0
+                    if objective_path.is_file():
+                        try:
+                            completed_objectives = len(
+                                load_jsonl(objective_path)
+                            )
+                        except (OSError, ValueError, TypeError):
+                            completed_objectives = 0
+                    atomic_write_json(
+                        status_path,
+                        {
+                            **status,
+                            "completed_objectives": completed_objectives,
+                            "error": f"{type(exc).__name__}: {exc}",
+                            "failure_stage": (
+                                "outside_training_loop"
+                                if state_path.is_file()
+                                else "initial_probe_or_setup"
+                            ),
+                            "finished_at_unix_s": time.time(),
+                            "gate_label": protocol.gate_label,
+                            "invocation_id": invocation_id,
+                            "learning_rate": (
+                                cfg.training.learning_rate
+                            ),
+                            "status": "failed",
+                            "variant": cfg.variant,
+                        },
+                    )
+        except BaseException:
+            pass
+        raise

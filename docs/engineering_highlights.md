@@ -9,7 +9,7 @@
 | 项目 | 状态 | 可用证据 |
 | --- | --- | --- |
 | 配置、planner、adapter、分片、resume、聚合 | 已实现 | `src/`、`configs/`、`tests/` |
-| 自动化测试 | 已通过 | `pytest -q`：351 passed、5 warnings；覆盖阶段一/二回归与 Thought3 配置、cache、Adapter、resume、泄漏和真实 Gate 编排 |
+| 自动化测试 | 已通过 | `pytest -q`：360 passed、5 warnings；覆盖阶段一/二回归与 Thought3 配置、cache、Adapter、resume、泄漏、任意 positive-flow grid 和真实 Gate 编排 |
 | Conda 环境与激活入口 | 已配置 | `scripts/create_env.sh`、`scripts/activate_env.sh` |
 | checkpoint/stats | 已下载并人工校验 | checkpoint SHA-256 `1000437c...a49579`；stats SHA-256 `30f81ad7...68638` |
 | FastWAM 公共运行时模型 | 已下载并逐文件校验 | `scripts/download_fastwam_runtime_models.sh`；T5、VAE、tokenizer 共约 11.9 GiB |
@@ -463,10 +463,16 @@
 - 分层门禁：保留原 A0/A1/paired thresholds，再增加四轨 32-comparison
   FWER confirmed-harm；稳定候选与“真正减少 raw tail”分成两种分类。
 - 一次性 holdout：在不解码的情况下冻结 train 排序 17–28 的 12 条完整身份、
-  cohort SHA、flows `107..138` 和 zero-weight 位置；只有 E.9a candidate
+  cohort SHA、flows `107..138` 和 zero-weight 位置；只有 E.9a-v2 candidate
   才能进行一次只读复验。
-- 当前证据：协议、配置、单卡 runner 与 no-model tests 已完成；真实四轨训练
-  尚未运行，因此不能写 loss reduction、tail mitigation 或 OOD 效果。
+- 失败隔离：E.9a-v1 暴露共用 evaluator 的 `1..5` 硬编码，在 raw/A0
+  initial probe 前以 0 objective/0 update 停止；五个工件 SHA 与 frozen
+  backbone 不变已归档，v1 runner 永久拒绝 resume。
+- 修复验证：v2 将 aggregator/evaluator/outcome 改成协议显式正整数 flow 集，
+  对完整 `75..106` 的 256-objective grid 做回归；invocation-scoped wrapper
+  令 initial-probe/setup 异常原子落盘为 `failed`，不再残留假 `running`。
+- 当前证据：v2 协议、配置、单卡 runner 与 CPU/no-model tests 已完成；真实
+  四轨训练尚未运行，因此不能写 loss reduction、tail mitigation 或 OOD 效果。
 
 ## 4. 简历表达素材
 

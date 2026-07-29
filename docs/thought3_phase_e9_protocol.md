@@ -1,8 +1,16 @@
-# Thought3 Gate E.9：Matched Sample-Tail Mitigation 预注册
+# Thought3 Gate E.9a-v1：Matched Sample-Tail Mitigation 归档协议
 
-状态：**PRE-REGISTERED / NOT RUN**
+状态：**INVALID ENGINEERING RUN / SUPERSEDED**
 
 冻结日期：2026-07-29
+
+> 2026-07-29 的首次真实启动在 raw/A0 initial probe 前因 evaluator
+> 错误地硬编码 `flow_steps=1..5` 而停止；协议要求的是 `75..106`。该次运行
+> 完成模型加载与八条样本准备，但完成 `0` 个训练 objective、`0` 次
+> optimizer update，没有写出科学结果，冻结 Fast-WAM SHA 前后相同。v1
+> 输出已只读归档，不得 resume 或覆盖。证据见
+> [v1 失败报告](thought3_phase_e9_v1_failure_report.md)；修复后的唯一入口和
+> 不变科学边界见 [E.9a-v2 协议](thought3_phase_e9_v2_protocol.md)。
 
 > 本协议在查看 E.8 全部结果后建立。已知 E.8 为
 > `mixed_or_inconclusive`，并已知每条样本的 zero-gate initial loss、A0
@@ -335,25 +343,14 @@ selection 和停止规则。完整 Gate E 通过后才讨论 A2/A4。
 11. 单卡显存达到 43 GiB；
 12. 科学判定使用 step 100 或任何非 200 endpoint。
 
-## 12. 运行边界
+## 12. 归档运行边界
 
-E.9a 预注册提交完成后，唯一正式入口为：
+以下 v1 命令已经永久停用：
 
 ```bash
-CONFIRM_THOUGHT3_PHASE_E9A=YES \
-THOUGHT3_GPU_ID=1 \
 bash scripts/run_thought3_phase_e9_sample_tail_mitigation.sh
 ```
 
-runner 只接受一个物理 GPU ID，并在显存使用超过 1 GiB 时拒绝启动。正常中断可在
-保留同一 Run ID 的情况下追加 `--resume`；科学失败不可通过 resume 重跑成新结果。
-
-正式运行前应先执行：
-
-```bash
-git status --short
-git rev-parse HEAD
-```
-
-只有 clean preregistration commit 才可运行。当前协议完成不等于 E.9a 已运行，
-任何结果字段在真实工件产生前都保持空白。
+归档 runner 现在只返回 exit code 2，避免 v1 被误 resume 或覆盖。不得把 v1
+模型加载、数据准备或 failure log 当作有效 E.9a 结果；正式运行只能按
+[E.9a-v2 协议](thought3_phase_e9_v2_protocol.md)从全新输出目录开始。

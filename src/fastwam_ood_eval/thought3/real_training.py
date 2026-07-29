@@ -14,6 +14,7 @@ import math
 import statistics
 import time
 from dataclasses import dataclass
+from numbers import Integral
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
@@ -2391,6 +2392,34 @@ def evaluate_fixed_subset_probe(
     }
 
 
+def _normalize_explicit_flow_steps(
+    flow_steps: Sequence[int],
+) -> tuple[int, ...]:
+    """Validate an arbitrary explicit, ordered flow-step set."""
+
+    raw_steps = tuple(flow_steps)
+    if (
+        not raw_steps
+        or any(
+            isinstance(raw, bool)
+            or not isinstance(raw, Integral)
+            or int(raw) < 1
+            for raw in raw_steps
+        )
+    ):
+        raise RealTrainingError(
+            "multiflow steps must be a nonempty ordered set of unique "
+            "positive integers"
+        )
+    normalized_steps = tuple(int(value) for value in raw_steps)
+    if len(set(normalized_steps)) != len(normalized_steps):
+        raise RealTrainingError(
+            "multiflow steps must be a nonempty ordered set of unique "
+            "positive integers"
+        )
+    return normalized_steps
+
+
 def aggregate_multiflow_probe_grid_rows(
     rows: Sequence[Mapping[str, Any]],
     *,
@@ -2398,21 +2427,18 @@ def aggregate_multiflow_probe_grid_rows(
     flow_steps: Sequence[int],
     variant: str,
 ) -> dict[str, Any]:
-    """Aggregate a complete eight-sample × five-flow objective grid."""
+    """Aggregate a complete eight-sample × explicit-flow objective grid."""
 
     normalized_ids = tuple(str(value) for value in sample_ids)
-    normalized_steps = tuple(int(value) for value in flow_steps)
+    normalized_steps = _normalize_explicit_flow_steps(flow_steps)
     if (
         len(normalized_ids) != 8
         or len(set(normalized_ids)) != 8
-        or len(normalized_steps) != 5
-        or len(set(normalized_steps)) != 5
-        or any(value < 1 for value in normalized_steps)
         or variant not in {"A0", "A1"}
     ):
         raise RealTrainingError(
-            "multiflow grid requires 8 unique samples and 5 unique "
-            "positive flow steps"
+            "multiflow grid requires 8 unique samples, an explicit "
+            "positive flow set, and A0/A1"
         )
     expected_pairs = {
         (base_sample_id, flow_step)
@@ -2427,7 +2453,7 @@ def aggregate_multiflow_probe_grid_rows(
         )
         if key in keyed:
             raise RealTrainingError(
-                f"duplicate Gate E.3 multiflow objective: {key}"
+                f"duplicate multiflow objective: {key}"
             )
         values = (
             float(row["action_weight"]),
@@ -2457,14 +2483,14 @@ def aggregate_multiflow_probe_grid_rows(
             or (values[0] == 0 and values[1] != 0)
         ):
             raise RealTrainingError(
-                f"non-finite/invalid Gate E.3 multiflow row: {key}"
+                f"non-finite/invalid multiflow row: {key}"
             )
         keyed[key] = row
     if set(keyed) != expected_pairs:
         missing = sorted(expected_pairs - set(keyed))
         extra = sorted(set(keyed) - expected_pairs)
         raise RealTrainingError(
-            "Gate E.3 multiflow objective grid mismatch: "
+            "multiflow objective grid mismatch: "
             f"missing={missing[:5]}, extra={extra[:5]}"
         )
 
@@ -2592,20 +2618,17 @@ def evaluate_multiflow_probe_grid(
     flow_steps: Sequence[int],
     device: str,
 ) -> dict[str, Any]:
-    """Evaluate an explicit five-flow grid without training."""
+    """Evaluate an arbitrary explicit flow grid without training."""
 
     sample_ids = [sample.base_sample_id for sample in samples]
-    normalized_steps = tuple(int(value) for value in flow_steps)
+    normalized_steps = _normalize_explicit_flow_steps(flow_steps)
     if (
         len(samples) != 8
         or len(set(sample_ids)) != 8
-        or len(normalized_steps) != 5
-        or len(set(normalized_steps)) != 5
-        or any(value < 1 for value in normalized_steps)
     ):
         raise RealTrainingError(
-            "multiflow probe requires 8 unique samples and 5 unique "
-            "positive flow steps"
+            "multiflow probe requires 8 unique samples and an explicit "
+            "positive flow set"
         )
     was_training = adapter.training
     adapter.eval()
@@ -2635,7 +2658,7 @@ def evaluate_multiflow_probe_grid(
                     or diagnostics.action_hidden_norm <= 0
                 ):
                     raise RealTrainingError(
-                        "Gate E.3 multiflow diagnostics are invalid"
+                        "multiflow diagnostics are invalid"
                     )
                 loss_value = float(loss.detach().float().cpu())
                 ratio = (
@@ -2721,19 +2744,16 @@ def evaluate_multiflow_subset_probe(
     flow_steps: Sequence[int],
     device: str,
 ) -> dict[str, Any]:
-    """Evaluate the frozen Gate E.3 flow-1..5 grid."""
+    """Evaluate one protocol-supplied explicit positive flow grid."""
 
-    if tuple(int(value) for value in flow_steps) != (1, 2, 3, 4, 5):
-        raise RealTrainingError(
-            "Gate E.3 multiflow probe requires flow steps 1..5"
-        )
+    normalized_steps = _normalize_explicit_flow_steps(flow_steps)
     return evaluate_multiflow_probe_grid(
         cfg,
         model,
         adapter,
         injector,
         samples,
-        flow_steps=flow_steps,
+        flow_steps=normalized_steps,
         device=device,
     )
 
@@ -2744,20 +2764,17 @@ def multiflow_probe_grid_outcome(
     *,
     expected_flow_steps: Sequence[int],
 ) -> dict[str, Any]:
-    """Compare two complete explicit five-flow objective grids."""
+    """Compare two complete explicit protocol-supplied flow grids."""
 
-    normalized_expected = [
-        int(value) for value in expected_flow_steps
-    ]
+    normalized_expected = list(
+        _normalize_explicit_flow_steps(expected_flow_steps)
+    )
     expected_objective_count = 8 * len(normalized_expected)
     if (
         list(initial_probe.get("flow_steps", []))
         != normalized_expected
         or list(final_probe.get("flow_steps", []))
         != normalized_expected
-        or len(normalized_expected) != 5
-        or len(set(normalized_expected)) != 5
-        or any(value < 1 for value in normalized_expected)
         or int(initial_probe.get("flow_objective_count", -1))
         != expected_objective_count
         or int(final_probe.get("flow_objective_count", -1))
@@ -2785,7 +2802,7 @@ def multiflow_probe_grid_outcome(
         or set(initial_objectives) != set(final_objectives)
     ):
         raise RealTrainingError(
-            "Gate E.3 initial/final objective identities differ"
+            "multiflow initial/final objective identities differ"
         )
     for probe, label in (
         (initial_probe, "initial"),
@@ -2817,7 +2834,7 @@ def multiflow_probe_grid_outcome(
             for field in checked_fields
         ):
             raise RealTrainingError(
-                f"Gate E.3 {label} summary differs from objective rows"
+                f"multiflow {label} summary differs from objective rows"
             )
     outcome = fixed_subset_outcome(initial_probe, final_probe)
     objective_loss_ratios: list[float] = []
@@ -2836,7 +2853,7 @@ def multiflow_probe_grid_outcome(
             or initial_weight != final_weight
         ):
             raise RealTrainingError(
-                "Gate E.3 initial/final objective flow inputs differ"
+                "multiflow initial/final objective flow inputs differ"
             )
         if initial_loss == 0:
             zero_initial_loss_objective_count += 1
@@ -2852,7 +2869,7 @@ def multiflow_probe_grid_outcome(
         objective_loss_ratios.append(final_loss / initial_loss)
     if not objective_loss_ratios:
         raise RealTrainingError(
-            "Gate E.3 has no positive initial objective loss"
+            "multiflow grid has no positive initial objective loss"
         )
     return {
         **outcome,

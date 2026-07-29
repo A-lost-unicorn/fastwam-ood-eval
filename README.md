@@ -52,8 +52,11 @@ step 同时通过 A0、A1 absolute 与 paired 三组门槛。E.8 已完成 A0-on
 的 64 个全新 flow replication：工程 Gate 通过，step 200 pooled mean 下降
 3.728%，但 full/两个 block 的 sample stability 均未全部通过；只有 1/3
 预识别 target 被确认恶化，故冻结分类为 `mixed_or_inconclusive`。因此
-E.9 matched sample-tail mitigation 已预注册但尚未运行；完整 Gate E、A2/A4
-和在线成功率评测仍未启动。未运行的实验不会填入虚构结果。
+E.9a-v1 在第一条 initial probe 前因旧 `1..5` flow 硬编码失效，完成 0 个
+training objective；该 invalid engineering run 已冻结。E.9a-v2 保持科学
+协议不变，使用修复后的任意正整数 flow evaluator 和全新输出目录，已预注册但
+尚未运行。完整 Gate E、A2/A4 和在线成功率评测仍未启动。未运行的实验不会
+填入虚构结果。
 
 当前 pinned Fast-WAM 代码与 release 权重带来四个结论边界：
 
@@ -85,7 +88,7 @@ E.9 matched sample-tail mitigation 已预注册但尚未运行；完整 Gate E�
 - [思考点三 Gate E.6 结果](docs/thought3_phase_e6_report.md)：两轨迹完整结果、唯一失败门槛、逐样本对照和工件哈希。
 - [思考点三 Gate E.7 协议与结果](docs/thought3_phase_e7_protocol.md)、[结果报告](docs/thought3_phase_e7_report.md)：只读 checkpoint trajectory、primary/continuity 分离、冻结分类与无候选结论。
 - [思考点三 Gate E.8 协议与结果](docs/thought3_phase_e8_protocol.md)、[结果报告](docs/thought3_phase_e8_report.md)：A0 step 100/200、64 个全新 flow、双 32-flow block、配对 bootstrap，以及 mixed 诊断结论。
-- [思考点三 Gate E.9 预注册](docs/thought3_phase_e9_protocol.md)：raw/normalized × A0/A1 单变量配方、固定权重、FWER tail Gate，以及 train 排序 17–28 的一次性复验边界。
+- [思考点三 Gate E.9a-v1 失败报告](docs/thought3_phase_e9_v1_failure_report.md)、[E.9a-v2 预注册](docs/thought3_phase_e9_v2_protocol.md)：v1 零 objective evaluator 失效证据；v2 的 raw/normalized × A0/A1 单变量配方、`75..106` 回归和全新输出边界。
 - [思考点三设计与数据协议](docs/thought3_design.md)、[训练手册](docs/thought3_training.md)、[在线评测手册](docs/thought3_evaluation.md)。
 - [思考点三最终目标完成度](docs/thought3_completion_audit.md)：已证明、未证明与通往正式 OOD 对照的依赖链。
 - [工程亮点、难点与阻碍台账](docs/engineering_highlights.md)：工程复盘、未解决风险和简历素材。
@@ -450,9 +453,11 @@ flow 上 A0 在 step 50/100 稳定、150/200 不稳定，但 pooled mean 继续�
 [Gate E.6 报告](docs/thought3_phase_e6_report.md)与
 [Gate E.7 报告](docs/thought3_phase_e7_report.md)、
 [Gate E.8 协议](docs/thought3_phase_e8_protocol.md)和
-[Gate E.8 结果](docs/thought3_phase_e8_report.md)。下一步 E.9a 的单变量
-raw/normalized 四轨协议已冻结，但没有运行结果，见
-[Gate E.9 预注册](docs/thought3_phase_e9_protocol.md)。
+[Gate E.8 结果](docs/thought3_phase_e8_report.md)。E.9a-v1 在任何训练
+objective 前因 evaluator 硬编码失效，不能作为结果；下一步是只运行保持同一
+科学设计的 E.9a-v2，见
+[v1 失败报告](docs/thought3_phase_e9_v1_failure_report.md)与
+[E.9a-v2 预注册](docs/thought3_phase_e9_v2_protocol.md)。
 
 ## 14. 查看失败视频
 
@@ -490,18 +495,21 @@ fastwam-ood review-failures --experiment-dir outputs/ood_full
 3. 保留 E.7 primary 与 continuity 的证据等级，不事后合并或挑选 step 100/200；
 4. 冻结 E.8 mixed 结果：不继续在同八条 sample 上堆 flow、改 target 或降低
    `2/3`/`6-of-8` 门槛；
-5. 已预注册 matched raw/normalized × A0/A1 单变量 sample-tail mitigation；
-   E.9a 尚未运行；
-6. train 排序 17–28 已按身份与新 flow namespace 冻结，只能在 E.9a 产生
+5. 冻结 E.9a-v1 的 invalid engineering run：0 training objective、0
+   optimizer update、无科学结果，不 resume、不覆盖；
+6. E.9a-v2 已预注册 matched raw/normalized × A0/A1 单变量
+   sample-tail mitigation，并增加 `75..106` evaluator 回归；尚未真实运行；
+7. train 排序 17–28 已按身份与新 flow namespace 冻结，只能在 E.9a-v2 产生
    candidate 后做一次性 demonstration-level 独立复验；
-7. 只有形成并独立验证稳定配方后才冻结新的完整 28-train/4-development Gate E；
-8. 完整 Gate E 通过后才训练 A2/A4，并实现真实 online no-cache evaluator；
-9. Phase F 技术 pilot 后冻结分析协议，再解锁正式 ID/OOD 六组对照。
+8. 只有形成并独立验证稳定配方后才冻结新的完整 28-train/4-development Gate E；
+9. 完整 Gate E 通过后才训练 A2/A4，并实现真实 online no-cache evaluator；
+10. Phase F 技术 pilot 后冻结分析协议，再解锁正式 ID/OOD 六组对照。
 
 最近结果、停止条件和完整依赖链见
 [Gate E.8 结果](docs/thought3_phase_e8_report.md)、
 [Gate E.8 协议](docs/thought3_phase_e8_protocol.md)、
-[Gate E.9 预注册](docs/thought3_phase_e9_protocol.md)、
+[Gate E.9a-v1 失败报告](docs/thought3_phase_e9_v1_failure_report.md)、
+[Gate E.9a-v2 预注册](docs/thought3_phase_e9_v2_protocol.md)、
 [Gate E.7 结果](docs/thought3_phase_e7_report.md)、
 [Gate E.7 协议](docs/thought3_phase_e7_protocol.md)、
 [Gate E.6 结果](docs/thought3_phase_e6_report.md)、

@@ -592,6 +592,7 @@ def test_objective_aggregation_api_has_no_outcome_input() -> None:
         "progress",
         "protocol",
         "resume",
+        "sample_loss_weights",
     }
     assert not parameters & {
         "development",

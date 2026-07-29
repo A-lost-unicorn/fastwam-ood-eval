@@ -24,6 +24,7 @@ THOUGHT3_COMMANDS = (
     "thought3-replicate-fresh-cohort",
     "thought3-diagnose-checkpoint-trajectory",
     "thought3-replicate-a0-flow-variance",
+    "thought3-diagnose-sample-tail-mitigation",
     "thought3-plan-cache",
     "thought3-build-cache",
     "thought3-validate-cache",

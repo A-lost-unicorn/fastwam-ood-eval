@@ -468,6 +468,15 @@ def dispatch(args: Any) -> int:
             cfg,
             resume=args.resume,
         )
+    elif args.command == "thought3-diagnose-sample-tail-mitigation":
+        from fastwam_ood_eval.thought3.phase_e9_sample_tail_mitigation import (
+            run_phase_e9_sample_tail_mitigation,
+        )
+
+        result = run_phase_e9_sample_tail_mitigation(
+            cfg,
+            resume=args.resume,
+        )
     elif args.command == "thought3-plan-cache":
         from fastwam_ood_eval.thought3.cache_planner import write_cache_plan
 

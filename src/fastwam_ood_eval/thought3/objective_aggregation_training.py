@@ -101,6 +101,11 @@ class ObjectiveAggregationProtocol:
     checkpoint_marker_key: str
     flow_slot_offset: int
     expected_zero_weight_slots: tuple[tuple[int, int, int], ...]
+    heldout_flow_steps: tuple[int, ...] = (
+        OBJECTIVE_AGGREGATION_HELDOUT_FLOW_STEPS
+    )
+    gradient_reduction: str = "arithmetic_mean"
+    sample_loss_weights_sha256: str | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -118,6 +123,34 @@ class ObjectiveAggregationProtocol:
                     + row[1]
                 )
                 for row in self.expected_zero_weight_slots
+            )
+            or not self.heldout_flow_steps
+            or len(set(self.heldout_flow_steps))
+            != len(self.heldout_flow_steps)
+            or any(
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or value < 1
+                for value in self.heldout_flow_steps
+            )
+            or self.gradient_reduction
+            not in {
+                "arithmetic_mean",
+                "fixed_sample_normalized_mean",
+            }
+            or (
+                self.gradient_reduction == "arithmetic_mean"
+                and self.sample_loss_weights_sha256 is not None
+            )
+            or (
+                self.gradient_reduction
+                == "fixed_sample_normalized_mean"
+                and (
+                    not isinstance(
+                        self.sample_loss_weights_sha256, str
+                    )
+                    or len(self.sample_loss_weights_sha256) != 64
+                )
             )
         ):
             raise ValueError("invalid objective-aggregation protocol")
@@ -305,23 +338,63 @@ def objective_aggregation_metric_rows_sha256(
     ).hexdigest()
 
 
+def sample_loss_weights_sha256(
+    sample_ids: Sequence[str],
+    sample_loss_weights: Mapping[str, float],
+) -> str:
+    """Hash one exact, positive, unit-mean sample-weight vector."""
+
+    normalized_ids = [str(value) for value in sample_ids]
+    if (
+        len(normalized_ids) != OBJECTIVES_PER_UPDATE
+        or len(set(normalized_ids)) != OBJECTIVES_PER_UPDATE
+        or set(sample_loss_weights) != set(normalized_ids)
+    ):
+        raise ObjectiveAggregationTrainingError(
+            "sample-loss weights require exactly the ordered 8-sample cohort"
+        )
+    values = [float(sample_loss_weights[value]) for value in normalized_ids]
+    if (
+        any(not math.isfinite(value) or value <= 0 for value in values)
+        or not math.isclose(
+            sum(values),
+            float(OBJECTIVES_PER_UPDATE),
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        )
+    ):
+        raise ObjectiveAggregationTrainingError(
+            "sample-loss weights must be finite, positive, and sum to 8"
+        )
+    payload = "\n".join(
+        "\0".join((sample_id, repr(weight)))
+        for sample_id, weight in zip(normalized_ids, values)
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def _backward_mean_objective(
     loss: Tensor,
     *,
     accumulation_factor: int,
+    sample_weight: float = 1.0,
 ) -> None:
-    """Backpropagate one contribution to an arithmetic-mean objective."""
+    """Backpropagate one contribution to a fixed weighted mean."""
 
     if (
         loss.ndim != 0
         or isinstance(accumulation_factor, bool)
         or not isinstance(accumulation_factor, int)
         or accumulation_factor <= 0
+        or isinstance(sample_weight, bool)
+        or not math.isfinite(float(sample_weight))
+        or float(sample_weight) <= 0
     ):
         raise ObjectiveAggregationTrainingError(
-            "mean-objective backward requires a scalar loss and positive integer factor"
+            "mean-objective backward requires a scalar loss, positive "
+            "integer factor, and positive finite sample weight"
         )
-    (loss / accumulation_factor).backward()
+    (loss * float(sample_weight) / accumulation_factor).backward()
 
 
 def _objective_rows_for_resume(
@@ -425,7 +498,8 @@ def _validate_resume_metric_provenance(
         or len(objective_rows) != expected_objectives
         or len(update_rows) != global_step
         or extra.get(protocol.checkpoint_marker_key) is not True
-        or extra.get("gradient_reduction") != "arithmetic_mean"
+        or extra.get("gradient_reduction")
+        != protocol.gradient_reduction
         or int(extra.get("objectives_per_update", -1))
         != OBJECTIVES_PER_UPDATE
         or int(extra.get("objective_count", -1))
@@ -433,7 +507,9 @@ def _validate_resume_metric_provenance(
         or int(extra.get("training_flow_slot_offset", -1))
         != protocol.flow_slot_offset
         or list(extra.get("heldout_flow_steps", []))
-        != list(OBJECTIVE_AGGREGATION_HELDOUT_FLOW_STEPS)
+        != list(protocol.heldout_flow_steps)
+        or extra.get("sample_loss_weights_sha256")
+        != protocol.sample_loss_weights_sha256
         or extra.get("identity_schedule_sha256")
         != identity_schedule_sha256
         or extra.get("train_flow_schedule_sha256")
@@ -464,6 +540,7 @@ def run_full_cohort_objective_aggregation(
     protocol: ObjectiveAggregationProtocol = (
         PHASE_E5_OBJECTIVE_AGGREGATION_PROTOCOL
     ),
+    sample_loss_weights: Mapping[str, float] | None = None,
 ) -> dict[str, Any]:
     """Train one frozen track with eight mean-aggregated objectives/update."""
 
@@ -509,7 +586,10 @@ def run_full_cohort_objective_aggregation(
         {
             "gradient_accumulation_steps": OBJECTIVES_PER_UPDATE,
             "learning_rate": cfg.training.learning_rate,
-            "loss_reduction": "arithmetic_mean",
+            "loss_reduction": protocol.gradient_reduction,
+            "sample_loss_weights_sha256": (
+                protocol.sample_loss_weights_sha256
+            ),
             "started_at_unix_s": time.time(),
             "status": "running",
             "variant": cfg.variant,
@@ -530,6 +610,35 @@ def run_full_cohort_objective_aggregation(
             "source-filtered train samples"
         )
     sample_ids = [sample.base_sample_id for sample in samples]
+    if protocol.gradient_reduction == "arithmetic_mean":
+        if sample_loss_weights is not None:
+            raise ObjectiveAggregationTrainingError(
+                f"{protocol.gate_label} arithmetic mean forbids "
+                "sample-loss weights"
+            )
+        normalized_sample_weights = {
+            sample_id: 1.0 for sample_id in sample_ids
+        }
+    else:
+        if sample_loss_weights is None:
+            raise ObjectiveAggregationTrainingError(
+                f"{protocol.gate_label} normalized mean requires "
+                "sample-loss weights"
+            )
+        normalized_sample_weights = {
+            str(key): float(value)
+            for key, value in sample_loss_weights.items()
+        }
+        if (
+            sample_loss_weights_sha256(
+                sample_ids,
+                normalized_sample_weights,
+            )
+            != protocol.sample_loss_weights_sha256
+        ):
+            raise ObjectiveAggregationTrainingError(
+                f"{protocol.gate_label} sample-loss weight identity changed"
+            )
     identity_schedule_sha256 = (
         objective_aggregation_identity_schedule_sha256(
             sample_ids,
@@ -628,11 +737,13 @@ def run_full_cohort_objective_aggregation(
             != protocol.flow_slot_offset
             or int(state["objectives_per_update"])
             != OBJECTIVES_PER_UPDATE
-            or state["loss_reduction"] != "arithmetic_mean"
+            or state["loss_reduction"] != protocol.gradient_reduction
             or state["identity_schedule_sha256"]
             != identity_schedule_sha256
             or list(state["heldout_flow_steps"])
-            != list(OBJECTIVE_AGGREGATION_HELDOUT_FLOW_STEPS)
+            != list(protocol.heldout_flow_steps)
+            or state.get("sample_loss_weights_sha256")
+            != protocol.sample_loss_weights_sha256
         ):
             raise ObjectiveAggregationTrainingError(
                 f"{protocol.gate_label} training-state provenance mismatch"
@@ -650,7 +761,7 @@ def run_full_cohort_objective_aggregation(
             adapter,
             injector,
             samples,
-            flow_steps=OBJECTIVE_AGGREGATION_HELDOUT_FLOW_STEPS,
+            flow_steps=protocol.heldout_flow_steps,
             device=device,
         )
         if (
@@ -675,14 +786,22 @@ def run_full_cohort_objective_aggregation(
             "config_fingerprint": cfg.fingerprint,
             "frozen_parameter_sha256": frozen_parameter_sha256,
             "heldout_flow_steps": list(
-                OBJECTIVE_AGGREGATION_HELDOUT_FLOW_STEPS
+                protocol.heldout_flow_steps
             ),
             "identity_schedule_sha256": identity_schedule_sha256,
             "initial_adapter_sha256": initial_adapter_sha256,
             "initial_probe": initial_probe,
-            "loss_reduction": "arithmetic_mean",
+            "loss_reduction": protocol.gradient_reduction,
             "objectives_per_update": OBJECTIVES_PER_UPDATE,
             "sample_ids": sample_ids,
+            "sample_loss_weights": (
+                normalized_sample_weights
+                if protocol.sample_loss_weights_sha256 is not None
+                else None
+            ),
+            "sample_loss_weights_sha256": (
+                protocol.sample_loss_weights_sha256
+            ),
             "split_fingerprint": prepared.split_fingerprint,
             "training_flow_slot_offset": (
                 protocol.flow_slot_offset
@@ -801,6 +920,9 @@ def run_full_cohort_objective_aggregation(
                         f"{protocol.gate_label} action loss is NaN/Inf"
                     )
                 raw_loss = float(loss.detach().float().cpu())
+                sample_loss_weight = normalized_sample_weights[
+                    sample.base_sample_id
+                ]
                 diagnostics = adapter.last_diagnostics
                 if (
                     diagnostics is None
@@ -813,6 +935,7 @@ def run_full_cohort_objective_aggregation(
                 _backward_mean_objective(
                     loss,
                     accumulation_factor=OBJECTIVES_PER_UPDATE,
+                    sample_weight=sample_loss_weight,
                 )
                 if adapter.gate.grad is None:
                     raise ObjectiveAggregationTrainingError(
@@ -864,16 +987,21 @@ def run_full_cohort_objective_aggregation(
                         diagnostics.gated_delta_norm
                         / diagnostics.action_hidden_norm
                     ),
-                    "gradient_reduction": "arithmetic_mean",
+                    "gradient_reduction": (
+                        protocol.gradient_reduction
+                    ),
                     "learning_rate": cfg.training.learning_rate,
                     "mean_scaled_backward_loss": (
-                        raw_loss / OBJECTIVES_PER_UPDATE
+                        raw_loss
+                        * sample_loss_weight
+                        / OBJECTIVES_PER_UPDATE
                     ),
                     "micro_index": micro_index,
                     "nan_or_inf": False,
                     "objective_index": objective_index,
                     "optimizer_update": optimizer_update,
                     "sample_cursor": sample_cursor,
+                    "sample_loss_weight": sample_loss_weight,
                     "timestep": timestep,
                     "training_flow_slot": flow_slot,
                     "variant": cfg.variant,
@@ -1022,9 +1150,16 @@ def run_full_cohort_objective_aggregation(
                 "gate_raw_after_update": gate_after,
                 "gate_raw_before_update": gate_before,
                 "gradient_groups": groups,
-                "gradient_reduction": "arithmetic_mean",
+                "gradient_reduction": protocol.gradient_reduction,
                 "learning_rate": cfg.training.learning_rate,
                 "mean_action_loss": statistics.fmean(raw_losses),
+                "mean_weighted_action_loss": statistics.fmean(
+                    raw_loss
+                    * normalized_sample_weights[
+                        sample.base_sample_id
+                    ]
+                    for raw_loss, sample in zip(raw_losses, samples)
+                ),
                 "nan_or_inf": False,
                 "objective_count": OBJECTIVES_PER_UPDATE,
                 "objective_index_end": sample_cursor,
@@ -1086,9 +1221,11 @@ def run_full_cohort_objective_aggregation(
                         train_sample_count=len(samples),
                         extra={
                             protocol.checkpoint_marker_key: True,
-                            "gradient_reduction": "arithmetic_mean",
+                            "gradient_reduction": (
+                                protocol.gradient_reduction
+                            ),
                             "heldout_flow_steps": list(
-                                OBJECTIVE_AGGREGATION_HELDOUT_FLOW_STEPS
+                                protocol.heldout_flow_steps
                             ),
                             "identity_schedule_sha256": (
                                 identity_schedule_sha256
@@ -1103,6 +1240,9 @@ def run_full_cohort_objective_aggregation(
                             ),
                             "objectives_per_update": (
                                 OBJECTIVES_PER_UPDATE
+                            ),
+                            "sample_loss_weights_sha256": (
+                                protocol.sample_loss_weights_sha256
                             ),
                             "subset_sample_count": len(samples),
                             "train_flow_schedule_sha256": (
@@ -1177,7 +1317,7 @@ def run_full_cohort_objective_aggregation(
                 adapter,
                 injector,
                 samples,
-                flow_steps=OBJECTIVE_AGGREGATION_HELDOUT_FLOW_STEPS,
+                flow_steps=protocol.heldout_flow_steps,
                 device=device,
             )
             final_probe = {
@@ -1248,9 +1388,9 @@ def run_full_cohort_objective_aggregation(
             "first_projector_nonzero_gradient_update": (
                 first_projector_update
             ),
-            "gradient_reduction": "arithmetic_mean",
+            "gradient_reduction": protocol.gradient_reduction,
             "heldout_flow_steps": list(
-                OBJECTIVE_AGGREGATION_HELDOUT_FLOW_STEPS
+                protocol.heldout_flow_steps
             ),
             "identity_schedule_sha256": identity_schedule_sha256,
             "initial_adapter_sha256": initial_adapter_sha256,
@@ -1271,6 +1411,14 @@ def run_full_cohort_objective_aggregation(
             "resumed_from_update": start_update,
             "sample_count": len(samples),
             "sample_ids": sample_ids,
+            "sample_loss_weights": (
+                normalized_sample_weights
+                if protocol.sample_loss_weights_sha256 is not None
+                else None
+            ),
+            "sample_loss_weights_sha256": (
+                protocol.sample_loss_weights_sha256
+            ),
             "status": "complete",
             "train_flow_schedule_sha256": schedule_sha256,
             "train_flow_slot_end": objective_aggregation_flow_slot(

@@ -1,6 +1,6 @@
 # Thought3 训练与恢复手册
 
-状态：Phase D 已通过；Gate E.1–E.8 已完成，完整 Gate E 尚未通过
+状态：Phase D 已通过；Gate E.1–E.8 已完成；E.9a 已预注册未运行；完整 Gate E 尚未通过
 更新时间：2026-07-29
 
 ## 1. 当前能做什么
@@ -517,3 +517,32 @@ Gate。E.8 只增加 flow-level 精度，不增加 demonstration 数；任何候
 完整污染披露、target ID、RNG SHA、zero-weight 位置、分类和命令见
 [协议](thought3_phase_e8_protocol.md)与
 [结果报告](thought3_phase_e8_report.md)。
+
+### 11.10 Gate E.9 matched sample-tail mitigation
+
+E.9a 已于 2026-07-29 完成预注册和 CPU/no-model 验证，**尚未运行真实 GPU
+训练**。它不选 E.7 的 step 100，也不降低 E.6–E.8 的原门槛。
+
+设计冻结为：
+
+- 使用原 train 排序 9–16，只开发一个 sample-scale 变量；
+- 同时运行 raw/normalized × A0/A1 四轨，避免把新 flow draw 与 weighting
+  混淆；
+- normalized 权重只由 E.8 zero-gate initial sample loss 计算，
+  `w_i=(1/L_i)/mean(1/L)`，权重和精确为 8；
+- 四轨共用 train slots `40001..41600` 和 held-out flows `75..106`；
+- 每轨 200 updates、1,600 train objectives、initial/final 各 256 held-out
+  objectives；
+- 科学判定固定为 step 200，并保留 A0 `>=0%+6/8`、A1
+  `>=10%+6/8`、A1-vs-A0 `>=10%+6/8`；
+- 增加 32-comparison FWER tail Gate，normalized A0/A1 都必须 0 confirmed
+  harm；
+- 分类区分“支持 tail mitigation”“稳定但无 tail contrast”和“不支持”。
+
+train 排序 17–28 的 12 条 demonstration 仅冻结身份、cohort SHA 和
+flows `107..138`；E.9a 不解码、不训练、不 probe。只有 E.9a 产生稳定 candidate
+才允许一次性 E.9b 只读复验，且要保持 `>=9/12`、A1 10% 和 zero-confirmed-harm
+门槛。完整 28/4 Gate E、A2/A4 和 OOD rollout 继续锁定。
+
+完整权重表、RNG SHA、预算、分类、E.9b 身份与运行命令见
+[thought3_phase_e9_protocol.md](thought3_phase_e9_protocol.md)。

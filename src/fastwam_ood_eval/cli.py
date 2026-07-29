@@ -440,6 +440,10 @@ def build_parser() -> argparse.ArgumentParser:
             "thought3-replicate-a0-flow-variance",
             "Run Gate E.8: larger-flow read-only A0 stability replication",
         ),
+        (
+            "thought3-diagnose-sample-tail-mitigation",
+            "Run Gate E.9a: matched raw/normalized A0/A1 tail mitigation",
+        ),
         ("thought3-plan-cache", "Plan paired K=1/2/4 future cache shards"),
         ("thought3-build-cache", "Build this rank's future cache shards"),
         ("thought3-validate-cache", "Validate cache schema, pairing and checksums"),

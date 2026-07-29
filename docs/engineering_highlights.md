@@ -9,7 +9,7 @@
 | 项目 | 状态 | 可用证据 |
 | --- | --- | --- |
 | 配置、planner、adapter、分片、resume、聚合 | 已实现 | `src/`、`configs/`、`tests/` |
-| 自动化测试 | 已通过 | `pytest -q`：338 passed、5 warnings；覆盖阶段一/二回归与 Thought3 配置、cache、Adapter、resume、泄漏和真实 Gate 编排 |
+| 自动化测试 | 已通过 | `pytest -q`：351 passed、5 warnings；覆盖阶段一/二回归与 Thought3 配置、cache、Adapter、resume、泄漏和真实 Gate 编排 |
 | Conda 环境与激活入口 | 已配置 | `scripts/create_env.sh`、`scripts/activate_env.sh` |
 | checkpoint/stats | 已下载并人工校验 | checkpoint SHA-256 `1000437c...a49579`；stats SHA-256 `30f81ad7...68638` |
 | FastWAM 公共运行时模型 | 已下载并逐文件校验 | `scripts/download_fastwam_runtime_models.sh`；T5、VAE、tokenizer 共约 11.9 GiB |
@@ -451,6 +451,23 @@
   失败，而只有 3.555% pooled mean 变差；这量化了小 panel 波动，同时保留
   `episode_000012` 跨两个 block 的稳定 +8.881% harm，没有把它抹成纯噪声。
 
+### 3.31 把 sample-tail mitigation 隔离成单一优化变量
+
+- 避免新混淆：normalized A0/A1 之外同时保留 same-flow raw A0/A1，使新
+  action-flow draw 不会与 weighting 同时变化。
+- 固定尺度：只用 E.8 zero-gate initial loss 计算 inverse-loss weights，
+  权重和保持 8；不读取 final loss/harm、不 clipping、不按 E.9 结果再调。
+- 训练 provenance：扩展 full-cohort trainer，使 arithmetic mean 的旧协议与
+  工件保持兼容，同时为 normalized recipe 记录 weight SHA、逐 objective
+  sample weight、weighted backward loss 和 resume manifest。
+- 分层门禁：保留原 A0/A1/paired thresholds，再增加四轨 32-comparison
+  FWER confirmed-harm；稳定候选与“真正减少 raw tail”分成两种分类。
+- 一次性 holdout：在不解码的情况下冻结 train 排序 17–28 的 12 条完整身份、
+  cohort SHA、flows `107..138` 和 zero-weight 位置；只有 E.9a candidate
+  才能进行一次只读复验。
+- 当前证据：协议、配置、单卡 runner 与 no-model tests 已完成；真实四轨训练
+  尚未运行，因此不能写 loss reduction、tail mitigation 或 OOD 效果。
+
 ## 4. 简历表达素材
 
 ### 当前即可使用的版本
@@ -513,6 +530,10 @@
   和 20,000 次 FWER paired bootstrap；单卡完成 1,536 个只读 objective，
   分离出“pooled loss 改善 3.728%”与“两条 sample 确认恶化”的混合结构，
   并以 fail-closed 分类阻止事后选择 checkpoint 或降低门槛。
+- 为结果后 sample-tail 工程问题预注册四轨 matched 对照，将 inverse-initial-loss
+  weighting 与新 flow draw 解耦，并用权重/调度 SHA、逐 objective telemetry、
+  32-comparison FWER 和一次性未使用 cohort 边界防止配方与验证集反复选择；
+  当前只可表述为协议与工程实现，不可宣称 mitigation 已通过。
 
 ### 可直接使用的量化表述
 

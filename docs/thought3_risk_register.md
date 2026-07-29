@@ -1,6 +1,6 @@
 # Thought3 风险登记与停止条件
 
-状态：Phase A–D 已通过；Gate E 未通过；E.2–E.8 均已完成有效工程诊断；E.8 为 mixed 结果
+状态：Phase A–D 已通过；Gate E 未通过；E.2–E.8 已完成；E.9a 已预注册未运行
 范围：Partial-Future Adapter 的数据、cache、训练、推理、统计和阶段隔离
 
 ## 1. 等级
@@ -77,9 +77,10 @@
 | R52 | Adapter 在 200 step 内主要拟合固定 action noise/timestep，而非形成跨 flow 稳定 action objective | 高 | High | E.2 fixed-flow、E.3 held-out 与 E.4 diversified-train 对照 | E.4 将六条 held-out reduction 改善为 `0.997%–1.948%`，说明 fixed-flow 是混淆但不是全部原因；不得回用 E.2 checkpoint | E | Controlled |
 | R53 | microbatch 1 的单 action-flow objective 方差过高，使 scalar gate/Adapter 更新抵消 | 高 | High | per-step loss CV/top-share、gate-gradient sign/cancellation、final gate 与 delta/hidden | E.5 已完成 full-cohort arithmetic mean；六条 reduction 均高于 E.4，A1@3e-4 达 19.668%，但 E.5 同时多看 8× objectives，不能把增幅唯一归因于聚合 | E | Controlled / mechanism unresolved |
 | R54 | 看过三档 LR 后把 A1@3e-4 的强单条结果当作正式 LR 或 future 效果 | 高 | Critical | protocol timestamp、selected LR、fresh-cohort identity、paired A0/A1 outcome | E.5 保持 failed/null selection；E.6 显式 post-selection 并在新 cohort 复现 A1 信号，但总 Gate 因 A0 4/8 稳定性失败，full E/A2/A4/OOD 仍锁定 | E | Controlled / valid negative gate |
-| R55 | A0 mean 改善掩盖逐样本不稳定，导致仅看 pooled loss 错误放行配方 | 高 | High | per-sample ratio、intermediate checkpoint trajectory、larger-flow replication | E.8 实证该风险：step-200 pooled mean 改善 3.728%，但 full/双 block 稳定性仅 4/8、4/8、5/8；两条 sample 经 FWER 确认恶化。下一配方需 matched sample-tail mitigation | E | Open |
-| R56 | 把同一八条 sample 上增加 flow draw 错当成 demonstration-level 独立复现 | 高 | Critical | 明确 resampling unit、保留未使用 cohort、结果措辞门禁 | E.8 完成 64-flow 精度诊断但结论仍限定于同八条 sample；train 排序 17–28 未读取，继续保留为一次性 demonstration-level 独立复验 | E | Controlled |
-| R57 | `6/8` 点符号 Gate 把校正后未确认的小波动与稳定 harm 等价计数 | 高 | High | point sign、双 block、FWER paired bootstrap、material flag | E.8 step 200 有 4 条 point-worsened，但仅 2 条 confirmed；不得追溯改判旧 Gate。新协议必须同时报告 pooled、point-sign 与 confirmed-harm 门槛 | E | Open |
+| R55 | A0 mean 改善掩盖逐样本不稳定，导致仅看 pooled loss 错误放行配方 | 高 | High | per-sample ratio、intermediate checkpoint trajectory、larger-flow replication | E.9a 已预注册 raw/normalized × A0/A1 四轨、原 absolute/paired Gate 与 normalized zero-confirmed-harm Gate；尚未运行 | E | Controlled / evidence pending |
+| R56 | 把同一八条 sample 上增加 flow draw 错当成 demonstration-level 独立复现 | 高 | Critical | 明确 resampling unit、保留未使用 cohort、结果措辞门禁 | train 排序 17–28 的 12 条身份、cohort SHA 与 flows 107–138 已冻结；E.9a 明确 0 decode/train，只有 candidate 才一次性只读复验 | E | Controlled |
+| R57 | `6/8` 点符号 Gate 把校正后未确认的小波动与稳定 harm 等价计数 | 高 | High | point sign、双 block、FWER paired bootstrap、material flag | E.9a 同时保留原 6/8 与 32-comparison FWER confirmed-harm，不追溯覆盖 E.6–E.8；尚无真实结果 | E | Controlled / evidence pending |
+| R58 | 根据 E.8 的已知 tail outcome 调权或只跑 normalized 配方，造成 outcome-conditioned weight 与新 flow 混淆 | 高 | Critical | calibration field audit、weight SHA、raw same-flow controls、protocol timestamp | 权重只读取 E.8 zero-gate initial loss，不读取 final/harm；sum=8、SHA 冻结；raw/normalized 共用 slots 40001–41600 与 held-out 75–106 | E | Controlled |
 
 ## 3. 最高优先级风险详解
 
@@ -284,6 +285,17 @@ R53 已从“mitigation 未测试”更新为“聚合配方真实可用，但�
 E.5 在相同 update 数下使用 E.4 的 8 倍 objectives，无法区分 aggregation 与
 exposure。R54 则阻止把看到结果后突出的 `3e-4` 直接升级为正式 LR。
 
+E.6–E.8 随后证明 A1 信号可序贯复现，但 A0 pooled improvement 与逐样本
+harm 并存。E.9a 已冻结 raw/normalized × A0/A1 四轨单变量协议：
+
+- 不选 step 100，科学 endpoint 固定 step 200；
+- 不降低 A0/A1/paired 的原门槛；
+- normalized weights 只来自 E.8 zero-gate initial loss；
+- raw/normalized 共用新训练与 held-out schedule；
+- train 排序 17–28 identity-only 保留，E.9a 不读取。
+
+该段目前仍是 PRE-REGISTERED/NOT RUN；不得把测试通过改写成 mitigation 结果。
+
 ### Gate F：技术 pilot
 
 - [ ] 六组都执行；
@@ -347,9 +359,10 @@ exposure。R54 则阻止把看到结果后突出的 `3e-4` 直接升级为正式
 | R52 fixed-flow objective 拟合 | 已受控：E.4 证明 diversification 有改善但不足以形成 eligible LR |
 | R53 单 objective 梯度方差 | E.5 已完成真实 full-cohort mitigation；仍需 matched-objective 证据才能分离 aggregation 与 8× exposure，但该机制分离不应先于强 A1 信号复验 |
 | R54 post-selection 候选污染 | E.6 已按披露协议运行；保持 failed/null formal selection，不把复现的 A1 信号写成 future/OOD 效果 |
-| R55 A0 样本稳定性 | E.8 已确认 pooled 改善与 sample harm 并存；下一证据是预注册 matched A0/A1 sample-tail mitigation |
-| R56 flow pseudo-replication | E.8 只提供同八条 sample 的 flow-level 证据；必须保留 train 排序 17–28 做 demonstration-level 独立复验 |
-| R57 point-sign 与 confirmed harm 混淆 | 新协议分层报告 pooled mean、原 6/8 点符号和 FWER-confirmed harm，不追溯覆盖 E.6–E.8 |
+| R55 A0 样本稳定性 | E.9a 协议已冻结；下一证据是四条真实轨迹的 original Gate + confirmed-harm 分类 |
+| R56 flow pseudo-replication | 排序 17–28 已 identity-only 冻结；仅在 E.9a candidate 后一次性只读复验 |
+| R57 point-sign 与 confirmed harm 混淆 | E.9a 将同时报告原 6/8 与 FWER harm；需真实 E.9a 工件 |
+| R58 outcome-conditioned weighting | 需验证 raw/normalized same-schedule、固定 weight SHA 和 calibration provenance 全部执行通过 |
 | 3-rank cache 完整性 | 正式分布式 cache 的 union/intersection/cardinality 证明 |
 | Gate E 多样本优化 | 稳定配方下重新跑 28/4 fixed train/development gate |
 

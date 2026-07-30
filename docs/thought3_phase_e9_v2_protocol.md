@@ -1,9 +1,17 @@
-# Thought3 Gate E.9a-v2：修复后预注册
+# Thought3 Gate E.9a-v2：冻结协议与运行状态
 
-状态：**PRE-REGISTERED / NOT RUN**
+状态：**EXECUTED / COMPUTE COMPLETE / ENGINEERING INVALID**
 
 冻结日期：2026-07-29
 证据等级：`POST-RUN SEQUENTIAL ENGINEERING`
+
+> 运行后说明：四轨均完成 step 200，但 probe row 未保存 checker 要求的三个
+> RNG identity 字段，使四轨共同的
+> `heldout_rng_and_zero_weight_identity_exact` 为 false，根结果按 fail-closed
+> 规则标为 invalid。性能分类为
+> `sample_tail_mitigation_not_supported`，无 E.9b candidate。完整数字、根因和
+> 工件 SHA 见 [E.9a-v2 结果报告](thought3_phase_e9_v2_report.md)。以下设计
+> 内容保留为运行前冻结协议，不因结果改写。
 
 ## 1. 为什么需要 v2
 
@@ -119,8 +127,10 @@ runner 仍为单卡进程，只接受一个物理 GPU ID；显存已用超过 1 
 
 ## 7. 结论边界
 
-当前 v2 状态仍是 `NOT RUN`，所以没有 raw/normalized、A0/A1、tail mitigation
-或 candidate 结果。代码和回归测试通过只证明修复后的工程 contract，不证明
+在预注册 commit `694d1d0d98b11d24ca16a0c261dc2fa89e750d6a` 时，v2
+状态为 `NOT RUN`，本节是运行前结论边界。运行后的四轨 provisional metrics
+和 engineering-invalid 边界仅以
+[E.9a-v2 结果报告](thought3_phase_e9_v2_report.md)为准；它们仍不证明
 sample normalization 有效，更不证明未来 latent 改善 OOD。
 
 完整 Gate E、A2/A4、在线 latency 和 ID/OOD rollout 在 E.9a-v2 及必要的 E.9b

@@ -463,16 +463,23 @@
 - 分层门禁：保留原 A0/A1/paired thresholds，再增加四轨 32-comparison
   FWER confirmed-harm；稳定候选与“真正减少 raw tail”分成两种分类。
 - 一次性 holdout：在不解码的情况下冻结 train 排序 17–28 的 12 条完整身份、
-  cohort SHA、flows `107..138` 和 zero-weight 位置；只有 E.9a-v2 candidate
-  才能进行一次只读复验。
+  cohort SHA、flows `107..138` 和 zero-weight 位置；v2 没有 candidate，
+  所以该 cohort 保持未消费且 E.9b 不解锁。
 - 失败隔离：E.9a-v1 暴露共用 evaluator 的 `1..5` 硬编码，在 raw/A0
   initial probe 前以 0 objective/0 update 停止；五个工件 SHA 与 frozen
   backbone 不变已归档，v1 runner 永久拒绝 resume。
 - 修复验证：v2 将 aggregator/evaluator/outcome 改成协议显式正整数 flow 集，
   对完整 `75..106` 的 256-objective grid 做回归；invocation-scoped wrapper
   令 initial-probe/setup 异常原子落盘为 `failed`，不再残留假 `running`。
-- 当前证据：v2 协议、配置、单卡 runner 与 CPU/no-model tests 已完成；真实
-  四轨训练尚未运行，因此不能写 loss reduction、tail mitigation 或 OOD 效果。
+- 真实执行：单卡 88.60 分钟完成四轨 800 updates、6,400 train objectives、
+  2,048 held-out objectives 和 16 个 checkpoint。raw A0/A1 reduction 为
+  4.175%/12.994%，normalized 为 2.983%/11.010%；A0 confirmed harm
+  `2→0`，但 normalized paired gain 只有 8.274%，未达 10%。
+- 二次工程卡点：probe writer 没有保存 checker 强制要求的三个 RNG identity
+  字段，使四轨唯一共同 execution check false。根 Gate 正确 fail closed，
+  77 个工件和 SHA 已冻结；下一步只读 audit，不重训、不覆盖。
+- 结论边界：只能写 provisional tail/mean trade-off 和 provenance 缺陷定位；
+  不能写 mitigation 成功、E.9b candidate、future 因果增益或 OOD 效果。
 
 ## 4. 简历表达素材
 
@@ -480,6 +487,9 @@
 
 - 搭建 Fast-WAM 在 LIBERO/LIBERO-Plus 上的配置驱动 OOD 评测框架，以 adapter 隔离同名仿真 backend，并支持单卡调试与 episode-level 多 GPU 推理。
 - 设计确定性 job manifest、哈希分片、逐 episode JSONL 落盘与断点续跑机制，保证大规模机器人 rollout 可复现、可审计、可恢复。
+- 设计并执行 raw/normalized × A0/A1 的 matched Adapter 诊断，完成 6,400
+  training 与 2,048 held-out objectives；通过 fail-closed 审计定位 probe
+  writer/checker RNG provenance contract 缺陷，并冻结无覆盖的只读恢复边界。
 - 将 Clean 多 seed 与 LIBERO-Plus 预生成 task-instance 协议显式分离，通过配置门禁阻止每变体重复采样造成的数量级计算浪费。
 - 建立相同 checkpoint/配对 seed 的鲁棒性评测与统计链路，覆盖成功率下降、bootstrap CI、失败分类和跨策略配方一致性约束。
 - 在 3 张 GPU 上完成 7,571 个真实 rollout 和 2,399,314 个 action step，

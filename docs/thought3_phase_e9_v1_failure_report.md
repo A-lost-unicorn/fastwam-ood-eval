@@ -63,5 +63,6 @@ Gate E.3 multiflow probe requires flow steps 1..5
   身份、统计门槛和 E.9b reserve 不变。
 - 完整 Gate E、A2/A4 和 ID/OOD rollout 继续锁定。
 
-修复后的正式边界与命令见
-[E.9a-v2 协议](thought3_phase_e9_v2_protocol.md)。
+修复后的冻结边界与实际运行状态见
+[E.9a-v2 协议](thought3_phase_e9_v2_protocol.md)和
+[E.9a-v2 结果报告](thought3_phase_e9_v2_report.md)。

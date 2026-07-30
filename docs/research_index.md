@@ -1,6 +1,6 @@
 # 研究总控：Fast-WAM 在 OOD 环境中真的不需要未来想象吗？
 
-更新日期：2026-07-29
+更新日期：2026-07-30
 
 本文是项目的研究入口与证据总账。详细命令、协议和实现分别链接到各阶段手册；这里只回答四件事：当前做到哪里、哪些数字可以使用、阶段之间如何隔离、下一步是什么。
 
@@ -25,7 +25,7 @@
 | 阶段二正式抽样 | outcome-blind planner、anchor、exact-ratification 与 formal gate 已实现 | 200 Clean + 532 OOD 已 exact-ratify 并全部运行 | **完成**。只认证 Phase 2 future 指标前 job ID 不变；不冒充阶段一 outcome 前 preregistration |
 | 阶段二统计协议 | episode→task 分层、task bootstrap、首 probe/outcome gate 已实现 | 10,000 次 suite-stratified task bootstrap；730/732 outcome match | **post-run analysis 完成，非 preregistered confirmatory**。DRAFT 未在正式指标前冻结；人工 endpoint 待完成 |
 | 阶段二 B：action-conditioned future consistency | 严格门禁、schema、runner、测试已实现 | CPU/mock 与门禁测试通过 | **阻塞**。官方 release 为 `action_conditioned=false`，且没有可信匹配 checkpoint |
-| 阶段三：Future-to-Action Adapter | Phase A/B/C/D 完成；E/E.1–E.8 均已真实执行；E.9a-v1 invalid，v2 已预注册未运行 | v1 在 raw/A0 initial probe 前被旧 `1..5` flow 硬编码拒绝：0 training objective、0 optimizer update、无结果；v2 冻结同一 `75..106` 科学设计并增加完整 256-objective 回归 | **E.9a-v1 仅为工程失败；E.9a-v2 为 PRE-REGISTERED/NOT RUN**。不得把 v1 写成负结果，不得选 step 100、扩 A2/A4 或启动 ID/OOD |
+| 阶段三：Future-to-Action Adapter | Phase A/B/C/D、E.1–E.8 完成；E.9a-v1/v2 均 engineering-invalid | v2 四轨完成 800 updates、6,400 train + 2,048 held-out objectives；normalization 将 A0 confirmed harm `2→0`，但 normalized A1-vs-A0 仅 `8.274%<10%`；probe 缺 RNG identity telemetry | **v2 compute complete，但根 Gate invalid，provisional 分类 `sample_tail_mitigation_not_supported`，无 E.9b candidate**。下一步仅只读 artifact audit，不重训、不扩 A2/A4/OOD |
 
 因此，“阶段一已经完成”的准确说法是：**阶段一工程、正式全量计算、聚合与
 完整性审计均已完成；失败机制人工 taxonomy 尚未完成，但不阻塞主成功率结论。**
@@ -139,7 +139,7 @@ outcome JSONL 前使用 `frozen_before_source_outcomes`；现有 v2 则走更窄
 | 阶段三 Gate E.6 | 新 cohort 双轨共 400 updates、3,200 train objectives、160 held-out objectives；总耗时 43.89 分钟；全部 execution/paired/frozen checks 通过 | A1 下降 14.842%、7/8 且相对 A0 final mean 低 13.815%；A0 仅 4/8 不变差，故为有效负 Gate，但 A1 工程信号得到序贯复现 |
 | 阶段三 Gate E.7 | 冻结 8 个既有 checkpoint、primary flow `6..10`、continuity flow `1..5`、800 个只读 forward objective；0 backward/optimizer/新训练；13.98 分钟 | Primary A0 50/100 通过、150/200 因 5/8 失败；step-200 mean 仍比 step 50 低 5.651%，故分类为 `not_supported_no_material_late_degradation`；A1 信号增强但无 joint candidate |
 | 阶段三 Gate E.8 | A0 step 100/200；全新 flow `11..74`，双 32-flow block；1,536 forward；20k paired bootstrap + 20k five-flow sensitivity；0 backward/optimizer/训练；18.51 分钟 | 工程 Gate 通过；step 100 三 panel 全过，step 200 pooled reduction 为 3.472%/4.047%/3.728%，但稳定性为 4/8、5/8、4/8；仅 1/3 target 确认恶化，另有 1 条非 target 确认恶化，故为 `mixed_or_inconclusive` |
-| 阶段三 Gate E.9a-v1/v2 | v1 归档 SHA 冻结；v2 维持 raw/normalized × A0/A1、固定 inverse-initial-loss 权重、train flow `40001..41600`、held-out `75..106`；train 排序 17–28 身份冻结 | v1 为 **INVALID / 0 objective**；v2 为 **PRE-REGISTERED / NOT RUN**。仍没有真实 loss、tail 或 candidate 结果，完整 Gate E、A2/A4、OOD 继续锁定 |
+| 阶段三 Gate E.9a-v1/v2 | v1 为 0-objective invalid；v2 四轨各完成 200 updates/1,600 objectives，held-out `75..106`，88.60 分钟 | v2 raw A0/A1 reduction `4.175%/12.994%`，normalized `2.983%/11.010%`；tail harm `2/0→0/0`，但 normalized paired `8.274%<10%`。RNG identity 字段未落盘使 engineering Gate invalid；无 E.9b candidate |
 
 20-step pilot 的 episode-weighted Clean→OOD 描述值为：latent L1
 `0.1512→0.2002`、cosine distance `0.1168→0.1942`、motion-direction cosine
@@ -197,7 +197,8 @@ OOD 一致性下降假设”，不能进入论文结论表。
   [thought3_phase_e8_report.md](thought3_phase_e8_report.md)
 - 阶段三 Gate E.9a-v1 失败证据与 v2 matched sample-tail mitigation：
   [thought3_phase_e9_v1_failure_report.md](thought3_phase_e9_v1_failure_report.md)、
-  [thought3_phase_e9_v2_protocol.md](thought3_phase_e9_v2_protocol.md)
+  [thought3_phase_e9_v2_protocol.md](thought3_phase_e9_v2_protocol.md)、
+  [thought3_phase_e9_v2_report.md](thought3_phase_e9_v2_report.md)
 - 阶段三数据/训练/评测：[thought3_data_protocol.md](thought3_data_protocol.md)、[thought3_training.md](thought3_training.md)、[thought3_evaluation.md](thought3_evaluation.md)
 - 阶段三分析 DRAFT 与限制：[thought3_analysis_protocol_DRAFT.md](thought3_analysis_protocol_DRAFT.md)、[thought3_limitations.md](thought3_limitations.md)
 - 阶段三旧版路线摘要：[thought3_adapter_plan.md](thought3_adapter_plan.md)
@@ -223,19 +224,20 @@ OOD 一致性下降假设”，不能进入论文结论表。
    方差或普遍 tail risk。
 7. E.9a-v1 已因 evaluator 复用错误冻结为 invalid engineering run：0
    training objective、0 optimizer update、无科学结果，禁止 resume/覆盖。
-8. E.9a-v2 已预注册为 raw/normalized × A0/A1 四轨单变量实验，使用全新
-   输出目录并对 `75..106` 做完整回归；尚未运行，旧门槛与 step 200 endpoint
-   均冻结。
+8. E.9a-v2 四轨计算完整，但 probe row 未落盘 RNG identity，使根 Gate
+   engineering-invalid；冻结 provisional 分类
+   `sample_tail_mitigation_not_supported`，不得把 tail harm `2→0` 单独写成成功。
 9. train 排序 17–28 的 12 条身份、cohort SHA 和 flow `107..138` 已冻结；
-   E.9a-v2 没有 candidate 时不得解码，产生 candidate 后也只能一次性只读复验。
-10. 只有后续产生稳定候选配方，并在未使用 cohort 复验及新的完整 28/4 Gate E
+   当前 `independent_replication_candidate=false`，E.9b 不解锁。
+10. 下一步只预注册现有 v2 工件的只读 audit；不训练、不增加 flow、不覆盖 Run ID。
+11. 只有后续产生稳定候选配方，并在未使用 cohort 复验及新的完整 28/4 Gate E
    中通过 train/dev、resume、frozen 与尺度门槛后，才允许实现和训练 A2/A4。
-11. 当前不得覆盖 E.5/E.6/E.7/E.8/E.9a-v1 Run ID、事后放宽门槛、启动完整 Gate E、A2/A4、
+12. 当前不得覆盖 E.5/E.6/E.7/E.8/E.9a-v1/v2 Run ID、事后放宽门槛、启动完整 Gate E、A2/A4、
    Phase F 或 ID/OOD rollout。
-12. 在不按自动 metric/outcome 挑案例的前提下，冻结正式 human-review budget、
+13. 在不按自动 metric/outcome 挑案例的前提下，冻结正式 human-review budget、
    seed 和每 job 至多一个 probe；至少两名 reviewer 独立标注并保留 agreement/
    adjudication。
-13. 人工 endpoint 只回答 goal progress、physical plausibility、局部 action
+14. 人工 endpoint 只回答 goal progress、physical plausibility、局部 action
    execution 和 future–actual agreement；不把它升级成 future-to-action 因果。
-14. 阶段三 OOD 结果不用于边训练边选择 K，
+15. 阶段三 OOD 结果不用于边训练边选择 K，
    Phase F 后先冻结分析协议再解锁正式 cohort。

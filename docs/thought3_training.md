@@ -1,7 +1,7 @@
 # Thought3 训练与恢复手册
 
-状态：Phase D 已通过；Gate E.1–E.8 已完成；E.9a-v1 invalid、v2 已预注册未运行；完整 Gate E 尚未通过
-更新时间：2026-07-29
+状态：Phase D 已通过；Gate E.1–E.8 已完成；E.9a-v1/v2 engineering-invalid；完整 Gate E 尚未通过
+更新时间：2026-07-30
 
 ## 1. 当前能做什么
 
@@ -526,9 +526,10 @@ training objective、0 次 optimizer update、无 checkpoint/result，属于
 invalid engineering run，不是负科学结果，且禁止 resume/覆盖。
 
 E.9a-v2 只把 evaluator 改为接受协议显式冻结的任意正整数 flow 集，并补齐
-initial-probe 失败状态落盘；使用全新 config/schema/runner/output。v2 已完成
-CPU/no-model 回归，**尚未运行真实 GPU 训练**。它不选 E.7 的 step 100，也不
-降低 E.6–E.8 的原门槛。
+initial-probe 失败状态落盘；使用全新 config/schema/runner/output。v2 四轨
+真实训练已经完成，共 800 updates、6,400 train 和 2,048 held-out
+objectives；但 probe writer 未保存 checker 要求的三个 RNG identity 字段，
+导致四轨唯一共同 execution check false，根 Gate 为 engineering-invalid。
 
 设计冻结为：
 
@@ -547,10 +548,15 @@ CPU/no-model 回归，**尚未运行真实 GPU 训练**。它不选 E.7 的 step
 - 分类区分“支持 tail mitigation”“稳定但无 tail contrast”和“不支持”。
 
 train 排序 17–28 的 12 条 demonstration 仅冻结身份、cohort SHA 和
-flows `107..138`；E.9a-v2 不解码、不训练、不 probe。只有 E.9a-v2 产生稳定 candidate
-才允许一次性 E.9b 只读复验，且要保持 `>=9/12`、A1 10% 和 zero-confirmed-harm
-门槛。完整 28/4 Gate E、A2/A4 和 OOD rollout 继续锁定。
+flows `107..138`；E.9a-v2 没有解码、训练或 probe 它们。provisional
+normalized A1-vs-A0 为 `8.274%`，低于 `10%`，因此
+`independent_replication_candidate=false`，E.9b 不解锁。完整 28/4 Gate E、
+A2/A4 和 OOD rollout 继续锁定。
 
-v1 故障证据、完整权重表、RNG SHA、预算、分类、E.9b 身份与 v2 运行命令见
+v1 故障证据、完整权重表、RNG SHA、预算、分类、工件 SHA 与 v2 结果见
 [thought3_phase_e9_v1_failure_report.md](thought3_phase_e9_v1_failure_report.md)
-与 [thought3_phase_e9_v2_protocol.md](thought3_phase_e9_v2_protocol.md)。
+、[thought3_phase_e9_v2_protocol.md](thought3_phase_e9_v2_protocol.md)
+和 [thought3_phase_e9_v2_report.md](thought3_phase_e9_v2_report.md)。
+
+禁止对 v2 使用 `--resume` 或覆盖输出。下一步只能先预注册全新输出目录的
+read-only artifact audit；不重训、不增加 flow、不读取 reserve cohort。

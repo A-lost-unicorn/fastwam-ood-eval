@@ -1,7 +1,7 @@
 # Thought3 最终目标完成度审计
 
 状态：`ACTIVE / INCOMPLETE`
-审计日期：2026-07-29
+审计日期：2026-07-30
 目标文件 SHA-256：
 `8459b07d6cf870ec6c1cf9f2d0254e61b543dd5c3532b116a0079a0c0c2ca972`
 
@@ -23,7 +23,8 @@ Gate E.6             valid failed gate; 400 updates/3,200 objectives complete
 Gate E.7             valid read-only diagnosis; primary hypothesis not supported
 Gate E.8             valid read-only diagnosis; mixed/inconclusive classification
 Gate E.9a-v1         invalid engineering run; 0 objectives/updates
-Gate E.9a-v2         preregistered; real four-track run not started
+Gate E.9a-v2         four tracks complete; invalid RNG-telemetry check
+E.9b replication     locked; no candidate
 full 28/4 Gate E     not passed
 A2/A4 real training  not started
 Phase F real pilot   not started
@@ -51,10 +52,10 @@ paper claim          unavailable
   bootstrap 完成真实诊断；step-200 pooled mean 改善 3.728%，但只有 1/3
   预识别 target 被确认恶化，另有一条非 target 确认恶化，故分类为
   `mixed_or_inconclusive`。
-- E.9a-v1 在 objective 1 前工程失效；v2 已把 raw/normalized × A0/A1、固定
-  sample weights、新 train/held-out flow、原门槛、FWER tail 分类和
-  `75..106` evaluator 回归冻结为可执行协议。这只证明设计与无模型门禁，
-  不证明 mitigation 有效。
+- E.9a-v1 在 objective 1 前工程失效；v2 四轨完成 800 updates、6,400 train
+  与 2,048 held-out objectives。normalization 将 A0 confirmed harm 从 2
+  降到 0，但 paired gain 只有 8.274% < 10%；probe 缺 RNG identity telemetry，
+  因而根 Gate invalid、无 E.9b candidate。
 
 尚无证据证明：
 
@@ -126,7 +127,7 @@ Phase D cache 只能用于训练；不得把它接入 Phase F/G 在线 policy。
 | E.7 | valid read-only diagnosis | 800 forward、0 backward/optimizer/write；primary 分类 `not_supported_no_material_late_degradation`，continuity 描述性分类相反；无 joint candidate |
 | E.8 | valid read-only diagnosis | A0 step 100/200、flows 11–74、双 32-flow block、1,536 forward、20k bootstrap + 20k five-flow sensitivity；工程通过，分类 `mixed_or_inconclusive` |
 | E.9a-v1 | invalid engineering run | raw/A0 initial probe 前被旧 `1..5` flow 硬编码拒绝；0 training objective、0 optimizer update、无 checkpoint/result；frozen SHA 未变 |
-| E.9a-v2 | preregistered / not run | generic flow evaluator、`75..106` 完整回归、initial-probe failed-status 落盘及全新输出已实现；四轨 6,400 train + 2,048 held-out objectives 预算和排序 17–28 reserve 不变；无真实结果 |
+| E.9a-v2 | compute complete / engineering invalid | 四轨 800 updates、6,400 train + 2,048 held-out objectives；raw A0/A1 reduction 4.175%/12.994%，normalized 2.983%/11.010%；tail 2/0→0/0；paired 8.274% 未过 10%；RNG identity telemetry 缺失 |
 | full E | not passed | 仍缺新的 28 train / 4 development 完整闭环 |
 
 在 full E 通过前：
@@ -194,14 +195,15 @@ Gate E.8 completed: pooled improvement + confirmed sample harm; mixed result
   ↓
 Gate E.9a-v1 invalid: evaluator rejected 75..106 before objective 1
   ↓
-Gate E.9a-v2 preregistered: raw/normalized × matched A0/A1; not run
+Gate E.9a-v2 compute complete: no candidate + telemetry-invalid
   ↓
-run E.9a-v2 once on used cohort; if candidate, read-only replicate once on
-unused train positions 17–28
+preregister read-only artifact audit; no retraining/new flow/reserve access
   ↓
-if a stable recipe is independently replicated: freeze full 28/4 Gate E
+audit cannot change frozen 8.274%<10%; E.9b remains locked
   ↓
-new full 28/4 Gate E training + dev selection
+new scientific recipe/data authority required before another full Gate E
+  ↓
+new full 28/4 Gate E training + development selection must pass
   ↓
 train matched A0/A1/A2/A4 checkpoints
   ↓
@@ -233,17 +235,17 @@ step 200 的 full/Block A/Block B pooled loss 均改善
 `episode_000000` 非 target 确认恶化。因此 tail-risk 的 `2/3` 门槛与纯
 five-flow variance 条件都不满足，冻结分类为 `mixed_or_inconclusive`。
 
-E.9a-v1 已冻结为 **0-objective invalid engineering run**，不能用于科学
-判断。下一步是按新的 clean commit 执行 **E.9a-v2 一次真实四轨运行**。
-唯一处理变量是由 E.8 zero-gate initial loss 冻结的 sample weight；raw 与
-normalized A0/A1 使用同一新 schedule。排序 17–28 的身份和 flows 已冻结，
-E.9a-v2 不读取；只有 E.9a-v2 candidate 才解锁一次性 E.9b。不能选 step 100、降低
-旧门槛或提前启动 full E/A2/A4/OOD。
+E.9a-v1 已冻结为 **0-objective invalid engineering run**。E.9a-v2 四轨
+计算完整，但 RNG identity telemetry 未落盘使工程 Gate invalid；冻结性能数字
+又给出 normalized paired `8.274%<10%`，所以没有 E.9b candidate。下一步仅
+允许现有工件的预注册只读 audit；不能 resume/重训、读取排序 17–28、选择
+step 100、降低旧门槛或提前启动 full E/A2/A4/OOD。
 相关协议、结果与父结果见
 [thought3_phase_e8_protocol.md](thought3_phase_e8_protocol.md)、
 [thought3_phase_e8_report.md](thought3_phase_e8_report.md)、
 [thought3_phase_e9_v1_failure_report.md](thought3_phase_e9_v1_failure_report.md)、
 [thought3_phase_e9_v2_protocol.md](thought3_phase_e9_v2_protocol.md)、
+[thought3_phase_e9_v2_report.md](thought3_phase_e9_v2_report.md)、
 [thought3_phase_e7_report.md](thought3_phase_e7_report.md)、
 [thought3_phase_e7_protocol.md](thought3_phase_e7_protocol.md)、
 [thought3_phase_e6_report.md](thought3_phase_e6_report.md)、

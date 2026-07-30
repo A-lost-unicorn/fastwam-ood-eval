@@ -49,6 +49,7 @@
 | `P3-PHASE-E9A-PREREG-v1` | 2026-07-29 | 3 / SUPERSEDED PREREGISTRATION | commit `94255fa98499070cf89d20b48d101ba3696f3462`；raw/normalized × A0/A1；LR `3e-4`；slots `40001..41600`；held-out `75..106` | 科学设计仍冻结；首次真实启动的工程结果另记为 `P3-PHASE-E9A-v1-INVALID` | 不选择 step 100、不降低旧门槛；v2 只允许修 evaluator/status/output identity |
 | `P3-PHASE-E9A-v1-INVALID` | 2026-07-29 | 3 / INVALID ENGINEERING RUN | v1 输出；raw/A0 initial probe；协议 flow `75..106` | evaluator 错误硬编码 `1..5`；0 training objective、0 optimizer update、0 checkpoint、`result=null`；frozen Fast-WAM SHA 前后相同 | 不是负科学结果；五个工件 SHA 冻结，v1 禁止 resume/覆盖 |
 | `P3-PHASE-E9A-PREREG-v2` | 2026-07-29 | 3 / PRE-REGISTERED SEQUENTIAL ENGINEERING | 同一 raw/normalized × A0/A1 科学设计；generic positive-integer flow evaluator；新 config/schema/runner/output | `75..106` 完整 8×32 grid/outcome 回归与 initial-probe failed-status 故障注入通过；**真实 GPU 尚未运行** | v1 失败前置校验；排序 17–28 仍 identity-only reserve；full E、A2/A4/OOD 继续锁定 |
+| `P3-PHASE-E9A-v2-INVALID` | 2026-07-29 | 3 / COMPUTE-COMPLETE INVALID ENGINEERING RUN | prereg commit `694d1d0`；raw/normalized × A0/A1；800 updates；train 6,400 + held-out 2,048 objectives；88.60 分钟 | raw A0/A1 reduction `4.175%/12.994%`，normalized `2.983%/11.010%`；A0 confirmed harm `2→0`，但 normalized paired `8.274%<10%`；四轨未保存 RNG identity 字段，唯一 execution check false | 根 result SHA `022e8086...e25e24`；provisional 分类 `sample_tail_mitigation_not_supported`，无 E.9b candidate。v2 禁止 resume/覆盖；下一步仅只读 artifact audit |
 
 ### `P1-FORMAL-v1` 机器证据
 
@@ -399,6 +400,7 @@
 | 2026-07-29 / Gate E.9a-v1 预注册 | 只跑 normalized A0/A1 会把新 flow draw 与 weighting 混淆；直接消费剩余 12 条又会失去独立复验 | 同时冻结 raw/normalized × A0/A1 四轨；权重只由 E.8 zero-gate initial loss 决定且和为 8；step 200 与原 absolute/paired Gate 不变 | 新 train/held-out identity、32-comparison FWER 和三种互斥分类已编码；排序 17–28 的 cohort/flow SHA 只登记不读取 | 否；此行记录 v1 启动前状态，后续 invalid run 与 v2 另列 |
 | 2026-07-29 / Gate E.9a-v1 真实启动 | raw/A0 initial probe 前命令以 track execution failed 返回，子轨状态残留 `running` | 共用 evaluator 仍硬编码 Gate E.3 的 `flow_steps=1..5`，拒绝协议 `75..106`；原状态异常处理从 training loop 才开始 | 冻结 v1 五个工件 SHA 和零训练边界；generic evaluator 接受协议显式正整数集；状态 wrapper 用 invocation ID 将 initial-probe/setup 异常原子落为 `failed`；v2 使用新输出 | 否；0 training objective、0 optimizer update、0 checkpoint、无 result，Fast-WAM SHA 未变 |
 | 2026-07-29 / Gate E.9a-v2 预注册 | 修复 evaluator 可能引入科学设计漂移或覆盖 v1 的风险 | cohort、权重、LR、step-200、train/held-out identity、门槛和 E.9b reserve 全部不变；只改变 evaluator 通用性、失败状态与 Run identity | 新 config fingerprint `afcd6a7...097a`、新 runner/output；完整 `75..106` 256-objective outcome 回归和 initial-probe 故障注入已编码 | 否；PRE-REGISTERED/NOT RUN，仍无 loss、tail、candidate 或 OOD 结果 |
+| 2026-07-29 / Gate E.9a-v2 结果 | 四轨都 complete，但根命令报 engineering checks failed | probe writer 未保存 `action_noise_seed`、`action_timestep_seed`、`flow_objective_sha256`，checker 却逐 row 强制比较，导致四轨共同 identity check 必然 false；实际 8×32 grid、initial/final timestep/weight 和零权重位置均精确 | 冻结 77 个输出文件与根 SHA；不重训、不覆盖；预注册只读 artifact audit。性能门槛独立显示 normalized A1-vs-A0 `8.274%<10%`，无 E.9b candidate | 否；计算完整但工程 invalid。tail harm `2→0` 只能作为 provisional trade-off，不可写成 mitigation 成功或 OOD/future 因果效果 |
 
 冷启动观测：2-step smoke 中 Wan 组件装载约 `336–433 s`；20-step OOD
 三进程观测到约 `604.37 s`，Clean 单进程为 `521.74 s`。这不是单次 future
@@ -489,10 +491,9 @@ Provenance 补充核对：Fast-WAM 和 LIBERO checkout clean；LIBERO-Plus
    formal future 指标生成前没有冻结。
 6. 20-step shadow RGB 生成成本是否等于阶段三 cached latent 或在线 Adapter
    成本；阶段三必须单独计时。
-7. E.8 mixed 结果能否由 E.9a-v2 固定 sample normalization 缓解，以及候选
-   能否推广到 train 排序 17–28。v1 是零 objective 工程失败；v2 目前只有
-   预注册代码与协议，没有真实结果。中间 checkpoint 仍不是正式选择，A2/A4
-   和阶段三成功率继续锁定。
+7. E.9a-v2 的 telemetry-invalid 工件能否通过预注册只读 audit 完成工程
+   provenance 认证。无论 audit 结果如何，normalized paired `8.274%<10%`，
+   当前无 E.9b candidate；中间 checkpoint、A2/A4 和阶段三成功率继续锁定。
 
 ## 4. 待填论文主表
 

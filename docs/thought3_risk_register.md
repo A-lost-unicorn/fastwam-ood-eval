@@ -1,6 +1,6 @@
 # Thought3 风险登记与停止条件
 
-状态：Phase A–D 已通过；Gate E 未通过；E.2–E.8 已完成；E.9a-v1 invalid、v2 已预注册未运行
+状态：Phase A–D 已通过；Gate E 未通过；E.2–E.8 已完成；E.9a-v1/v2 均 engineering-invalid
 范围：Partial-Future Adapter 的数据、cache、训练、推理、统计和阶段隔离
 
 ## 1. 等级
@@ -77,11 +77,12 @@
 | R52 | Adapter 在 200 step 内主要拟合固定 action noise/timestep，而非形成跨 flow 稳定 action objective | 高 | High | E.2 fixed-flow、E.3 held-out 与 E.4 diversified-train 对照 | E.4 将六条 held-out reduction 改善为 `0.997%–1.948%`，说明 fixed-flow 是混淆但不是全部原因；不得回用 E.2 checkpoint | E | Controlled |
 | R53 | microbatch 1 的单 action-flow objective 方差过高，使 scalar gate/Adapter 更新抵消 | 高 | High | per-step loss CV/top-share、gate-gradient sign/cancellation、final gate 与 delta/hidden | E.5 已完成 full-cohort arithmetic mean；六条 reduction 均高于 E.4，A1@3e-4 达 19.668%，但 E.5 同时多看 8× objectives，不能把增幅唯一归因于聚合 | E | Controlled / mechanism unresolved |
 | R54 | 看过三档 LR 后把 A1@3e-4 的强单条结果当作正式 LR 或 future 效果 | 高 | Critical | protocol timestamp、selected LR、fresh-cohort identity、paired A0/A1 outcome | E.5 保持 failed/null selection；E.6 显式 post-selection 并在新 cohort 复现 A1 信号，但总 Gate 因 A0 4/8 稳定性失败，full E/A2/A4/OOD 仍锁定 | E | Controlled / valid negative gate |
-| R55 | A0 mean 改善掩盖逐样本不稳定，导致仅看 pooled loss 错误放行配方 | 高 | High | per-sample ratio、intermediate checkpoint trajectory、larger-flow replication | E.9a-v2 已预注册 raw/normalized × A0/A1 四轨、原 absolute/paired Gate 与 normalized zero-confirmed-harm Gate；尚未运行 | E | Controlled / evidence pending |
-| R56 | 把同一八条 sample 上增加 flow draw 错当成 demonstration-level 独立复现 | 高 | Critical | 明确 resampling unit、保留未使用 cohort、结果措辞门禁 | train 排序 17–28 的 12 条身份、cohort SHA 与 flows 107–138 已冻结；E.9a-v2 明确 0 decode/train，只有 candidate 才一次性只读复验 | E | Controlled |
-| R57 | `6/8` 点符号 Gate 把校正后未确认的小波动与稳定 harm 等价计数 | 高 | High | point sign、双 block、FWER paired bootstrap、material flag | E.9a-v2 同时保留原 6/8 与 32-comparison FWER confirmed-harm，不追溯覆盖 E.6–E.8；尚无真实结果 | E | Controlled / evidence pending |
-| R58 | 根据 E.8 的已知 tail outcome 调权或只跑 normalized 配方，造成 outcome-conditioned weight 与新 flow 混淆 | 高 | Critical | calibration field audit、weight SHA、raw same-flow controls、protocol timestamp | 权重只读取 E.8 zero-gate initial loss，不读取 final/harm；sum=8、SHA 冻结；raw/normalized 共用 slots 40001–41600 与 held-out 75–106 | E | Controlled |
-| R59 | 复用旧 Gate evaluator 时隐含 flow 数/取值硬编码，导致新协议在 objective 前失败且子轨状态误留 `running` | 中 | High | 任意正整数 flow contract、75–106 完整 grid 回归、invocation-scoped failed-status test、v1 SHA 冻结 | v1 以 0 objective invalid 归档；v2 generic aggregator/evaluator/outcome 与 initial-probe fail-close 已实现，新 schema/output 防覆盖 | E | Controlled / regression required |
+| R55 | A0 mean 改善掩盖逐样本不稳定，导致仅看 pooled loss 错误放行配方 | 高 | High | per-sample ratio、intermediate checkpoint trajectory、larger-flow replication | v2 provisional 结果显示 raw/A0 有 2 条 confirmed harm，normalized/A0 为 0；但 paired 8.274% 未过 10%，无 candidate | E | Controlled / invalid-run evidence |
+| R56 | 把同一八条 sample 上增加 flow draw 错当成 demonstration-level 独立复现 | 高 | Critical | 明确 resampling unit、保留未使用 cohort、结果措辞门禁 | 排序 17–28 未解码/训练；v2 `independent_replication_candidate=false`，E.9b 保持锁定 | E | Controlled |
+| R57 | `6/8` 点符号 Gate 把校正后未确认的小波动与稳定 harm 等价计数 | 高 | High | point sign、双 block、FWER paired bootstrap、material flag | v2 同时报告 6/8 point Gate 和 32-comparison FWER：raw/A0 2 harms，normalized 四轨 0；结果受 R60 invalid 边界约束 | E | Controlled / invalid-run evidence |
+| R58 | 根据 E.8 的已知 tail outcome 调权或只跑 normalized 配方，造成 outcome-conditioned weight 与新 flow 混淆 | 高 | Critical | calibration field audit、weight SHA、raw same-flow controls、protocol timestamp | 四轨 pairing/weight/schedule checks 通过；normalization 降低 tail harm 但同时降低 pooled/paired gain，未被选择为候选 | E | Controlled |
+| R59 | 复用旧 Gate evaluator 时隐含 flow 数/取值硬编码，导致新协议在 objective 前失败且子轨状态误留 `running` | 中 | High | 任意正整数 flow contract、75–106 完整 grid 回归、invocation-scoped failed-status test、v1 SHA 冻结 | v2 成功完成四轨 `75..106`，证明 generic evaluator 与 initial-probe 路径修复有效 | E | Closed |
+| R60 | checker 强制验证 RNG identity 字段，但 probe writer 未持久化这些字段，导致完整运行被标 invalid | 高 | High | writer/checker schema contract、artifact SHA、完整 grid/timestep/weight/zero-position 只读审计 | v2 四轨唯一 false check；77 个工件冻结，禁止重训/覆盖；下一步预注册 read-only audit | E | Open / blocks valid result |
 
 ## 3. 最高优先级风险详解
 
@@ -296,8 +297,10 @@ harm 并存。E.9a-v1 在 objective 前因 flow 硬编码工程失效；E.9a-v2 
 - raw/normalized 共用新训练与 held-out schedule；
 - train 排序 17–28 identity-only 保留，E.9a-v2 不读取。
 
-v1 不是负结果；v2 目前仍是 PRE-REGISTERED/NOT RUN，不得把测试通过改写成
-mitigation 结果。
+v1 不是负结果。v2 已完成四轨：normalization 将 raw/A0 的 confirmed harm
+从 2 降到 0，但 paired gain 只有 8.274%，未达 10%。同时 R60 使根 Gate
+engineering-invalid，因此该权衡只能作为 provisional post-run evidence。
+下一步只读审计，不运行 E.9b。
 
 ### Gate F：技术 pilot
 
@@ -362,11 +365,12 @@ mitigation 结果。
 | R52 fixed-flow objective 拟合 | 已受控：E.4 证明 diversification 有改善但不足以形成 eligible LR |
 | R53 单 objective 梯度方差 | E.5 已完成真实 full-cohort mitigation；仍需 matched-objective 证据才能分离 aggregation 与 8× exposure，但该机制分离不应先于强 A1 信号复验 |
 | R54 post-selection 候选污染 | E.6 已按披露协议运行；保持 failed/null formal selection，不把复现的 A1 信号写成 future/OOD 效果 |
-| R55 A0 样本稳定性 | E.9a-v2 协议已冻结；下一证据是四条真实轨迹的 original Gate + confirmed-harm 分类 |
-| R56 flow pseudo-replication | 排序 17–28 已 identity-only 冻结；仅在 E.9a-v2 candidate 后一次性只读复验 |
-| R57 point-sign 与 confirmed harm 混淆 | E.9a-v2 将同时报告原 6/8 与 FWER harm；需真实 v2 工件 |
-| R58 outcome-conditioned weighting | 需验证 raw/normalized same-schedule、固定 weight SHA 和 calibration provenance 全部执行通过 |
-| R59 evaluator/status 复用缺陷 | v1 零 objective 工件按 SHA 冻结；v2 必须持续通过 `75..106` 与 initial-probe fail-close 回归 |
+| R55 A0 样本稳定性 | v2 provisional：raw 2 harms、normalized 0，但无 paired candidate；等待只读 audit 定级 |
+| R56 flow pseudo-replication | 排序 17–28 未读取；v2 无 candidate，E.9b 不解锁 |
+| R57 point-sign 与 confirmed harm 混淆 | v2 已同时报告 6/8 与 FWER；不得只挑 tail `2→0` 忽略 paired 失败 |
+| R58 outcome-conditioned weighting | same-schedule、固定 weight SHA 和 calibration provenance 均通过；结果未达候选门槛 |
+| R59 evaluator/status 复用缺陷 | 已关闭：v2 完成 `75..106` 四轨与 6,400 objectives |
+| R60 probe identity telemetry | 当前最高阻塞：冻结 v2 工件并执行新输出的只读 artifact audit |
 | 3-rank cache 完整性 | 正式分布式 cache 的 union/intersection/cardinality 证明 |
 | Gate E 多样本优化 | 稳定配方下重新跑 28/4 fixed train/development gate |
 

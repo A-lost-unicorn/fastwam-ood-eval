@@ -10,7 +10,8 @@
 > optimizer update，没有写出科学结果，冻结 Fast-WAM SHA 前后相同。v1
 > 输出已只读归档，不得 resume 或覆盖。证据见
 > [v1 失败报告](thought3_phase_e9_v1_failure_report.md)；修复后的唯一入口和
-> 不变科学边界见 [E.9a-v2 协议](thought3_phase_e9_v2_protocol.md)。
+> 不变科学边界见 [E.9a-v2 协议](thought3_phase_e9_v2_protocol.md)，实际
+> 四轨状态见 [E.9a-v2 结果](thought3_phase_e9_v2_report.md)。
 
 > 本协议在查看 E.8 全部结果后建立。已知 E.8 为
 > `mixed_or_inconclusive`，并已知每条样本的 zero-gate initial loss、A0
@@ -352,5 +353,5 @@ bash scripts/run_thought3_phase_e9_sample_tail_mitigation.sh
 ```
 
 归档 runner 现在只返回 exit code 2，避免 v1 被误 resume 或覆盖。不得把 v1
-模型加载、数据准备或 failure log 当作有效 E.9a 结果；正式运行只能按
-[E.9a-v2 协议](thought3_phase_e9_v2_protocol.md)从全新输出目录开始。
+模型加载、数据准备或 failure log 当作有效 E.9a 结果。v2 已从全新输出目录
+执行，其状态以 [E.9a-v2 结果](thought3_phase_e9_v2_report.md)为准。

@@ -531,8 +531,12 @@
   root 混用。修复统一覆盖 calibration/track/checkpoint，并拒绝 outside-root
   工件；原 rows 与 weight SHA 保留，只允许原目录 resume。
 - 验证：config/schema/CLI/runner、两卡 launcher、四 stage no-torch dry-run、
-  63 项相关测试和 397 项全量测试通过；A0/A1 optimizer update 仍为 0，不能
-  写成训练改善、success 或 OOD 结果。
+  63 项相关测试和 397 项全量测试通过；原目录恢复后 A0/A1 各完成 200×28
+  objectives，12/12 hard checks、32/32 manifest descriptor、8/8 checkpoint
+  provenance 通过。
+- 结果：A0 development loss 改善 `1.845%`，A1 恶化 `1.712%`；A1 final
+  比 A0 高 `3.624%` 且 4/4 development sample 更差。按预注册规则登记有效
+  离线负结果并锁定 Phase 3，而不是改 LR、weight、checkpoint 或 K 寻找正值。
 
 ## 4. 简历表达素材
 
@@ -549,6 +553,10 @@
   原子保存 action/future tensor与分段 CUDA telemetry；真实单卡 8-sample
   运行中 B0/null 精确一致、correct-null/correct-shuffle/action-hash 均
   `8/8`，验证 future 内容进入动作，同时明确不宣称 rollout/OOD 效果。
+- 设计并执行双 GPU、预注册 matched K=0/K=1 Adapter 消融，完成 11,200 个
+  training objectives、8 个可恢复 checkpoint 和多层 SHA 审计；发现 future
+  内容虽改变动作但未改善 held-out objective，并以冻结停止规则阻止
+  outcome-driven 调参及无依据的 OOD 扩展。
 - 将 Clean 多 seed 与 LIBERO-Plus 预生成 task-instance 协议显式分离，通过配置门禁阻止每变体重复采样造成的数量级计算浪费。
 - 建立相同 checkpoint/配对 seed 的鲁棒性评测与统计链路，覆盖成功率下降、bootstrap CI、失败分类和跨策略配方一致性约束。
 - 在 3 张 GPU 上完成 7,571 个真实 rollout 和 2,399,314 个 action step，
@@ -612,7 +620,8 @@
 - 将 Phase 1 正向动作敏感性转化为可审计的 28/4 A0/A1 训练协议：冻结单一
   normalized weight artifact、200×28 matched flow schedule、step-200 endpoint
   和双卡 track isolation，并实现 Adapter/optimizer/metric-prefix checksum
-  resume。真实 Phase 2 尚未运行，因此该条只可作为系统设计与工程实现经历。
+  resume；真实完成 11,200 training objectives 和 8 个 checkpoint，并登记
+  A1 比 A0 高 `3.624%` 的有效离线负结果。
 
 ### 可直接使用的量化表述
 

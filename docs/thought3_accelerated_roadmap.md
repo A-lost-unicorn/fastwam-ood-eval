@@ -2,8 +2,8 @@
 
 更新日期：2026-07-30
 
-当前节点：Phase 0 完成；Phase 1 真实单卡完成并进入分支 A；Phase 2 已预注册、
-实现并通过 dry-run，等待显式双卡运行确认
+当前节点：Phase 0 完成；Phase 1 进入分支 A；Phase 2 双卡完整完成但
+development direction 为负；路线按预注册规则停止在 Phase 3 之前
 
 ## 1. 为什么改线
 
@@ -18,11 +18,11 @@ Phase 0：E9 工件账本修复（已完成，不阻塞）
                        ▼
 Phase 1：K=1 correct/null/shuffle 在线动作反事实
         │
-        ├─ A 内容敏感（已观测）→ Phase 2：28/4 A0/A1
+        ├─ A 内容敏感（已观测）→ Phase 2：28/4 A0/A1（已完成）
         │                    ↓
-        │              Phase 3：240 paired Clean/OOD pilot
-        │                    ↓（仅正向）
-        │              Phase 4：A2/A4 + 正式多 seed
+        │              direction 未观察到（实测）
+        │                    ↓
+        │              停止 Phase 3/A2/A4/OOD 扩展
         │
         ├─ B 仅 presence ─→ 一次单变量结构修复 → 只复验一次 Phase 1
         │
@@ -39,15 +39,15 @@ Phase 1：K=1 correct/null/shuffle 在线动作反事实
 - E9 normalized paired 门槛；
 - E9b reserve replication。
 
-Phase 1 已于 2026-07-30 得到分支 A。此后仍禁止新增 flow-variance、
-checkpoint-trajectory、sample-weight、LR 或 surrogate-threshold Gate，也不训练
-A2/A4；下一项工作只能是冻结 Phase 2 的唯一 matched A0/A1 配方。
+Phase 1 已于 2026-07-30 得到分支 A，Phase 2 随后按唯一配方完成并得到有效
+离线负结果。仍禁止新增 flow-variance、checkpoint-trajectory、sample-weight、
+LR、K 或 surrogate-threshold Gate，也不训练 A2/A4。
 
-## 3. Phase 2 已冻结：完整 28/4 A0/A1
+## 3. Phase 2 已完成：完整 28/4 A0/A1
 
-Phase 1 已满足分支 A。本阶段的 config、单配方、flow namespace、update budget、
-固定 step-200 checkpoint rule、双卡 runner、resume 和 CPU finalize 已冻结；
-真实 GPU 尚未启动，仍需显式确认。
+Phase 1 满足分支 A后，本阶段按冻结 config、单配方、flow namespace、update
+budget 和 step-200 rule 完整运行。A0/A1 各完成 200×28 objectives，12/12
+hard checks 全部通过。
 
 ### 配方
 
@@ -72,26 +72,25 @@ Phase 1 已满足分支 A。本阶段的 config、单配方、flow namespace、u
 - 不读 OOD，不根据 rollout success 调参；
 - 不训练 A2/A4，不做 LR/sample-weight sweep。
 
-### 通过边界
+### 冻结结果
 
-- train/dev loss finite；
-- A1 dev 保持冻结方向，或明显优于 A0；
-- 无 catastrophic 数值异常；
-- frozen Fast-WAM SHA 不变；
-- 完整 checkpoint 上再次保留 Phase 1 内容敏感性；
-- latency/memory 可运行。
-
-目标是产生进入 directional pilot 的工程候选，不重建 E5–E9 式“所有 surrogate
-样本必须完美”的总门禁。
+- A0 development reduction：`+1.845%`；
+- A1 development reduction：`−1.712%`；
+- A1 final mean 比 A0 高 `3.624%`；
+- 4/4 development sample 的 A1 loss 高于 A0；
+- 分类：`training_valid_dev_direction_not_observed`；
+- `phase3_unlocked=false`。
 
 为使用两张空闲卡而不引入 DDP 混淆，先在卡 1 生成唯一 normalized weight
-artifact，再让 A0/A1 分别在卡 1/2 并行；CPU finalize 不会直接解锁 Phase 3。
-完整协议、唯一命令、恢复方法和 1.5–2 小时时间估计见
-[thought3_phase2_full_28_4_protocol.md](thought3_phase2_full_28_4_protocol.md)。
+artifact，再让 A0/A1 分别在卡 1/2 并行。结果说明工程链路有效，但没有产生
+进入 directional pilot 的候选。完整协议与结果见
+[thought3_phase2_full_28_4_protocol.md](thought3_phase2_full_28_4_protocol.md)、
+[thought3_phase2_full_28_4_report.md](thought3_phase2_full_28_4_report.md)。
 
-## 4. Phase 3 草案：最小 Clean/OOD paired pilot
+## 4. Phase 3 草案：未解锁、仅保留历史设计
 
-仅在 Phase 2 完成后执行。建议在 manifest 冻结前采用以下 240-rollout 预算：
+该草案原本只在 Phase 2 direction 正向时执行。本次 direction 为负，因此不得
+生成 manifest 或运行下列 240-rollout 预算：
 
 ```text
 4 groups：B0 / A0 / A1 / A-shuffle
@@ -132,17 +131,14 @@ pilot outcome 前冻结，并与未来正式 Phase G seed namespace 分离。
   收益”，停止 A2/A4，除非出现明确 K=1 quality 机制证据。
 - **负向**：A1 不优于 A0/shuffle 或 latency 不可部署；停止扩展。
 
-## 5. 从现在到 directional OOD 的最短路径
+## 5. 冻结停止记录
 
 1. ~~单卡运行一次 Phase 1，获得 A/B/C。~~ 已完成，结果为 A。
-2. ~~冻结 Phase 2。~~ 已完成；现在只运行一次 28/4 A0/A1，不得重选
-   Phase 1 checkpoint、LR、权重或门槛。
-3. 在完整 checkpoint 上复验一次 K=1 内容敏感性。
-4. 冻结 240-rollout paired manifest。
-5. 运行 B0/A0/A1/A-shuffle 的 Clean/camera/robot-init pilot。
-6. 登记正向、动作但无 success、或负向三类结论。
-
-最短路径中没有 E9b、新 LR sweep、新 flow Gate、A2 或 A4。
+2. ~~冻结并运行唯一 Phase 2。~~ 已完成，结果为 negative direction。
+3. ~~在正向时复验完整 checkpoint。~~ 条件未满足，不执行。
+4. ~~在复验通过时冻结 240-rollout manifest。~~ 条件未满足，不执行。
+5. 登记并保留负结果，停止 E9b、新 LR/weight/K/flow Gate、A2/A4 与 OOD
+   Adapter pilot。
 
 ## 6. 当前论文边界
 
@@ -154,11 +150,14 @@ pilot outcome 前冻结，并与未来正式 Phase G seed namespace 分离。
 - E9 normalization 有 tail-stabilization signal，但未过 paired 门槛。
 - 固定 E6 A1 checkpoint 在八条同 task train sample 上对 K=1 future 内容具有
   技术动作敏感性：correct-null、correct-shuffle 与 action-hash 均为 `8/8`。
+- 完整 28/4 offline ablation 中，A0 改善 `1.845%`、A1 恶化 `1.712%`，
+  A1 比 A0 高 `3.624%`；future sensitivity 未转化为该配方的 held-out utility。
 
 当前尚不支持：
 
 - Phase 1 的小幅动作变化会转化成闭环轨迹或成功率差异；
 - K=1 提高 Clean/OOD success；
+- K=1 在其他 task、seed、结构或 K 设置中也无效；
 - future 对失败的因果解释；
 - K=1 优于 K=2/K=4；
 - 任何 A2/A4 或正式多 seed 结论。

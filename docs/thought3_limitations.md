@@ -1,6 +1,6 @@
 # Thought3 当前限制与未决问题
 
-状态：Phase 0 完成、Phase 1 真实分支 A 后的诚实边界
+状态：Phase 0/1 完成、Phase 2 有效离线负结果后的诚实边界
 更新时间：2026-07-30
 
 ## 1. 已有工程证据与仍缺的下游结果
@@ -12,13 +12,14 @@
 - E5/E6 两个 cohort 的 A1 离线 action-loss 信号；
 - E9a-v2.1 engineering-valid/scientific-failed 审计；
 - K=1 online B0/correct/null/shuffle 真实分支 A：B0/null 精确 parity，
-  correct-null、correct-shuffle 与 action hash 均 `8/8`。
+  correct-null、correct-shuffle 与 action hash 均 `8/8`；
+- 完整 28/4 A0/A1 checkpoint 与固定 step-200 offline development 结果。
 
 当前仍没有：
 
 - ID/OOD success rate；
 - A-shuffle 机器人 rollout；
-- 完整 28/4 A0/A1 checkpoint（协议/代码已冻结，但 GPU 尚未运行）；
+- 完整 checkpoint 的机器人 rollout 或 OOD success 对照；
 - K=2/K=4 的真实训练、在线动作反事实或收益—成本曲线。
 
 Phase C–E 的真实离线工程结果不支持 future 改善 OOD。Phase 1 的真实
@@ -143,3 +144,20 @@ post-run exploratory。
 - OOD 增益不足以覆盖 latency。
 
 论文必须保留这些可能性。
+
+## 13. Phase 2 已得到单 task 离线负结果
+
+完整 28/4 matched A0/A1 已完成：A0 development loss 改善 `1.845%`，A1
+恶化 `1.712%`，A1 final 比 A0 高 `3.624%`，且 4/4 development sample 的
+A1 loss 更高。这是工程有效、按冻结 endpoint 得到的负结果，不是梯度断链。
+
+它仍有明确限制：
+
+- 只有一个 `libero_goal` task 和 4 条 development sample；
+- 只有一个 seed、一个 K=1 Adapter 配方和固定 step 200；
+- objective 是 action flow-matching loss，不是 rollout success；
+- 没有读取 Clean/OOD outcome，也没有执行 Phase 3；
+- 不能外推到 K=2/K=4、其他融合结构、完整模型训练或其他 task。
+
+因此可写“future-content sensitivity 未在该预注册配方中转化为 offline
+utility”，不可写“Fast-WAM 在 OOD 中不需要未来”。

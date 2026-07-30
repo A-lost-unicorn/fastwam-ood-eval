@@ -1,6 +1,6 @@
 # Thought3 风险登记与停止条件
 
-状态：Phase 0 完成；Phase 1 在线反事实真实单卡完成、分支 A；Phase 2 待预注册
+状态：Phase 0/1 完成；Phase 2 有效离线负结果；Phase 3/A2/A4/OOD 路线停止
 范围：Partial-Future Adapter 的数据、cache、训练、推理、统计和阶段隔离
 
 ## 1. 等级
@@ -92,11 +92,11 @@
 | R67 | Phase 1 代码/dry-run 被误记成真实 action 结果 | 中 | High | 只有 output decision/run status 才产生 outcome | 真实 `run_status=completed`、decision、62-file manifest 和结果报告已审计 | 1 | Closed |
 | R68 | replay 恰好为 0 导致 `1e-7` floor 极低，把确定但很小的动作差异误写成实用效应 | 高 | Critical | 同时报告 L1/L2/L∞、action cosine、相对 B0 RMS、逐样本方向与 latency | 分支 A 只表示 content sensitivity；轨迹/success relevance 必须由完整 checkpoint 和 paired rollout 证明 | 1–3 | Controlled / downstream open |
 | R69 | 八条同 task train sample 的 `8/8` 被误推广到其他 task、dev 或 OOD | 高 | Critical | cohort fingerprint、sample-level table、证据等级 | 报告固定为 one-task SMOKE；Phase 2 full 28/4 复验与多 task directional pilot 才允许推广 | 1–3 | Controlled / downstream open |
-| R70 | 两卡分别重算 normalized weights，微小差异破坏 A0/A1 单变量配对 | 中 | High | calibration artifact SHA、两轨 weight SHA | 先单卡生成唯一 28-sample weight artifact，两轨只读同一 SHA；不容忍近似匹配 | 2 | Controlled / not run |
-| R71 | 查看 step 50/100/150 dev 后挑 checkpoint，重建 trajectory selection | 高 | Critical | fixed endpoint、checkpoint manifest、无 fallback | checkpoint 可用于恢复，但主终点固定 step 200；development 只评 step 0/200 | 2 | Controlled / not run |
+| R70 | 两卡分别重算 normalized weights，微小差异破坏 A0/A1 单变量配对 | 中 | High | calibration artifact SHA、两轨 weight SHA | 两轨实测读取同一 `4c36dece...1dc22`；sample/identity/flow SHA 全部 matched | 2 | Closed |
+| R71 | 查看 step 50/100/150 dev 后挑 checkpoint，重建 trajectory selection | 高 | Critical | fixed endpoint、checkpoint manifest、无 fallback | 主结果固定 step 200；development 只评 step 0/200，中间 checkpoint 未用于选择 | 2 | Closed |
 | R72 | E9-derived normalized recipe 被误写成预先独立发现或 E9 科学通过 | 高 | High | recipe disclosure、E9 audit SHA、protocol timestamp | 明确登记 post-E8 engineering selection，paired 8.274%<10% 与 E9b locked 同时报告 | 2 | Controlled |
-| R73 | Phase 2 dev 方向通过后直接进入 rollout，却未确认完整 A1 checkpoint 仍读取 future 内容 | 中 | Critical | finalize 强制 `phase3_unlocked=false`、下一 stage 字段 | 完整 checkpoint 必须再做一次 correct/null/shuffle；未通过则不生成 pilot manifest | 2–3 | Controlled / downstream open |
-| R74 | config-relative artifact path 与 resolved safety root 混用，导致计算完成后 manifest 写入失败 | 中 | High | mixed relative/absolute path regression、outside-root rejection、原 rows SHA、resume status | calibration/track/checkpoint 统一通过 resolve-both helper 生成 key；保留 1,024 rows，仅允许原目录 resume | 2 | Controlled / real resume pending |
+| R73 | Phase 2 dev 方向通过后直接进入 rollout，却未确认完整 A1 checkpoint 仍读取 future 内容 | 中 | Critical | finalize 强制 `phase3_unlocked=false`、下一 stage 字段 | 本次 direction 为负，完整-checkpoint recheck 与 rollout 均未触发；Phase 3 保持锁定 | 2–3 | Not triggered / route stopped |
+| R74 | config-relative artifact path 与 resolved safety root 混用，导致计算完成后 manifest 写入失败 | 中 | High | mixed relative/absolute path regression、outside-root rejection、原 rows SHA、resume status | 原目录 resume 完成；calibration/track/checkpoint manifests 全部验证，原 1,024 rows 保留 | 2 | Closed |
 
 ## 3. 最高优先级风险详解
 
@@ -390,14 +390,10 @@ Phase 1 真实结果为分支 A。correct-null 与 correct-shuffle 均 `8/8` 超
 | R58 outcome-conditioned weighting | same-schedule、固定 weight SHA 和 calibration provenance 均通过；结果未达候选门槛 |
 | R59 evaluator/status 复用缺陷 | 已关闭：v2 完成 `75..106` 四轨与 6,400 objectives |
 | R60 probe identity telemetry | 已关闭：Phase 0 audit valid，父 77 文件未改；科学 Gate 仍 failed |
-| R68 技术差异与实用效应混淆 | 完整 checkpoint 复验 action effect size，并由 paired rollout 测轨迹/success |
-| R69 单 task/八样本外推 | 28/4 训练复验后执行预冻结多 task directional pilot |
-| R70 双卡 weight identity | Phase 2 calibration 与 A0/A1 track 的 weight/artifact SHA 全部匹配 |
-| R71 dev checkpoint selection | Phase 2 只出现 step 0/200 dev metric，主 checkpoint manifest 固定 200 |
-| R73 完整 checkpoint future 使用 | Phase 2 完成后执行一次 online correct/null/shuffle recheck |
-| R74 manifest 路径恢复 | 原目录 `--resume` 后 calibration artifact SHA 验证、A0/A1 正常启动且最终 manifest complete |
+| R68 技术差异与实用效应混淆 | Phase 1 sensitivity 与 Phase 2 offline negative 已分开登记；本路线停止，因此 rollout utility 仍未回答 |
+| R69 单 task/八样本外推 | Phase 2 扩到 28/4 仍只有同一个 task；不得把 4-sample negative 外推到其他 task/OOD |
 | 3-rank cache 完整性 | 正式分布式 cache 的 union/intersection/cardinality 证明 |
-| 28/4 多样本优化 | 唯一 normalized matched A0/A1 Phase 2 已预注册/实现，等待真实双卡运行 |
+| 28/4 结果的跨 task/seed 外推 | 当前只有一个 task、一个 seed、4 条 development sample；本路线已按负 direction 停止，不以事后扩样覆盖 |
 
 已关闭项可以写成其精确覆盖范围内的完成事实；上述未关闭项仍必须使用“预计”
 “待验证”，不能外推成 rollout、success 或 OOD 结果。

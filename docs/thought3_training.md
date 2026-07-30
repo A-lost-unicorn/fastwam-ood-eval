@@ -1,7 +1,7 @@
 # Thought3 训练与恢复手册
 
-状态：Phase 0 完成；Phase 1 在线反事实真实单卡完成并进入分支 A；full 28/4
-Phase 2 calibration 已计算，manifest bookkeeping 中断，A0/A1 尚未启动
+状态：Phase 0 完成；Phase 1 在线反事实进入分支 A；full 28/4 Phase 2
+完整完成并得到有效离线负结果；Phase 3 锁定
 更新时间：2026-07-30
 
 ## 1. 当前能做什么
@@ -47,10 +47,10 @@ Phase 1 已额外确认固定 E6 A1 checkpoint 的 correct/null/shuffle
 future-content action sensitivity，并按预注册规则解锁 Phase 2 的设计。该解锁
 不等于授权未冻结的长训练，也不允许跳过 matched A0。
 
-Phase 2 现已冻结为唯一 28/4 normalized matched A0/A1 配方。首次启动已保存
-896 条 train 与 128 条 development calibration objective，但在 artifact manifest
-写入时因相对/绝对路径表示混用中断；A0/A1 optimizer update 仍为 0。恢复补丁
-不改变任何科学配方，只允许在原目录使用 `--resume`。
+Phase 2 以唯一 28/4 normalized matched A0/A1 配方完整完成。manifest 路径
+中断后只做 bookkeeping-only 修复并从原目录 resume；两轨各完成 200×28
+objectives。A0 development 改善 `1.845%`，A1 恶化 `1.712%`，且 A1 比 A0
+高 `3.624%`。按冻结规则停止，不再启动 Phase 3、A2/A4 或 OOD pilot。
 
 ## 2. Adapter 结构
 
@@ -599,7 +599,7 @@ E9 Gate 通过。Phase 2 只允许一个 LR、一个 seed、同一 sample/flow s
 - 先单卡 calibration，再两卡 A0/A1 并行，最后 CPU finalize；
 - 完整 checkpoint online sensitivity recheck 前，Phase 3 始终锁定。
 
-真实首次运行：
+已执行的首次/恢复命令保留用于 provenance，不应再次运行或覆盖当前结果：
 
 ```bash
 CONFIRM_THOUGHT3_PHASE2_FULL=YES \
@@ -607,7 +607,7 @@ THOUGHT3_GPU_IDS=1,2 \
 bash scripts/run_thought3_phase2_full_28_4.sh
 ```
 
-中断后不得删改已有工件，使用：
+本次 manifest 中断后实际使用的恢复命令为：
 
 ```bash
 CONFIRM_THOUGHT3_PHASE2_FULL=YES \
@@ -615,8 +615,9 @@ THOUGHT3_GPU_IDS=1,2 \
 bash scripts/run_thought3_phase2_full_28_4.sh --resume
 ```
 
-预计双卡墙钟 1.5–2 小时。当前代码、测试和 dry-run 完成，但真实训练尚未
-启动。
+恢复后的 calibration、双轨与 finalize 约 78 分钟；双卡训练区间约 69 分钟。
+最终分类为 `training_valid_dev_direction_not_observed`，下一动作是登记负结果，
+不是再次 resume、改配置或选择中间 checkpoint。
 
 完整路径与停止规则见
 [thought3_accelerated_roadmap.md](thought3_accelerated_roadmap.md)；在线技术
@@ -625,4 +626,6 @@ bash scripts/run_thought3_phase2_full_28_4.sh --resume
 真实分支 A 的数值与边界见
 [thought3_phase1_k1_online_counterfactual_report.md](thought3_phase1_k1_online_counterfactual_report.md)。
 Phase 2 的全部配方、泄漏边界、resume 与分类见
-[thought3_phase2_full_28_4_protocol.md](thought3_phase2_full_28_4_protocol.md)。
+[thought3_phase2_full_28_4_protocol.md](thought3_phase2_full_28_4_protocol.md)；
+完整结果见
+[thought3_phase2_full_28_4_report.md](thought3_phase2_full_28_4_report.md)。

@@ -1,7 +1,7 @@
 # Thought3 在线评测手册
 
 状态：Phase 1 真实 K=1 online counterfactual 已完成并进入分支 A；Phase 2
-与 rollout 未启动
+得到有效离线负结果；rollout 未解锁
 更新时间：2026-07-30
 
 ## 1. 最重要的边界
@@ -134,7 +134,8 @@ correct-shuffle 为 `0.012092`；paired correct-null policy overhead mean 为
 
 ## 7. Directional OOD pilot 设计
 
-仅当 Phase 1=A 且 Phase 2 完成后进入。当前草案为：
+仅当 Phase 1=A 且 Phase 2 direction 正向并通过完整-checkpoint recheck 后进入。
+本次 Phase 2 direction 为负，所以下列草案不生成 manifest、不执行：
 
 - 5 个预先冻结代表 task；
 - Clean + camera + robot-init；

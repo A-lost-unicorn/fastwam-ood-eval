@@ -138,12 +138,12 @@ Phase D cache 只能用于训练；不得把它接入 Phase F/G 在线 policy。
 | E.9a-v2 | compute complete / engineering invalid | 四轨 800 updates、6,400 train + 2,048 held-out objectives；raw A0/A1 reduction 4.175%/12.994%，normalized 2.983%/11.010%；tail 2/0→0/0；paired 8.274% 未过 10%；RNG identity telemetry 缺失 |
 | Phase 0 E9a-v2.1 | valid audit / scientific failed | 27/27 checks true；0 forward/backward/optimizer/GPU/parent write；恢复 RNG identity，确认 `sample_tail_mitigation_not_supported` 与 E9b locked |
 | Phase 1 online CF | valid engineering smoke / branch A | 固定 E6 A1 step-200 与 E6 8-sample cohort；B0/null 精确 parity，correct-null、correct-shuffle、hash 均 `8/8` |
-| full 28/4 A0/A1 | preregistered / implemented / not run | normalized matched A0/A1、3e-4、200×28、flows 与 fixed step-200 rule 已冻结；等待显式双卡运行 |
+| full 28/4 A0/A1 | valid offline negative / complete | 两轨各 200×28；12/12 hard checks；A0 `+1.845%`、A1 `−1.712%`，A1 比 A0 高 `3.624%`；Phase 3 locked |
 
-Phase 1 分支 A 已产生。进入 Phase 2 前仍然：
+Phase 1 分支 A 和 Phase 2 有效负结果均已产生。当前停止条件为：
 
 - 不新增 surrogate Gate；
-- 不启动未预注册的 full 28/4、A2/A4 或 OOD rollout；
+- 不重跑 full 28/4，不启动 A2/A4 或 OOD rollout；
 - 不按动作差异或 OOD outcome 选 LR/K/checkpoint；
 - 不把 E.2–E.9 的 A1/A0 loss 差写成 future 动作效应。
 
@@ -164,9 +164,10 @@ Phase 1 分支 A 已产生。进入 Phase 2 前仍然：
 8. replay floor、B0/null parity、A/B/C fail-closed 分类；
 9. frozen checkpoint/cohort/config/SHA、atomic artifacts 与 checksum resume。
 
-真实单卡命令已经完成，Phase 1 只测动作敏感性并得到分支 A。当前缺口已转为：
-完整 28/4 A0/A1 配方已预注册但尚未训练，完整 checkpoint 上的内容敏感性尚未复验，
-LIBERO/LIBERO-Plus paired rollout 尚未开始。
+真实单卡 Phase 1 已得到分支 A，完整 28/4 A0/A1 也已完成。Phase 2 direction
+为负，因此按预注册规则不复验完整 checkpoint、不启动 LIBERO/LIBERO-Plus
+paired rollout。当前缺口是该单-task offline 负结果不能回答 OOD success 因果
+问题，而不是等待继续运行本路线。
 
 ## 7. 数据、评测与统计
 
@@ -237,17 +238,20 @@ correct-null、correct-shuffle 与 action hash 均为 `8/8`，分类为
 `future_content_sensitivity_observed`。paired correct-null overhead mean 为
 `258.95 ms`，但 normalized action L2 mean 只有 `0.011052`，且没有 rollout。
 
-Phase 2 已冻结唯一 28/4 normalized matched A0/A1 配方：LR 3e-4、seed
-3407、200×28 objectives、calibration `139..170`、development `171..202`、
-training `50001..55600`，主 checkpoint 固定 step 200。双卡 runner、resume、
-CPU finalize 和 dry-run 已通过；Phase 2 真实 GPU 仍未启动。当前最近一步是按
-唯一确认命令运行它，而不是增加新 Gate、改 LR/权重或训练 A2/A4。
+Phase 2 已在修复 commit `8e41d0b` 上由原目录 resume 后完整完成。A0/A1
+各完成 200×28 objectives；12/12 hard checks、32/32 manifest descriptors 和
+8/8 checkpoint provenance 通过。固定 step-200 development 上，A0 reduction
+为 `+1.845%`，A1 为 `−1.712%`；A1 final 比 A0 高 `3.624%`，4/4 sample
+方向一致更差。冻结分类为
+`training_valid_dev_direction_not_observed`，因此 Phase 3、完整-checkpoint
+反事实、OOD pilot 与 A2/A4 均不解锁。
 
 相关协议、结果与父结果见
 [thought3_accelerated_roadmap.md](thought3_accelerated_roadmap.md)、
 [thought3_phase1_k1_online_counterfactual_protocol.md](thought3_phase1_k1_online_counterfactual_protocol.md)、
 [thought3_phase1_k1_online_counterfactual_report.md](thought3_phase1_k1_online_counterfactual_report.md)、
 [thought3_phase2_full_28_4_protocol.md](thought3_phase2_full_28_4_protocol.md)、
+[thought3_phase2_full_28_4_report.md](thought3_phase2_full_28_4_report.md)、
 [thought3_phase_e9_v2_1_readonly_audit_report.md](thought3_phase_e9_v2_1_readonly_audit_report.md)、
 [thought3_phase_e9_v2_1_readonly_audit_protocol.md](thought3_phase_e9_v2_1_readonly_audit_protocol.md)、
 [thought3_phase_e8_protocol.md](thought3_phase_e8_protocol.md)、

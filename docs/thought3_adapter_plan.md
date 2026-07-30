@@ -5,7 +5,8 @@
 `thought3_phase_b_report.md`。若本文件与它们冲突，以新版文档为准。真实
 Phase C/D 与 E1–E9 已运行；当前主线见
 `thought3_accelerated_roadmap.md`。Phase 1 已产生真实 K=1 action-sensitivity
-分支 A；完整 Phase 2 A0/A1、rollout 和 OOD outcome 尚未产生。
+分支 A；完整 Phase 2 A0/A1 已产生有效离线负结果并按规则停止，rollout 和
+OOD outcome 尚未产生。
 
 ## 1. 要回答的因果问题
 

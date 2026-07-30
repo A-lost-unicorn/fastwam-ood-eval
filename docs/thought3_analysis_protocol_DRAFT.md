@@ -4,6 +4,9 @@
 更新时间：2026-07-27
 冻结时机：Phase F 技术 pilot 结束后、任何 Phase G 正式结果产生前
 
+执行状态：Phase 2 development direction 为负，Phase F/G 未解锁；本文件只保留
+为历史草案，不能用于事后重开当前 Adapter 路线。
+
 ## 1. 研究问题与允许结论
 
 主问题：

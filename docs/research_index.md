@@ -25,15 +25,15 @@
 | 阶段二正式抽样 | outcome-blind planner、anchor、exact-ratification 与 formal gate 已实现 | 200 Clean + 532 OOD 已 exact-ratify 并全部运行 | **完成**。只认证 Phase 2 future 指标前 job ID 不变；不冒充阶段一 outcome 前 preregistration |
 | 阶段二统计协议 | episode→task 分层、task bootstrap、首 probe/outcome gate 已实现 | 10,000 次 suite-stratified task bootstrap；730/732 outcome match | **post-run analysis 完成，非 preregistered confirmatory**。DRAFT 未在正式指标前冻结；人工 endpoint 待完成 |
 | 阶段二 B：action-conditioned future consistency | 严格门禁、schema、runner、测试已实现 | CPU/mock 与门禁测试通过 | **阻塞**。官方 release 为 `action_conditioned=false`，且没有可信匹配 checkpoint |
-| 阶段三：Future-to-Action Adapter | Phase 0 审计完成；Phase 1 分支 A；Phase 2 calibration 已计算、A0/A1 未启动 | 固定 E6 A1@3e-4 step-200 的 correct-null、correct-shuffle、action-hash 均 `8/8`；Phase 2 已保存 896+128 calibration rows 与唯一 weight SHA；manifest path bookkeeping 已修复 | **当前最近一步**：原目录 `--resume`，先复验 calibration 再启动唯一 matched A0/A1。仍只证明固定 checkpoint 的 action sensitivity；success/OOD/A2/A4 无结果 |
+| 阶段三：Future-to-Action Adapter | Phase 0 审计完成；Phase 1 分支 A；Phase 2 完整双卡训练完成 | Phase 1 correct-null/shuffle/action-hash 均 `8/8`；Phase 2 A0 reduction `+1.845%`、A1 `−1.712%`，A1 比 A0 高 `3.624%` 且 4/4 dev sample 更差 | **有效离线负结果，路线停止**：future 内容会改变动作，但冻结 K=1 Adapter 未形成 held-out utility；Phase 3/OOD/A2/A4 锁定 |
 
 因此，“阶段一已经完成”的准确说法是：**阶段一工程、正式全量计算、聚合与
 完整性审计均已完成；失败机制人工 taxonomy 尚未完成，但不阻塞主成功率结论。**
 
-阶段三当前不再由“所有 surrogate Gate 必须完美”阻塞。E5–E9 继续保留为离线
-证据账本；Phase 1 已按预注册规则得到分支 A。下一步只能先冻结一次完整
-28/4 matched A0/A1 Phase 2 配方，不得根据本次动作差异大小再挑 checkpoint、
-LR、sample weight 或门槛。
+阶段三不再由 surrogate Gate 阻塞。E5–E9 作为离线证据账本，Phase 1 证明
+future-content action sensitivity；Phase 2 则得到有效离线负结果。按冻结停止
+规则，不再挑 checkpoint、LR、sample weight、K 或 OOD outcome 重开该 Adapter
+路线。
 
 ## 3. 证据等级
 
@@ -147,7 +147,7 @@ outcome JSONL 前使用 `frozen_before_source_outcomes`；现有 v2 则走更窄
 | 阶段三 Gate E.9a-v1/v2 | v1 为 0-objective invalid；v2 四轨各完成 200 updates/1,600 objectives，held-out `75..106`，88.60 分钟 | v2 raw A0/A1 reduction `4.175%/12.994%`，normalized `2.983%/11.010%`；tail harm `2/0→0/0`，但 normalized paired `8.274%<10%`。RNG identity 字段未落盘使 engineering Gate invalid；无 E.9b candidate |
 | 阶段三 Phase 0 E9a-v2.1 audit | CPU-only、0 forward/backward/optimizer/checkpoint tensor load、0 CUDA、父目录 0 write；27/27 checks true | 恢复登记为 `audit_valid_scientific_failed`；normalization tail signal 合法，但 `sample_tail_mitigation_not_supported`、无独立复验 candidate、E9b locked |
 | 阶段三 Phase 1 K=1 online CF | 单卡 8 sample；B0 replay/null L2/L∞ 均 0；correct-null L2 mean/p50/p95 `0.011052/0.011001/0.015738`；correct-shuffle `0.012092/0.011685/0.017690`；两者及 action hash 均 `8/8` 过冻结门槛；paired correct-null overhead `258.95 ms` mean | **有效 SMOKE、分支 A**：future 内容会改变该 checkpoint 的动作，但 action cosine 仍约 `0.9997`、单 task/无 rollout；不能写 success/OOD。模型加载峰值 `23,679.51 MiB`，policy 峰值 `13,009.92 MiB` |
-| 阶段三 Phase 2 full 28/4 | config fingerprint `fabb96a...468`；A0/A1、LR 3e-4、200×28、calibration `139..170`、dev `171..202`、train `50001..55600`；已保存 train/dev `896/128` calibration rows，weight SHA `4c36dece...1dc22` | **CALIBRATION COMPUTE COMPLETE / FORMAL STATUS FAILED / TRAINING NOT STARTED**：manifest 路径表示错误已做 bookkeeping-only 修复，须原目录 resume；没有 A0/A1 loss/checkpoint。finalize 仍固定 `phase3_unlocked=false` |
+| 阶段三 Phase 2 full 28/4 | A0/A1 各 200×28 training objectives；12/12 hard checks、32/32 manifest descriptors、8/8 checkpoint provenance；双卡 tracks 约 69 分钟 | **VALID OFFLINE NEGATIVE**：A0 `+1.845%`、A1 `−1.712%`；A1 final 比 A0 高 `3.624%`，4/4 dev sample 更差；`phase3_unlocked=false` |
 
 20-step pilot 的 episode-weighted Clean→OOD 描述值为：latent L1
 `0.1512→0.2002`、cosine distance `0.1168→0.1942`、motion-direction cosine
@@ -213,8 +213,9 @@ OOD 一致性下降假设”，不能进入论文结论表。
 - 阶段三 Phase 1 K=1 在线动作反事实协议与结果：
   [thought3_phase1_k1_online_counterfactual_protocol.md](thought3_phase1_k1_online_counterfactual_protocol.md)、
   [thought3_phase1_k1_online_counterfactual_report.md](thought3_phase1_k1_online_counterfactual_report.md)
-- 阶段三 Phase 2 完整 28/4 A0/A1 单配方协议：
-  [thought3_phase2_full_28_4_protocol.md](thought3_phase2_full_28_4_protocol.md)
+- 阶段三 Phase 2 完整 28/4 A0/A1 单配方协议与结果：
+  [thought3_phase2_full_28_4_protocol.md](thought3_phase2_full_28_4_protocol.md)、
+  [thought3_phase2_full_28_4_report.md](thought3_phase2_full_28_4_report.md)
 - 阶段三加速路线、Phase 2/3 草案与硬停止规则：
   [thought3_accelerated_roadmap.md](thought3_accelerated_roadmap.md)
 - 阶段三数据/训练/评测：[thought3_data_protocol.md](thought3_data_protocol.md)、[thought3_training.md](thought3_training.md)、[thought3_evaluation.md](thought3_evaluation.md)
@@ -230,21 +231,19 @@ OOD 一致性下降假设”，不能进入论文结论表。
 2. Phase 1 已完成并按冻结规则进入 A：
    `future_content_sensitivity_observed`。B0 replay、formal-null parity、
    no-cache/no-future-RGB 和 frozen SHA 全部通过。
-3. Phase 2 唯一 28/4 normalized matched A0/A1 配方已经冻结；calibration 的
-   896+128 rows 已保存。当前最近一步是在原目录 `--resume`，完成 manifest
-   复验后启动同一 LR/seed/update budget 与 paired flow schedule，不另建 run。
-4. Phase 2 不得根据本次 `8/8` 动作差异大小重新挑 checkpoint、sample weight、
-   LR 或门槛；不得读取 OOD/success，也不得消费 E9b reserve 作为新筛选集。
-5. Phase 2 训练完成后，先在完整 checkpoint 上按相同协议复验一次 K=1
-   content sensitivity；该复验不过则不进入 rollout。
-6. Phase 2 即使解锁也只运行 A0/A1；只有 240-rollout directional OOD pilot
-   给出正向 success 信号后，才允许 A2/A4。
-7. 当前不得覆盖 E.5–E.9 Run ID、事后放宽门槛、根据动作差异挑 checkpoint，
+3. Phase 2 已有效完成，但 development direction 未观察到：A1 比 A0 高
+   `3.624%` 且 4/4 sample 更差，分类为
+   `training_valid_dev_direction_not_observed`。
+4. 按冻结规则停止在 Phase 3 之前：不做完整-checkpoint sensitivity recheck、
+   OOD pilot、A2/A4、checkpoint/LR/weight/K 调参，也不消费 E9b reserve。
+5. 当前研究工作转为整理负结果、Phase 1→Phase 2 证据链和论文/简历表达；
+   若未来提出新方法，必须作为新的、独立预注册路线，不能覆盖本结果。
+6. 当前不得覆盖 E.5–E.9 Run ID、事后放宽门槛、根据动作差异挑 checkpoint，
    或把 engineering smoke 写成 success/OOD 证据。
-8. 在不按自动 metric/outcome 挑案例的前提下，冻结正式 human-review budget、
+7. 在不按自动 metric/outcome 挑案例的前提下，冻结正式 human-review budget、
    seed 和每 job 至多一个 probe；至少两名 reviewer 独立标注并保留 agreement/
    adjudication。
-9. 人工 endpoint 只回答 goal progress、physical plausibility、局部 action
+8. 人工 endpoint 只回答 goal progress、physical plausibility、局部 action
    execution 和 future–actual agreement；不把它升级成 future-to-action 因果。
-10. 阶段三 OOD 结果不用于边训练边选择 K，
-   Phase F 后先冻结分析协议再解锁正式 cohort。
+9. 阶段三 Phase F/G OOD 草案未解锁并保持 archived；不得用阶段一既有 OOD
+   outcome 事后选择 Adapter、K 或 checkpoint。

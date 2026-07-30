@@ -1,6 +1,6 @@
 # Thought3 Phase 2：完整 28/4 A0/A1 单配方训练协议
 
-状态：`CALIBRATION COMPUTED / TRAINING NOT STARTED / RESUME REQUIRED`
+状态：`COMPLETED / VALID OFFLINE NEGATIVE RESULT / PHASE 3 LOCKED`
 
 冻结日期：2026-07-30
 配置：`configs/thought3/phase2_full_28_4_a0_a1.yaml`
@@ -38,6 +38,12 @@ absolute root；旧代码直接对二者调用 `Path.relative_to()`。这只是�
 用于 calibration、track 与 checkpoint 工件；不改变 config fingerprint、数据、
 flow、loss、weight、LR、训练预算、endpoint 或门槛。恢复必须在原目录执行
 `--resume`，先复验并复用已完成 rows，再启动 matched A0/A1。
+
+恢复运行随后完整完成。固定 step-200 结果为 A0 reduction `+1.845%`、A1
+reduction `−1.712%`；A1 final mean 比 A0 高 `3.624%`，且 4/4 development
+sample 的 A1 loss 更高。冻结分类为
+`training_valid_dev_direction_not_observed`，Phase 3 保持锁定。完整审计见
+[thought3_phase2_full_28_4_report.md](thought3_phase2_full_28_4_report.md)。
 
 ## 1. 研究问题与进入条件
 
@@ -340,16 +346,22 @@ resume 会：
 
 ## 14. 当前可证明与不可证明
 
-协议与代码当前可以证明：
+协议、代码与完整运行当前可以证明：
 
 - Phase 2 的数据、配方、schedule、endpoint 和停止规则已在 outcome 前冻结；
 - 双卡并行不会改变 A0/A1 的 sample/flow/weight 配对；
-- dry-run 不触发真实计算。
+- checkpoint 与 objective/update metric prefix SHA 绑定；
+- Adapter/optimizer checkpoint round-trip；
+- 两轨均完成 200×28，step-200 development 完整；
+- frozen Fast-WAM SHA 前后相同；
+- 12/12 hard checks、32/32 manifest descriptor 与 8/8 checkpoint provenance
+  通过；
+- A1 未满足冻结 direction，Phase 3 已按规则锁定。
 
-在真实命令完成前仍不能证明：
+仍不能证明：
 
-- 完整 28/4 A1 development 优于 A0；
 - 完整 checkpoint 仍有 future-content action sensitivity；
 - A1 提高 Clean/OOD success；
 - K=1 优于 K=2/K=4；
-- 任何正式论文主结论。
+- 本次一个 task、一个 seed、4 条 development sample 可推广到其他设置；
+- Fast-WAM 在 OOD 中普遍不需要 future。

@@ -1,14 +1,14 @@
 # Thought3 设计：Partial-Future Adapter
 
-状态：Phase 0 审计完成；Phase 1 K=1 在线动作反事实真实单卡完成、分支 A；
-Phase 2 待预注册
+状态：Phase 0/1 完成；Phase 2 完整 28/4 A0/A1 得到有效离线负结果；
+Phase 3/A2/A4 锁定
 科学问题：显式读取低成本 future latent，能否改善 Fast-WAM 的 OOD 控制，而收益不是由
 额外参数、重新训练或错误对照造成？
 
 当前执行顺序以
 [thought3_accelerated_roadmap.md](thought3_accelerated_roadmap.md) 为准。
-E5–E9 的 surrogate 结果不再阻塞 Phase 1；六组 K 曲线只有在 K=1 directional
-OOD pilot 正向后才解锁。
+E5–E9 的 surrogate 结果不再阻塞 Phase 1；但 Phase 2 direction 为负，因此
+K=1 directional OOD pilot 和六组 K 曲线均未解锁。
 
 ## 1. 研究声明与非声明
 

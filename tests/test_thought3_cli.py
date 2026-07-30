@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 import torch
@@ -25,6 +26,7 @@ THOUGHT3_COMMANDS = (
     "thought3-diagnose-checkpoint-trajectory",
     "thought3-replicate-a0-flow-variance",
     "thought3-diagnose-sample-tail-mitigation",
+    "thought3-audit-e9-v2-artifacts",
     "thought3-plan-cache",
     "thought3-build-cache",
     "thought3-validate-cache",
@@ -33,6 +35,9 @@ THOUGHT3_COMMANDS = (
     "thought3-evaluate",
     "thought3-aggregate",
     "thought3-report",
+)
+E9_V21_AUDIT_CONFIG = Path(
+    "configs/thought3/audits/phase_e9_v2_1_readonly_audit.yaml"
 )
 
 
@@ -53,7 +58,11 @@ def test_dry_run_never_loads_checkpoint_or_writes(
     monkeypatch,
     capsys,
 ):
-    config = write_thought3_config(tmp_path)
+    config = (
+        E9_V21_AUDIT_CONFIG
+        if command == "thought3-audit-e9-v2-artifacts"
+        else write_thought3_config(tmp_path)
+    )
 
     def forbidden(*args, **kwargs):
         raise AssertionError("dry-run attempted torch.load")

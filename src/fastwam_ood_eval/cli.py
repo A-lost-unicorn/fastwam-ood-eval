@@ -444,6 +444,10 @@ def build_parser() -> argparse.ArgumentParser:
             "thought3-diagnose-sample-tail-mitigation",
             "Run Gate E.9a: matched raw/normalized A0/A1 tail mitigation",
         ),
+        (
+            "thought3-audit-e9-v2-artifacts",
+            "Run CPU-only E.9a-v2.1 artifact identity audit",
+        ),
         ("thought3-plan-cache", "Plan paired K=1/2/4 future cache shards"),
         ("thought3-build-cache", "Build this rank's future cache shards"),
         ("thought3-validate-cache", "Validate cache schema, pairing and checksums"),

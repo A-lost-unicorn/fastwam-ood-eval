@@ -383,6 +383,28 @@ def _report(cfg: Thought3Config) -> dict[str, Any]:
 
 
 def dispatch(args: Any) -> int:
+    if args.command == "thought3-audit-e9-v2-artifacts":
+        from fastwam_ood_eval.thought3.phase_e9_v21_readonly_audit import (
+            audit_dry_run_payload,
+            load_e9_v21_audit_config,
+            run_e9_v21_readonly_audit,
+        )
+
+        if args.set or args.device or args.rank != 0 or args.world_size != 1:
+            raise ValueError(
+                "E.9a-v2.1 audit forbids config overrides, device, and ranks"
+            )
+        audit_cfg = load_e9_v21_audit_config(args.config)
+        if args.dry_run:
+            _emit(audit_dry_run_payload(audit_cfg))
+            return 0
+        result = run_e9_v21_readonly_audit(
+            audit_cfg,
+            resume=args.resume,
+        )
+        _emit(result)
+        return 0
+
     cfg = _load(args)
     if args.dry_run:
         _emit(_dry_run_payload(cfg, args.command))

@@ -1,0 +1,103 @@
+schema_version: thought3.phase_e9_v2_1.audit_config.v1
+
+parent:
+  root: outputs/thought3/phase_e9_sample_tail_mitigation_v2
+  expected_file_count: 77
+  gate_sha256: 022e80868b56d7af7979e3c43a995061945ff7f615c6c21c5cf79256c8e25e24
+  config_fingerprint: afcd6a7fdad6338a2a09a0d881494ea9e5e2a0c9fd9495d712fcafeb5507097a
+  original_schema: thought3.phase_e9.sample_tail_mitigation.v2
+  original_status: invalid
+  core_artifacts:
+    data_preparation.json: 68ab4dbee025afaa1ceeaf2c10a5429f9da126f9d6115939e63a0476e206c5f4
+    gate_e9a_result.json: 022e80868b56d7af7979e3c43a995061945ff7f615c6c21c5cf79256c8e25e24
+    logs/phase_e9a_v2.log: 17cb5abe1982d075412b1e6555e94329d20265732ee4345f164cbf0e7fceb5d3
+    pre_validation_result.json: bfd83683c9b50a52cd4d284c53917b110e1a5933edb76b265dacbd9bc1db4333
+    run_status.json: c6e546c1fbeb64ac64462c2183dd8622a4e68c0b639070c415837c9f955a7fe9
+    tracks/raw/a0/training_manifest.json: 07a2cc94fd3885fa56a9cc4cc1bca1e29fbd3679751bb7042caccec22a0f4710
+    tracks/raw/a0/heldout_multiflow_metrics.jsonl: 8a53c38c11d688fa246b2be2b8e163f283050dfb935a8c904c4160c1c3d15753
+    tracks/raw/a0/checkpoints/step_00000200/adapter.safetensors: 0d850504f8e5199a737c3b66daaa57b1075cfccfcb6918fd34c71ce356a58eef
+    tracks/raw/a1/training_manifest.json: c3f3ae80a5c59f260a0a10dc5e9280386b30bfd43ab6348d8ce012b6339da39b
+    tracks/raw/a1/heldout_multiflow_metrics.jsonl: 48149b03ee8228a322df9397680ea863a6feb11dc27e6abe9ffe74ebaf598046
+    tracks/raw/a1/checkpoints/step_00000200/adapter.safetensors: 237a92d5820ca3c657efd94abfea61b05f14874165669053e8700d2e3e4432e8
+    tracks/normalized/a0/training_manifest.json: 13c72f643a1ae7dc0f635659a6b3db5a745bc554a35b7e3e49c711556b87a4b5
+    tracks/normalized/a0/heldout_multiflow_metrics.jsonl: 29652779af2ac243bbe5413fbf6f45b70931c454eed888472e409427e05d6248
+    tracks/normalized/a0/checkpoints/step_00000200/adapter.safetensors: 61965a4ffb474055b546a3d7bfe7520bbaf694546e63da86d5e8933659aa9bba
+    tracks/normalized/a1/training_manifest.json: ef57b5e74eb2675853efbc3fe2e59334bc436d0eb1bbe81a59085f1daf98638c
+    tracks/normalized/a1/heldout_multiflow_metrics.jsonl: c695df922799c9dfa703fe40b9318957a8a0bb3247910442b997015ceffcaa12
+    tracks/normalized/a1/checkpoints/step_00000200/adapter.safetensors: e63ccbf440a25154d810711abbc72c6f98edeb9b867dcb5d09fdcfa223c7d169
+
+provenance:
+  project_run_commit: 694d1d0d98b11d24ca16a0c261dc2fa89e750d6a
+  fastwam_commit: 45d8e1458921d83f8ad6cf9ce993d371208dabd0
+  source_blobs:
+    configs/thought3/phase_e9_sample_tail_mitigation_v2.yaml: 01640a11d1c5d255bf3dad274416a8a39c5e2c43
+    scripts/run_thought3_phase_e9_sample_tail_mitigation_v2.sh: 5c368d66440d91eed452d5ced0e4f51ab336d014
+    src/fastwam_ood_eval/thought3/phase_e9_sample_tail_mitigation.py: 6be05738095ed3cbae0fbb82f187f8f614a350a8
+    src/fastwam_ood_eval/thought3/real_training.py: b0906eefa510230a2f7fbec9aab5b67985afec45
+  run_first_event_utc: "2026-07-29T09:32:18.096973+00:00"
+  run_completed_utc: "2026-07-29T11:00:49.507757+00:00"
+
+identity:
+  train_seed: 3407
+  noise_namespace: thought3-real-action-noise-v1
+  timestep_namespace: thought3-real-action-time-v1
+  objective_digest_format: base_sample_id_NUL_train_seed_NUL_flow_step_NUL_noise_seed_NUL_timestep_seed
+  heldout_flows:
+    - 75
+    - 76
+    - 77
+    - 78
+    - 79
+    - 80
+    - 81
+    - 82
+    - 83
+    - 84
+    - 85
+    - 86
+    - 87
+    - 88
+    - 89
+    - 90
+    - 91
+    - 92
+    - 93
+    - 94
+    - 95
+    - 96
+    - 97
+    - 98
+    - 99
+    - 100
+    - 101
+    - 102
+    - 103
+    - 104
+    - 105
+    - 106
+  sample_ids:
+    - 9610d2aed3a6ddf382c514715ead977c9f9a25b56265b2705a9146ac28f6c0cc
+    - 75359438f810e6921754de327beda8bd974343f5e89fb54d7ac8852f79c89c9b
+    - 5f82a5db9be7a61f969fd32f5bca19dbb19a65106fb49d5357705be2d03def44
+    - 8f34793be5e051e0d62c0397b83cc341f17b626bd73660968f48ff1f6339d1b9
+    - 8c00174e915504c49a3c69057f9c199af1654a6ecef414070c1657316b1e4418
+    - 461a673f2745ab243d99d617f4514a737644d44ba2fc5fdece8b45f347e51564
+    - 739baab482230ba4ee1ae9c0cccf5886268db9ee37c895435af6c6891d22c3b0
+    - 81363feff988d3f3faaeeb66191e7ff9c4fd40c85d7b3b7cd0bda84cd41e3b9b
+  expected_zero_weight_positions:
+    - [1, 80]
+    - [7, 93]
+  expected_probe_rows: 256
+  expected_probes_per_track: 2
+  weight_cpu_gpu_abs_tolerance: 0.000001
+
+scientific:
+  paired_advantage_threshold: 0.10
+  expected_classification: sample_tail_mitigation_not_supported
+  expected_independent_replication_candidate: false
+  expected_raw_confirmed_harm_count: 2
+  expected_normalized_confirmed_harm_count: 0
+
+output:
+  root: outputs/thought3/phase_e9_v2_1_readonly_audit_v1
+

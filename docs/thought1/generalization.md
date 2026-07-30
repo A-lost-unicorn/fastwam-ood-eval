@@ -1,0 +1,55 @@
+# 思考点 1：unseen 泛化与未来想象
+
+正式实验结果、完整性审计和结论边界见
+[思考点一正式报告](report.md)。
+
+## 结论边界
+
+当前 release 能严谨完成的是“标准 LIBERO → LIBERO-Plus 环境扰动”的 zero-shot OOD 鲁棒性评测。其训练数据配置列出 `libero_spatial`、`libero_object`、`libero_goal` 和 `libero_10`，因此直接在这些 suite 上测试不能证明 unseen-object 或 unseen-task 泛化。LIBERO 与 RoboTwin 又使用不同平台接口和各自训练的 release checkpoint，不能把两个独立的同平台分数称为 cross-platform transfer。
+
+| 研究轴 | 当前状态 | 可报告的结论 |
+| --- | --- | --- |
+| 跨环境 | FORMAL 已完成 | Clean 97.25%→OOD 47.70%，绝对下降 49.55 pp；可报告五类官方 shift 的分层结果 |
+| 跨物体 | 仅诊断 | `libero_object` 的按对象表现；不是 unseen object，因为训练已见该 suite |
+| 跨任务 | 仅诊断 | 四个 suite/任务的分层表现；不是 unseen task，因为训练已见这些 suite |
+| 跨平台 | 阻塞 | 无；需要同一策略的源/目标平台适配与明确的训练暴露关系 |
+| 未来想象 | 阻塞 | 无；需要与 Fast-WAM 训练配方匹配的 Joint WAM/IDM checkpoint |
+
+机器可读版本在 `configs/studies/thought1.yaml`。
+
+## 为什么不能直接开关未来想象
+
+上游 `FastWAM` 的 attention mask 只允许 action token 读取首帧 video token；`infer_action` 因而不生成未来帧。即使调用 `infer_joint` 并保存未来视频，action mask 仍只读取首帧，所以这只是额外可视化开销，不是动作因果路径的消融。
+
+上游 `FastWAMJoint` 改变了 attention mask，使 action token 读取全部未来 video latent；`IDM` 则先生成未来视频再恢复动作。这些是不同的训练变体，必须加载各自 checkpoint。不能把 `libero_uncond` 权重加载进 `joint` 结构，也不能用是否保存视频冒充 on/off。
+
+## 三卡执行状态
+
+1. 已完成单卡 Clean smoke：2/2 completed、0 exception。
+2. 已完成单卡 OOD smoke：camera/light 4/4 completed、0 exception。
+3. 已完成 `configs/eval_ood_pilot.yaml` 三卡真实 pilot：9 planned、8 completed、1 expected skipped、0 exception；三个 rank 均产生真实 episode result。
+4. 已执行 `bash scripts/plan_thought1.sh`：四个 suite 共 7,639 planned
+   （800 Clean；6,771 OOD runnable；68 OOD skipped），不是旧协议的 12,800。
+5. 已使用 3 个 rank 完成 800 Clean 与 6,771 OOD rollout；0 exception、0
+   job 遗漏或重复，68 条预期空分层保持 skipped。
+6. 八个正式目录已合并聚合。Clean 为 `778/800=97.25%`，OOD 为
+   `3230/6771=47.70%`，绝对下降 49.55 pp、相对下降 50.95%。
+7. 机器 `paired` 表把每个 OOD variant 与同任务的 Clean episode-0 anchor
+   对齐；6,771 个展开比较实际只有 40 个唯一 Clean anchor，不能视为 6,771
+   个相互独立的 Clean trial。任务聚类敏感性分析仍得到 49.22 pp drop，
+   95% task-bootstrap CI `[42.14, 56.39] pp`。
+
+旧的 12,800-job manifests 来自把 OOD 每个分层重复 20 次的计划，已经过期，
+不能直接执行。`P1-FORMAL-v1` 已按 task-instance 协议完成；逐阶段命令和验收
+证据见 [实施与验收手册](execution_guide.md)。
+
+Joint WAM 的 smoke 模板位于 `configs/ablations/`。它们可以执行 `plan`，但 `doctor` 会在匹配 checkpoint 和 stats 不存在时失败；这是有意的安全门禁。
+
+截至 2026-07-22，官方 [`yuanty/fastwam`](https://huggingface.co/yuanty/fastwam) 仍只发布 LIBERO/RoboTwin 的 uncond checkpoint。第三方 [`LIQIIIII/badwam-libero-joint-wam`](https://huggingface.co/LIQIIIII/badwam-libero-joint-wam) 与 [`LIQIIIII/badwam-libero-idm-wam`](https://huggingface.co/LIQIIIII/badwam-libero-idm-wam) 提供约 12 GB 的 Joint/IDM 权重；其 metadata 说明 Joint 训练到 step 21700 并使用默认 Fast-WAM Joint 配置，但没有证明它与官方 uncond checkpoint 在初始化、训练 seed、优化预算和精确数据版本上配对，且模型页许可证标为 `other`。因此它们最多可作为 exploratory/associational baseline，不能直接支持“未来想象导致 unseen 泛化提升”的因果结论。
+
+## 让其真正回答 unseen object/task/platform 所需的新增证据
+
+- Object：定义训练对象集合和完全不相交的测试对象集合，训练一个不含测试对象的 checkpoint。
+- Task：定义语言/技能/场景级 holdout，冻结 split 后训练，不得用 release 的全-suite checkpoint冒充。
+- Platform：确定同一动作语义、相机/本体状态映射和目标平台成功判定，并说明训练是否见过目标平台。
+- Future imagination：Fast-WAM 与 Joint WAM/IDM 使用相同数据 split、优化步数、初始化/训练 seed 集合和推理预算；至少提供多个训练 seed。仅一个不同来源 checkpoint 的胜负只能作相关性证据。

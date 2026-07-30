@@ -55,7 +55,7 @@ class FastWAMAdapter(BasePolicy):
             from experiments.libero import eval_libero_single as official
         except ImportError as exc:
             raise RuntimeError(
-                "Fast-WAM dependencies are unavailable. Follow docs/environment_setup.md and install "
+                "Fast-WAM dependencies are unavailable. Follow docs/shared/environment_setup.md and install "
                 "third_party/FastWAM before real evaluation."
             ) from exc
 

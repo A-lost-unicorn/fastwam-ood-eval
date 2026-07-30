@@ -53,9 +53,9 @@ def _dry_run_payload(cfg: Thought3Config, command: str) -> dict[str, Any]:
 
 def _audit(cfg: Thought3Config) -> dict[str, Any]:
     documents = (
-        Path("docs/thought3_upstream_audit.md"),
-        Path("docs/thought3_design.md"),
-        Path("docs/thought3_risk_register.md"),
+        Path("docs/thought3/foundations/upstream_audit.md"),
+        Path("docs/thought3/foundations/design.md"),
+        Path("docs/thought3/foundations/risk_register.md"),
     )
     return {
         "config_fingerprint": cfg.fingerprint,

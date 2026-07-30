@@ -1,0 +1,225 @@
+{
+  "figures": {
+    "figure1_ood_success.svg": {
+      "attempted": [
+        800,
+        6771,
+        1599,
+        1550,
+        1076,
+        1525,
+        1021
+      ],
+      "ci95_high_percent": [
+        98.375,
+        48.89971939152267,
+        16.948092557848653,
+        45.225806451612904,
+        54.46096654275093,
+        63.67213114754099,
+        84.03525954946132
+      ],
+      "ci95_low_percent": [
+        96.0,
+        46.55146950228917,
+        13.3833646028768,
+        40.38709677419355,
+        48.51301115241636,
+        58.75409836065574,
+        79.43192948090108
+      ],
+      "labels": [
+        "Clean",
+        "OOD overall",
+        "Camera",
+        "Robot init.",
+        "Background",
+        "Object layout",
+        "Lighting"
+      ],
+      "success_rate_percent": [
+        97.25,
+        47.703441146064094,
+        15.134459036898063,
+        42.83870967741936,
+        51.486988847583646,
+        61.24590163934426,
+        81.88050930460334
+      ]
+    },
+    "figure2_future_consistency.svg": {
+      "clean_vs_ood": {
+        "future_latent_cosine_distance": {
+          "bootstrap_replicates": 10000,
+          "bootstrap_seed": 12134449883209279447,
+          "ci95_high": 0.03810604864551166,
+          "ci95_low": 0.025368425052212748,
+          "clean_episodes": 200,
+          "clean_task_equal_mean": 0.10247330337555989,
+          "eligible_tasks": 40,
+          "group": "all_ood",
+          "metric": "future_latent_cosine_distance",
+          "ood_episodes": 532,
+          "ood_minus_clean": 0.031612347361628615,
+          "ood_task_equal_mean": 0.1340856507371885,
+          "probe_mode": "all_available",
+          "raw_p_value": 9.999000099990002e-05,
+          "scope": "overall"
+        },
+        "motion_direction_cosine": {
+          "bootstrap_replicates": 10000,
+          "bootstrap_seed": 14373580664731003054,
+          "ci95_high": -0.1664093211686032,
+          "ci95_low": -0.2133895961889137,
+          "clean_episodes": 200,
+          "clean_task_equal_mean": 0.7415674750905583,
+          "eligible_tasks": 40,
+          "group": "all_ood",
+          "metric": "motion_direction_cosine",
+          "ood_episodes": 532,
+          "ood_minus_clean": -0.1897549703485386,
+          "ood_task_equal_mean": 0.5518125047420197,
+          "probe_mode": "all_available",
+          "raw_p_value": 9.999000099990002e-05,
+          "scope": "overall"
+        }
+      },
+      "ood_failure_association": {
+        "bh_q_value": 9.999000099990002e-05,
+        "bootstrap_replicates": 10000,
+        "bootstrap_seed": 3197537922665615911,
+        "ci95_high": 0.03280727261294811,
+        "ci95_low": 0.016589517177311604,
+        "condition": "ood",
+        "eligible_tasks": 40,
+        "excluded_outcome_mismatch_episodes": 2,
+        "failure_episodes": 275,
+        "failure_minus_success": 0.024913202952014605,
+        "failure_task_equal_mean": 0.14662973744921814,
+        "metric": "future_latent_cosine_distance",
+        "probe_mode": "all_available",
+        "raw_p_value": 9.999000099990002e-05,
+        "success_episodes": 255,
+        "success_task_equal_mean": 0.12171653449720354
+      }
+    },
+    "figure3_sensitivity_vs_utility.svg": {
+      "phase1_action_l2": {
+        "B0\u2013null": {
+          "mean": 0.0,
+          "p95": 0.0
+        },
+        "Correct\u2013null": {
+          "mean": 0.01105219020973891,
+          "p95": 0.015738203795626758
+        },
+        "Correct\u2013shuffle": {
+          "mean": 0.012091711862012744,
+          "p95": 0.01769042545929551
+        }
+      },
+      "phase2_development_loss": {
+        "A0_K0": 0.004155978542513594,
+        "A1_K1": 0.00430658254524019,
+        "A1_minus_A0": 0.00015060400272659535,
+        "initial": 0.004234103628760977
+      }
+    },
+    "figure4_phase2_per_sample.svg": {
+      "samples": [
+        {
+          "A0_final_mean_loss": 0.006007501776707613,
+          "A1_final_mean_loss": 0.006041887596893503,
+          "A1_minus_A0": 3.4385820185889315e-05,
+          "A1_vs_A0_percent": 0.5723813569096324,
+          "sample_id": "253c241e7c66e1c8b46432b143db546cf91802b971bd3121a374e04f8b58ba21"
+        },
+        {
+          "A0_final_mean_loss": 0.0025318133659766318,
+          "A1_final_mean_loss": 0.002811739691310322,
+          "A1_minus_A0": 0.00027992632533369033,
+          "A1_vs_A0_percent": 11.056357040192433,
+          "sample_id": "9c54127523fc7b7befea9e5110c1c30448d73a72333efd69258f68a854c4daaf"
+        },
+        {
+          "A0_final_mean_loss": 0.005217952793600489,
+          "A1_final_mean_loss": 0.0053370639236618445,
+          "A1_minus_A0": 0.00011911113006135565,
+          "A1_vs_A0_percent": 2.2827176629010215,
+          "sample_id": "30d329649c06076b86596da2172ff7613bb14e73b81b22d774ea32756053a208"
+        },
+        {
+          "A0_final_mean_loss": 0.002866646233769643,
+          "A1_final_mean_loss": 0.003035638969095089,
+          "A1_minus_A0": 0.00016899273532544612,
+          "A1_vs_A0_percent": 5.895137437423538,
+          "sample_id": "08e50da358c8e5d4c91981b36138ed0a20f85005c5f64ba0ae7c4c35d855a588"
+        }
+      ]
+    },
+    "figure5_evidence_chain.svg": {
+      "stages": [
+        {
+          "color": "#DCE8F7",
+          "evidence": "7,571 attempted rollouts",
+          "finding": "97.25% \u2192 47.70% success",
+          "grade": "Behavioral evaluation",
+          "question": "Is Fast-WAM robust\nto environment shift?",
+          "title": "Thought 1"
+        },
+        {
+          "color": "#FBE7D6",
+          "evidence": "732 episodes / 1,010 probes",
+          "finding": "OOD distance +0.0316\nDirection \u22120.1898",
+          "grade": "Observational association",
+          "question": "Does the shadow future\ntrack realized change?",
+          "title": "Thought 2"
+        },
+        {
+          "color": "#DCEFE7",
+          "evidence": "correct / null / shuffle; n=8",
+          "finding": "Action hash changed in 8/8",
+          "grade": "Technical causal intervention",
+          "question": "Does future content\naffect the action?",
+          "title": "Thought 3 \u00b7 Phase 1"
+        },
+        {
+          "color": "#F5DADA",
+          "evidence": "Matched 28 train /\n4 development",
+          "finding": "A1 3.624% worse than A0",
+          "grade": "Offline negative result \u00b7 STOP",
+          "question": "Does K=1 improve\nheld-out utility?",
+          "title": "Thought 3 \u00b7 Phase 2"
+        }
+      ]
+    }
+  },
+  "generator": "scripts/build_paper_figures.py",
+  "schema_version": "fastwam_ood.paper_figures.v1",
+  "source_artifacts": {
+    "thought1": {
+      "path": "outputs/thought1/fastwam/combined/summary/metrics.json",
+      "sha256": "0aa1173038a1c37d37123570a83ff9f08667490e3f94276345c802151897dbb5"
+    },
+    "thought2": {
+      "path": "outputs/thought2/five_category_formal_v1/formal_analysis_v1/formal_analysis.json",
+      "sha256": "9d51e0f46c7af73340b390c3acdfd30fa05c8d1e2fa92794ebcae0f112c69f19"
+    },
+    "thought3_phase1": {
+      "path": "outputs/thought3/phase1_k1_online_counterfactual_v1/aggregate.json",
+      "sha256": "7b6e131fbb01f2eb66fe78a3365fa8b681667b216ecdbd19945fda9b58d899ea"
+    },
+    "thought3_phase2": {
+      "path": "outputs/thought3/phase2_full_28_4_a0_a1_v1/phase2_training_result.json",
+      "sha256": "5ab57efa2747072a14170ef2ecdfc86cfb7bd36528d138cb14b27fdb17f53d93"
+    },
+    "thought3_phase2_a0_samples": {
+      "path": "outputs/thought3/phase2_full_28_4_a0_a1_v1/tracks/a0/development_final_objectives.jsonl",
+      "sha256": "8e370049e467b08fcb720fc664b026fad33ccda824404d70ec7385b7eecf7273"
+    },
+    "thought3_phase2_a1_samples": {
+      "path": "outputs/thought3/phase2_full_28_4_a0_a1_v1/tracks/a1/development_final_objectives.jsonl",
+      "sha256": "7f4f02412c0d4121870b0839350e10ec63af239eae8779cb67df0b9e049e7ee1"
+    }
+  }
+}

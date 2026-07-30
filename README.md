@@ -38,27 +38,19 @@ clean_success_rate - ood_success_rate
 
 `P1-FORMAL-v1` 已完成 800 个 Clean 和 6,771 个 runnable OOD rollout：
 Clean `97.25%`、OOD `47.70%`，绝对下降 `49.55` 个百分点，0 exception。
-完整分层结果与结论边界见 [思考点一正式报告](docs/thought1_report.md)。
+完整分层结果与结论边界见 [思考点一正式报告](docs/thought1/report.md)。
 
 ## 3. 当前阶段不做什么
 
 阶段一、二仍冻结，不重训或改写其 Fast-WAM 基线，也不把仿真 OOD 结论外推成
-真机结论。阶段三已在独立 namespace 完成 Phase A–D 与 E.1–E.8 的真实工程
-诊断；Gate E.5 六条轨迹完整，但没有 A0/A1 共同 eligible LR。E.6 已在
-未使用 train cohort 完成 A0/A1@3e-4 序贯复验：A1 信号复现，但 A0 仅 4/8
-样本不变差，故总 Gate 有效失败。E.7 已完成只读 step-50/100/150/200
-trajectory 诊断：primary flow 不支持预注册的实质晚期退化模式，且没有任何
-step 同时通过 A0、A1 absolute 与 paired 三组门槛。E.8 已完成 A0-only
-的 64 个全新 flow replication：工程 Gate 通过，step 200 pooled mean 下降
-3.728%，但 full/两个 block 的 sample stability 均未全部通过；只有 1/3
-预识别 target 被确认恶化，故冻结分类为 `mixed_or_inconclusive`。因此
-E.9a-v1 在第一条 initial probe 前因旧 `1..5` flow 硬编码失效，完成 0 个
-training objective；该 invalid engineering run 已冻结。E.9a-v2 保持科学
-协议不变并完成四轨 step-200 计算，共 6,400 training 和 2,048 held-out
-objectives；但 probe 未落盘 RNG identity 字段，使根工程 Gate invalid。
-provisional 分类为 `sample_tail_mitigation_not_supported`：normalized tail
-harm 为 0，但 A1-vs-A0 只有 8.274%，未达冻结的 10%，因此没有 E.9b
-candidate。完整 Gate E、A2/A4 和在线成功率评测仍未启动。
+真机结论。阶段三已在独立 namespace 完成 Phase A–D、Gate E 开发审计、
+K=1 在线动作反事实和完整 28/4 A0/A1 matched 训练。Phase 1 证明 future
+内容在 8/8 样本上改变动作；Phase 2 则得到有效离线负结果：A0(K=0)
+development objective 改善 1.845%，A1(K=1) 恶化 1.712%，A1 final 比
+A0 高 3.624%，4/4 development sample 更差。冻结分类为
+`training_valid_dev_direction_not_observed`，因此 Phase 3、完整-checkpoint
+反事实复验、OOD rollout、A2/A4 和 outcome-driven 调参均未解锁。当前论文
+结论是“future sensitivity 不等于 future utility”，不是“future 普遍无用”。
 
 当前 pinned Fast-WAM 代码与 release 权重带来四个结论边界：
 
@@ -67,34 +59,19 @@ candidate。完整 Gate E、A2/A4 和在线成功率评测仍未启动。
 - 跨平台：当前不可评测。同一策略没有同时兼容 LIBERO 与 RoboTwin 的 observation/action/权重。
 - 未来想象：release `libero_uncond` 的动作仅读取当前首帧 token。保存预测视频不等于启用未来想象；因果对照需要训练配方匹配的 `joint`/`idm` checkpoint。
 
-完整可识别性审计见 [思考点 1 协议](docs/thought1_generalization.md)。
-当前实现与实验完成度逐项清单见 [思考点 1 readiness audit](docs/thought1_readiness.md)。
+完整可识别性审计见 [思考点 1 协议](docs/thought1/generalization.md)。
+当前实现与实验完成度逐项清单见 [思考点 1 readiness audit](docs/thought1/readiness.md)。
 
 ### 文档导航
 
-- [研究总控与阶段状态](docs/research_index.md)：论文主线、证据等级、阶段隔离和当前优先级。
-- [实验、卡点与结论台账](docs/experiment_ledger.md)：已运行数字、失败尝试、可写与不可写结论。
-- [思考点一正式报告](docs/thought1_report.md)：全量结果、完整性审计、suite/category/difficulty 分层与结论边界。
-- [思考点 1 实施与验收手册](docs/thought1_execution_guide.md)：checkpoint/assets、单卡 smoke、三卡 pilot 与正式运行门禁。
-- [思考点二上游审计](docs/thought2_upstream_audit.md)：`infer_joint()`、官方预处理、动作语义、VAE、时间对齐和 release 能力门禁。
-- [思考点二概念说明](docs/thought2_concepts.md)：Shadow Diagnostics 的研究问题、旁观语义和因果边界。
-- [思考点二执行手册](docs/thought2_execution_guide.md)：2A/2B、真实命令、指标、阈值校准与人工盲审。
-- [思考点二五类正式结果](docs/thought2_formal_results.md)：732 episodes 的 ID/OOD、outcome association、资源与结论边界。
-- [思考点二盲审与抽样](docs/thought2_blind_review_and_sampling.md)：public/private 盲审包、outcome-blind cohort、anchor 与 pre-outcome freeze。
-- [思考点二统计分析计划](docs/thought2_statistical_analysis_plan.md)：episode/task 层级、primary estimand、cluster bootstrap、缺失与停止规则。
-- [思考点二 static/no-op 校准](docs/thought2_static_calibration.md)：独立 null set、候选阈值、freeze gate、真实数据与恢复规则。
-- [思考点三 Phase B 验收](docs/thought3_phase_b_report.md)：1.37M Adapter、cache、mock trainer、checkpoint、测试与 Phase C 门禁。
-- [思考点三 Phase C/D 验收](docs/thought3_phase_c_report.md)、[Phase D cache 验收](docs/thought3_phase_d_report.md)：真实单样本 backward 与 32-sample K1/K2/K4 cache。
-- [思考点三 Gate E.5 结果](docs/thought3_phase_e5_report.md)：full-cohort 六轨迹结果、有效失败原因、工件哈希和下一复验边界。
-- [思考点三 Gate E.6 预注册](docs/thought3_phase_e6_protocol.md)：未使用 cohort、全新 flow slots、post-selection 披露和冻结门槛。
-- [思考点三 Gate E.6 结果](docs/thought3_phase_e6_report.md)：两轨迹完整结果、唯一失败门槛、逐样本对照和工件哈希。
-- [思考点三 Gate E.7 协议与结果](docs/thought3_phase_e7_protocol.md)、[结果报告](docs/thought3_phase_e7_report.md)：只读 checkpoint trajectory、primary/continuity 分离、冻结分类与无候选结论。
-- [思考点三 Gate E.8 协议与结果](docs/thought3_phase_e8_protocol.md)、[结果报告](docs/thought3_phase_e8_report.md)：A0 step 100/200、64 个全新 flow、双 32-flow block、配对 bootstrap，以及 mixed 诊断结论。
-- [思考点三 Gate E.9a-v1 失败报告](docs/thought3_phase_e9_v1_failure_report.md)、[E.9a-v2 协议](docs/thought3_phase_e9_v2_protocol.md)、[v2 结果](docs/thought3_phase_e9_v2_report.md)：v1 零 objective 失效；v2 四轨完整计算、telemetry invalid 根因、tail/paired 权衡与无 E.9b candidate 结论。
-- [思考点三设计与数据协议](docs/thought3_design.md)、[训练手册](docs/thought3_training.md)、[在线评测手册](docs/thought3_evaluation.md)。
-- [思考点三最终目标完成度](docs/thought3_completion_audit.md)：已证明、未证明与通往正式 OOD 对照的依赖链。
-- [工程亮点、难点与阻碍台账](docs/engineering_highlights.md)：工程复盘、未解决风险和简历素材。
-- [环境配置](docs/environment_setup.md)、[实验协议](docs/experiment_protocol.md)、[上游勘察](docs/upstream_notes.md)。
+- [文档中心](docs/)：按 shared、Thought 1/2/3 和 paper 分类的总入口。
+- [完整论文草稿](docs/paper/manuscript.md)：传统论文结构、图表、结果与限制。
+- [论文证据链](docs/paper/evidence_chain.md)：Phase 1→2、Thought 1→3 及从 0 到 1 的过程。
+- [Thought 1](docs/thought1/) / [Thought 2](docs/thought2/) /
+  [Thought 3](docs/thought3/)：各阶段协议、结果和结论边界。
+- [研究总控](docs/shared/research_index.md) /
+  [实验台账](docs/shared/experiment_ledger.md) /
+  [工程与简历素材](docs/shared/engineering_highlights.md)：跨阶段记录。
 
 ## 4. 项目架构图
 
@@ -144,7 +121,7 @@ bash scripts/create_env.sh fastwam-ood
 conda activate fastwam-ood
 ```
 
-LIBERO-Plus 还需要单独下载 assets；无显示服务器需要 `MUJOCO_GL=egl`。精确步骤、兼容性理由和 assets 目录见 [环境文档](docs/environment_setup.md)。不要同时 `pip install -e third_party/LIBERO` 和 `pip install -e third_party/LIBERO-plus`。
+LIBERO-Plus 还需要单独下载 assets；无显示服务器需要 `MUJOCO_GL=egl`。精确步骤、兼容性理由和 assets 目录见 [环境文档](docs/shared/environment_setup.md)。不要同时 `pip install -e third_party/LIBERO` 和 `pip install -e third_party/LIBERO-plus`。
 
 ## 6. 下载 checkpoint
 
@@ -152,7 +129,7 @@ LIBERO-Plus 还需要单独下载 assets；无显示服务器需要 `MUJOCO_GL=e
 bash scripts/download_checkpoints.sh
 ```
 
-checkpoint、配套 stats 与 Plus assets 的分阶段准备和验收命令见 [实施手册](docs/thought1_execution_guide.md)。
+checkpoint、配套 stats 与 Plus assets 的分阶段准备和验收命令见 [实施手册](docs/thought1/execution_guide.md)。
 
 默认配置期望：
 
@@ -191,7 +168,7 @@ CUDA_VISIBLE_DEVICES=0 MUJOCO_GL=egl MUJOCO_EGL_DEVICE_ID=0 \
   fastwam-ood evaluate --config configs/eval_clean_smoke.yaml --device cuda:0
 ```
 
-为了肉眼验收成功 episode，smoke 时还应将 `experiment.save_failure_video_only` 覆盖为 `false`；完整命令和 action/robot-state 检查见 [实施手册](docs/thought1_execution_guide.md)。
+为了肉眼验收成功 episode，smoke 时还应将 `experiment.save_failure_video_only` 覆盖为 `false`；完整命令和 action/robot-state 检查见 [实施手册](docs/thought1/execution_guide.md)。
 
 ## 8. Clean baseline
 
@@ -255,7 +232,7 @@ CONFIRM_FULL_EVAL=YES GPU_ID=0 \
   bash scripts/run_thought1_single_gpu_full.sh all
 ```
 
-`all/clean/ood` 分别表示完整 Clean+OOD、仅 Clean、仅 OOD。单卡后台运行、显存门禁和日志监控见 [实施与验收手册](docs/thought1_execution_guide.md#81-单卡-rtx-4090-全量脚本)。
+`all/clean/ood` 分别表示完整 Clean+OOD、仅 Clean、仅 OOD。单卡后台运行、显存门禁和日志监控见 [实施与验收手册](docs/thought1/execution_guide.md#81-单卡-rtx-4090-全量脚本)。
 
 ## 11. 聚合结果
 
@@ -371,8 +348,8 @@ fastwam-ood report-static-calibration \
 
 旧阈值 1.0 下 predicted/actual static 均为 7/7；候选敏感性下均为 0/7，
 源 diagnostics JSONL 不改写。完整执行、自动指标和人工失败归因见
-[阶段二手册](docs/thought2_execution_guide.md)，校准细节见
-[static/no-op 手册](docs/thought2_static_calibration.md)。
+[阶段二手册](docs/thought2/execution_guide.md)，校准细节见
+[static/no-op 手册](docs/thought2/static_calibration.md)。
 
 7 个真实 20-step probe 已另行生成 label-blind workflow packet：7 cases /
 28 media，公开 manifest/HTML/CSV 不含 condition、outcome、metric 或 source
@@ -405,7 +382,7 @@ bash scripts/run_thought2_five_category_full.sh --background all
 ```
 
 完整命令和审计边界见
-[盲审与 outcome-blind 抽样手册](docs/thought2_blind_review_and_sampling.md)。
+[盲审与 outcome-blind 抽样手册](docs/thought2/blind_review_and_sampling.md)。
 正式派生分析命令为：
 
 ```bash
@@ -420,7 +397,7 @@ fastwam-ood analyze-thought2-formal \
 ```
 
 完整数值和论文/简历措辞见
-[思考点二五类正式结果](docs/thought2_formal_results.md)。
+[思考点二五类正式结果](docs/thought2/formal_results.md)。
 
 ## 13. 思考点三：Partial-Future Adapter
 
@@ -452,15 +429,15 @@ flow 上 A0 在 step 50/100 稳定、150/200 不稳定，但 pooled mean 继续�
 1,536-objective 只读诊断：step 200 full/双 block 的 pooled mean 都改善，
 但一个预识别 target 和一个非 target 经校正确认恶化，主要分类为
 `mixed_or_inconclusive`。见
-[Gate E.6 报告](docs/thought3_phase_e6_report.md)与
-[Gate E.7 报告](docs/thought3_phase_e7_report.md)、
-[Gate E.8 协议](docs/thought3_phase_e8_protocol.md)和
-[Gate E.8 结果](docs/thought3_phase_e8_report.md)。E.9a-v1 在任何训练
+[Gate E.6 报告](docs/thought3/gate_e/phase_e6_report.md)与
+[Gate E.7 报告](docs/thought3/gate_e/phase_e7_report.md)、
+[Gate E.8 协议](docs/thought3/gate_e/phase_e8_protocol.md)和
+[Gate E.8 结果](docs/thought3/gate_e/phase_e8_report.md)。E.9a-v1 在任何训练
 objective 前因 evaluator 硬编码失效；E.9a-v2 四轨已完成，但 RNG identity
 telemetry 未落盘使工程 Gate invalid。下一步是只读 artifact audit，不重训、
 不运行 E.9b，见
-[v1 失败报告](docs/thought3_phase_e9_v1_failure_report.md)与
-[E.9a-v2 结果](docs/thought3_phase_e9_v2_report.md)。
+[v1 失败报告](docs/thought3/gate_e/phase_e9_v1_failure_report.md)与
+[E.9a-v2 结果](docs/thought3/gate_e/phase_e9_v2_report.md)。
 
 ## 14. 查看失败视频
 
@@ -473,7 +450,7 @@ fastwam-ood review-failures --experiment-dir outputs/ood_full
 
 ## 15. 如何理解结果
 
-报告能够说明 Fast-WAM 对已测扰动是否敏感、哪类/哪个强度下降最大，以及标准分布与 OOD 分布的实测差距。它不能说明显式未来想象一定能修复 OOD、Fast-WAM 完全没有世界建模能力、所有 WAM 都不需要未来想象，或仿真与真机 OOD 等价。详细统计口径见 [实验协议](docs/experiment_protocol.md)。
+报告能够说明 Fast-WAM 对已测扰动是否敏感、哪类/哪个强度下降最大，以及标准分布与 OOD 分布的实测差距。它不能说明显式未来想象一定能修复 OOD、Fast-WAM 完全没有世界建模能力、所有 WAM 都不需要未来想象，或仿真与真机 OOD 等价。详细统计口径见 [实验协议](docs/shared/experiment_protocol.md)。
 
 ## 16. 常见报错
 
@@ -483,7 +460,7 @@ fastwam-ood review-failures --experiment-dir outputs/ood_full
 - LIBERO-Plus asset not found：按环境文档将官方 `assets.zip` 解压到正确目录。
 - CUDA OOM：保持每 GPU 一个 worker，确认 4090 实际可用显存，并降低并发；不要设置 `workers_per_gpu > 1`。
 
-更多见 [故障排查](docs/troubleshooting.md)。
+更多见 [故障排查](docs/shared/troubleshooting.md)。
 
 ## 17. 下一阶段路线
 
@@ -509,16 +486,16 @@ fastwam-ood review-failures --experiment-dir outputs/ood_full
 11. Phase F 技术 pilot 后冻结分析协议，再解锁正式 ID/OOD 六组对照。
 
 最近结果、停止条件和完整依赖链见
-[Gate E.8 结果](docs/thought3_phase_e8_report.md)、
-[Gate E.8 协议](docs/thought3_phase_e8_protocol.md)、
-[Gate E.9a-v1 失败报告](docs/thought3_phase_e9_v1_failure_report.md)、
-[Gate E.9a-v2 协议](docs/thought3_phase_e9_v2_protocol.md)、
-[Gate E.9a-v2 结果](docs/thought3_phase_e9_v2_report.md)、
-[Gate E.7 结果](docs/thought3_phase_e7_report.md)、
-[Gate E.7 协议](docs/thought3_phase_e7_protocol.md)、
-[Gate E.6 结果](docs/thought3_phase_e6_report.md)、
-[Gate E.6 预注册](docs/thought3_phase_e6_protocol.md)、
-[Gate E.5 报告](docs/thought3_phase_e5_report.md) 与
-[阶段三完成度审计](docs/thought3_completion_audit.md)。
+[Gate E.8 结果](docs/thought3/gate_e/phase_e8_report.md)、
+[Gate E.8 协议](docs/thought3/gate_e/phase_e8_protocol.md)、
+[Gate E.9a-v1 失败报告](docs/thought3/gate_e/phase_e9_v1_failure_report.md)、
+[Gate E.9a-v2 协议](docs/thought3/gate_e/phase_e9_v2_protocol.md)、
+[Gate E.9a-v2 结果](docs/thought3/gate_e/phase_e9_v2_report.md)、
+[Gate E.7 结果](docs/thought3/gate_e/phase_e7_report.md)、
+[Gate E.7 协议](docs/thought3/gate_e/phase_e7_protocol.md)、
+[Gate E.6 结果](docs/thought3/gate_e/phase_e6_report.md)、
+[Gate E.6 预注册](docs/thought3/gate_e/phase_e6_protocol.md)、
+[Gate E.5 报告](docs/thought3/gate_e/phase_e5_report.md) 与
+[阶段三完成度审计](docs/thought3/foundations/completion_audit.md)。
 
-实施过程中的工程决策、阻碍和可量化简历素材持续记录在 [工程台账](docs/engineering_highlights.md)。
+实施过程中的工程决策、阻碍和可量化简历素材持续记录在 [工程台账](docs/shared/engineering_highlights.md)。

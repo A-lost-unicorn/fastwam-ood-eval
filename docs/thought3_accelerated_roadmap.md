@@ -2,7 +2,7 @@
 
 更新日期：2026-07-30
 
-当前节点：Phase 0 完成；Phase 1 实现完成、真实 GPU 待运行
+当前节点：Phase 0 完成；Phase 1 真实单卡完成并进入分支 A；Phase 2 待预注册
 
 ## 1. 为什么改线
 
@@ -17,7 +17,7 @@ Phase 0：E9 工件账本修复（已完成，不阻塞）
                        ▼
 Phase 1：K=1 correct/null/shuffle 在线动作反事实
         │
-        ├─ A 内容敏感 ──→ Phase 2：28/4 A0/A1
+        ├─ A 内容敏感（已观测）→ Phase 2：28/4 A0/A1
         │                    ↓
         │              Phase 3：240 paired Clean/OOD pilot
         │                    ↓（仅正向）
@@ -38,13 +38,15 @@ Phase 1：K=1 correct/null/shuffle 在线动作反事实
 - E9 normalized paired 门槛；
 - E9b reserve replication。
 
-在首次 Phase 1 结果前禁止新增 flow-variance、checkpoint-trajectory、
-sample-weight、LR 或 surrogate-threshold Gate，也不训练 A2/A4。
+Phase 1 已于 2026-07-30 得到分支 A。此后仍禁止新增 flow-variance、
+checkpoint-trajectory、sample-weight、LR 或 surrogate-threshold Gate，也不训练
+A2/A4；下一项工作只能是冻结 Phase 2 的唯一 matched A0/A1 配方。
 
 ## 3. Phase 2 草案：完整 28/4 A0/A1
 
-仅当 Phase 1 分支 A 时允许执行。运行前另行冻结正式配置与 commit；本节只是
-设计草案，不是启动授权。
+Phase 1 已满足分支 A，因此允许进入本阶段的**预注册与配置冻结**。运行前仍须
+另行冻结正式 config、commit、update budget 和 checkpoint rule；本节只是设计
+草案，不是训练启动授权。
 
 ### 配方
 
@@ -123,8 +125,8 @@ pilot outcome 前冻结，并与未来正式 Phase G seed namespace 分离。
 
 ## 5. 从现在到 directional OOD 的最短路径
 
-1. 单卡运行一次 Phase 1，获得 A/B/C。
-2. 只有 A：冻结并训练一次 28/4 A0/A1。
+1. ~~单卡运行一次 Phase 1，获得 A/B/C。~~ 已完成，结果为 A。
+2. 现在冻结并训练一次 28/4 A0/A1；不得重选 Phase 1 checkpoint 或门槛。
 3. 在完整 checkpoint 上复验一次 K=1 内容敏感性。
 4. 冻结 240-rollout paired manifest。
 5. 运行 B0/A0/A1/A-shuffle 的 Clean/camera/robot-init pilot。
@@ -140,10 +142,12 @@ pilot outcome 前冻结，并与未来正式 Phase G seed namespace 分离。
 - OOD 下 future–realized 自动一致性 proxy 变差；
 - K=1 A1 离线 action-loss 信号在 E5/E6 两个 cohort 出现；
 - E9 normalization 有 tail-stabilization signal，但未过 paired 门槛。
+- 固定 E6 A1 checkpoint 在八条同 task train sample 上对 K=1 future 内容具有
+  技术动作敏感性：correct-null、correct-shuffle 与 action-hash 均为 `8/8`。
 
 当前尚不支持：
 
-- K=1 future 的内容确实进入动作决策（等待 Phase 1 GPU）；
+- Phase 1 的小幅动作变化会转化成闭环轨迹或成功率差异；
 - K=1 提高 Clean/OOD success；
 - future 对失败的因果解释；
 - K=1 优于 K=2/K=4；

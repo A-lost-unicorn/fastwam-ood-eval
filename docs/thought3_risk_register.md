@@ -1,6 +1,6 @@
 # Thought3 风险登记与停止条件
 
-状态：Phase 0 E9a-v2.1 审计完成；Phase 1 在线反事实实现完成、真实 GPU 待运行
+状态：Phase 0 完成；Phase 1 在线反事实真实单卡完成、分支 A；Phase 2 待预注册
 范围：Partial-Future Adapter 的数据、cache、训练、推理、统计和阶段隔离
 
 ## 1. 等级
@@ -24,7 +24,7 @@
 | ID | 风险 | 概率 | 影响 | 检测证据 | 控制与停止条件 | Gate | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | R01 | Adapter 输入真实未来图像或其 VAE latent | 中 | Critical | schema audit、future-mutation invariance test、provenance | training API 禁止 future observation 字段；一旦输出随真实后续 RGB 改变立即停止 | B/C | Controlled |
-| R02 | 在线正式评测读取训练 cache | 中 | Critical | file-open guard、online evaluator test、manifest | evaluator 不接收 cache path；发现任何 cache read 立即作废该 run | B/F/G | Controlled |
+| R02 | 在线正式评测读取训练 cache | 中 | Critical | file-open guard、online evaluator test、manifest | Phase 1 真实 telemetry 为 0 cache read；后续 evaluator 继续不接收 cache path | B/1/F/G | Controlled / Phase 1 closed |
 | R03 | 把 K 当重复编码、普通 forward 或 action steps | 中 | Critical | scheduler metadata、actual timestep/delta | K 只计 video scheduler update；不匹配即 fail-fast | B/C | Controlled |
 | R04 | K=1/2/4 起始噪声不同 | 中 | High | initial noise hash/seed、paired sample audit | seed 从 base sample ID 推导且不含 K；任一 pair 不同即拒绝 cache | B/D | Controlled |
 | R05 | K cache 与错误 sample 对齐 | 中 | Critical | base/cache ID、source hashes、random online recompute | fingerprint 全匹配；禁止仅按数组位置连接 | B/D | Controlled |
@@ -35,7 +35,7 @@
 | R10 | B0 与 zero-gate A0 初始动作不一致 | 中 | High | fixed-seed action allclose/hash | 初始差异超预注册容差即停止，先修注入路径 | B/C | Controlled |
 | R11 | 注入 hook 未调用、重复调用或泄露上一 batch context | 中 | Critical | hook counter、context lifecycle test | context manager + exact call count + finally cleanup；异常即失败 | B/C | Controlled |
 | R12 | 中层 hook 与 gradient checkpoint 重算冲突 | 中 | High | forward/backward call count、grad comparison | v1 改用 action encoder 输出；中层方案不进入第一版 | B | Controlled |
-| R13 | zero gate 长时间不开，Adapter 实际忽略 future | 高 | High | gate、submodule grad norm、counterfactual | Gate E.1 已证实 step 2 non-gate gradient 和单目标可拟合；多样本与反事实使用仍需 E/F | E/F | Controlled |
+| R13 | zero gate 长时间不开，Adapter 实际忽略 future | 高 | High | gate、submodule grad norm、counterfactual | E.1 已证实 step 2 non-gate gradient；Phase 1 在 E6 checkpoint 上以 correct/null/shuffle `8/8` 证明内容使用；完整 Phase 2 checkpoint 仍须复验 | E/1/2 | Controlled / Phase 1 closed |
 | R14 | Adapter attention mask 全 false 导致 NaN | 低 | High | finite test、mask validator | 每 sample 至少 1 token；masked softmax 单测；NaN 立即停止 | B/C | Controlled |
 | R15 | 上游 full `training_loss()` 把真实 future 带入图 | 高 | Critical | call audit、forbidden API test | 新 action-only loss；Thought3 trainer 禁止调用上游 full loss | B/C | Controlled |
 | R16 | action loss 与官方 flow target/weight 不一致 | 中 | Critical | formula parity test、fixed tensor reference | 逐项复用 scheduler/target/mask/reduction；不一致即停止 | B/C | Controlled |
@@ -51,9 +51,9 @@
 | R26 | 三卡 DDP shard 重复或遗漏 | 中 | High | union/intersection/cardinality test | hash/ordered deterministic shard；重复或缺失即不运行 | B/D/E | Controlled |
 | R27 | FSDP/ZeRO 增加复杂度但无实际收益 | 中 | Medium | memory profile | v1 先普通 DDP；只有实测 OOM 才升级 | C | Controlled |
 | R28 | cache 磁盘不足或产生过多 inode | 中 | High | plan-cache 容量预检、free-space check | Phase D 96-entry pilot 已通过；扩大正式 cache 前重新估算并保留 20% | D | Controlled |
-| R29 | 把 Thought2 3.355 s 当作 K-step 在线延迟 | 高 | High | latency boundary manifest | 新 CUDA event 分段计时；旧数值只作上界背景 | C/F | Controlled |
-| R30 | 离线 cache 读取时间替代部署 future latency | 中 | Critical | report schema、online_no_cache test | 正式 success/latency 只来自 online sampling | F/G | Controlled |
-| R31 | correct 与 shuffle 的计算量不同 | 中 | High | per-stage latency trace | 两者均在线跑相同 K；donor loading 单独记录 | F/G | Controlled |
+| R29 | 把 Thought2 3.355 s 当作 K-step 在线延迟 | 高 | High | latency boundary manifest | Phase 1 独立测得 K1 Video DiT `189.88 ms` mean、paired total overhead `258.95 ms`；Thought2 数值继续隔离 | C/1/F | Closed for K1 |
+| R30 | 离线 cache 读取时间替代部署 future latency | 中 | Critical | report schema、online_no_cache test | Phase 1 全部 future 在线生成、0 cache read；正式 success/latency 继续只允许 online | 1/F/G | Controlled / Phase 1 closed |
+| R31 | correct 与 shuffle 的计算量不同 | 中 | High | per-stage latency trace | Phase 1 两者均精确 1 个 K1 Video DiT 和 20 Adapter calls；donor loading 单独计入 shuffle policy total | 1/F/G | Closed for Phase 1 |
 | R32 | Video-only sampler 与上游 joint path 数值不等价 | 中 | Critical | same-input/seed parity test | Gate C same-seed parity 已通过冻结容差，结果见 Phase C 报告 | C | Closed |
 | R33 | current first-frame slice在 update 后漂移 | 低 | Critical | per-step equality assertion | 每 step 强制覆盖并断言；漂移立即停止 | B/C | Controlled |
 | R34 | latent 被 VAE decode/re-encode，语义变成 Thought2 embedding | 中 | Critical | graph/provenance/schema | cache 只接收 native sampler state `z[:,:,1:]` | B/C | Controlled |
@@ -61,13 +61,13 @@
 | R36 | 上游 config 默认 `val_set_proportion=0` 导致无 dev | 高 | Critical | split manifest | Thought3 自建 90/10 episode split，禁止沿用默认 | B/D | Controlled |
 | R37 | 数据 loader 虽只用 t0，却把后续 RGB 暴露给 model API | 中 | Critical | allowed-key schema、mutation test | 项目侧 current-observation dataset；模型调用对象不含未来帧 | B/C | Controlled |
 | R38 | action target 被误传入 uncond future sampler | 中 | Critical | signature test、taint sentinel | sampler signature 没有 action；传入即 TypeError/config error | B/C | Controlled |
-| R39 | future seed 与 action seed耦合，反事实不干净 | 中 | High | RNG stream manifest | 独立 namespace/Generator；counterfactual 固定 action seed | B/F | Controlled |
+| R39 | future seed 与 action seed耦合，反事实不干净 | 中 | High | RNG stream manifest | Phase 1 使用独立 namespace，correct/shuffle 复用 recipient future seed并固定 target action seed | B/1/F | Closed for Phase 1 |
 | R40 | 训练预算、初始化或 sample order 在 K 间不匹配 | 中 | Critical | cross-run manifest diff | 结构字段只允许 K/future fingerprint 不同；否则拒绝聚合 | E/F/G | Controlled |
 | R41 | 单一 train seed 偶然增益被写成结论 | 中 | High | multi-seed aggregation | Phase F 仅技术 pilot；正式至少多 seed，并报告 seed 间分布 | G | Controlled |
 | R42 | episode 被当完全独立样本，CI 过窄 | 中 | Critical | analysis protocol test | episode→task、task 等权、suite-stratified task bootstrap | G | Controlled |
 | R43 | 参数/成功率提高但 latency 不可部署 | 高 | Medium | Pareto table | 同时报告 P50/P95、显存和成功率；允许结论为 trade-off 不划算 | F/G | Accepted |
 | R44 | future 本身在 OOD 错误，Adapter 放大错误 | 高 | High | correct/shuffle/null、failure taxonomy | 作为核心科学结果报告；不隐藏负提升 | F/G | Accepted |
-| R45 | Adapter 根本不使用 future | 高 | High | replay-calibrated counterfactual | 如实报告；不以 success noise 声称 future 有用 | E/F/G | Accepted |
+| R45 | Adapter 根本不使用 future | 高 | High | replay-calibrated counterfactual | E6 checkpoint 的 Phase 1 分支 A 排除“完全忽略”；完整 Phase 2 checkpoint 与 success relevance 仍须复验 | E/1/F/G | Accepted / Phase 1 negative ruled out |
 | R46 | Phase A 文档变更意外修改 Thought1/2 输出 | 低 | Critical | 冻结文件 SHA-256 复核 | Phase A 前后八个冻结哈希一致；后续 gate 继续复核 | A/B | Closed for A |
 | R47 | 旧 CLI 因 Thought3 import/参数变化而改变 | 中 | Critical | old CLI regression、dry-run | additive lazy import；旧命令输出/计划 fixture 不变 | B | Controlled |
 | R48 | LIBERO-Plus 既有 `.downloads/` 被误归因或写入 | 低 | Medium | upstream status snapshot | 记录为审计前既有；Thought3 path guard 禁止写 third_party | A–G | Controlled |
@@ -83,13 +83,15 @@
 | R58 | 根据 E.8 的已知 tail outcome 调权或只跑 normalized 配方，造成 outcome-conditioned weight 与新 flow 混淆 | 高 | Critical | calibration field audit、weight SHA、raw same-flow controls、protocol timestamp | 四轨 pairing/weight/schedule checks 通过；normalization 降低 tail harm 但同时降低 pooled/paired gain，未被选择为候选 | E | Controlled |
 | R59 | 复用旧 Gate evaluator 时隐含 flow 数/取值硬编码，导致新协议在 objective 前失败且子轨状态误留 `running` | 中 | High | 任意正整数 flow contract、75–106 完整 grid 回归、invocation-scoped failed-status test、v1 SHA 冻结 | v2 成功完成四轨 `75..106`，证明 generic evaluator 与 initial-probe 路径修复有效 | E | Closed |
 | R60 | checker 强制验证 RNG identity 字段，但 probe writer 未持久化这些字段，导致完整运行被标 invalid | 高 | High | writer/checker schema contract、artifact SHA、完整 grid/timestep/weight/zero-position 只读审计 | Phase 0 27/27 checks 通过，父 77 文件未改；登记 engineering valid + scientific failed | E | Closed |
-| R61 | surrogate Gate 无限增长，长期不触达动作或 success 变量 | 高 | Critical | 加速路线和硬停止规则；Phase 1 前禁止新 flow/checkpoint/LR/weight Gate | Phase 0 不阻塞；当前唯一实验是在线 K=1 action CF | 1–4 | Controlled |
-| R62 | 用零 future tensor 冒充 formal null，使 correct-null 混入 projector 响应 | 高 | Critical | request-scoped parameter-free bypass；不构造 tensor、不跑 Video DiT、Adapter call=0；B0 hard parity | null hook 单元测试与 fail-closed runner 已实现 | 1 | Controlled / real run pending |
-| R63 | shuffle 同时改变 target current/context/action noise，无法归因于 future 内容 | 高 | Critical | other-episode 一一 derangement；target RGB/language/proprio/cache/action seed 不变；复用 recipient future noise | mapping SHA 已冻结，source/row telemetry 落盘 | 1 | Controlled / real run pending |
-| R64 | B0 非确定性被误报为 future sensitivity | 中 | Critical | 每样本 B0×2；预先定义 `max(1e-7,10×p95 replay L2)`；`L∞>1e-5` fail closed | replay 在 intervention 前完成，失败禁止分类 | 1 | Controlled / real run pending |
-| R65 | 尝试多个 checkpoint 后挑动作差异最大者 | 中 | Critical | 唯一固定 E6 A1@3e-4 step-200 path/file/state/config SHA；披露 post-training engineering | config/preflight/checkpoint manifest hard check | 1 | Controlled |
-| R66 | 把在线 action engineering smoke 写成 OOD/success 或 K 曲线 | 高 | Critical | schema/report claim boundary；runner 不读 OOD/success、不 rollout、不自动 Phase 2 | A/B/C 只描述 action sensitivity | 1 | Controlled |
-| R67 | Phase 1 代码/dry-run 被误记成真实 action 结果 | 中 | High | 总账显式 `REAL GPU NOT RUN`；只有 output decision/run status 才产生 outcome | 当前没有 `phase1_k1_online_counterfactual_v1` 正式结果 | 1 | Open |
+| R61 | surrogate Gate 无限增长，长期不触达动作或 success 变量 | 高 | Critical | 加速路线和硬停止规则；Phase 1 前禁止新 flow/checkpoint/LR/weight Gate | Phase 1 已真实触达 action 并得到 A；下一步直接冻结 Phase 2，不再新增 surrogate Gate | 1–4 | Closed for action boundary |
+| R62 | 用零 future tensor 冒充 formal null，使 correct-null 混入 projector 响应 | 高 | Critical | request-scoped parameter-free bypass；不构造 tensor、不跑 Video DiT、Adapter call=0；B0 hard parity | 真实 8/8 null 为 0 Video DiT/Adapter call，B0-null L∞ 精确 0 | 1 | Closed |
+| R63 | shuffle 同时改变 target current/context/action noise，无法归因于 future 内容 | 高 | Critical | other-episode 一一 derangement；target RGB/language/proprio/cache/action seed 不变；复用 recipient future noise | 8/8 other-episode、only-future-replaced、same recipient seed/context/initial-state checks 通过 | 1 | Closed for Phase 1 |
+| R64 | B0 非确定性被误报为 future sensitivity | 中 | Critical | 每样本 B0×2；预先定义 `max(1e-7,10×p95 replay L2)`；`L∞>1e-5` fail closed | 真实 B0 replay 的 L1/L2/L∞ 全 0；floor 冻结为 `1e-7` 后才运行 intervention | 1 | Closed |
+| R65 | 尝试多个 checkpoint 后挑动作差异最大者 | 中 | Critical | 唯一固定 E6 A1@3e-4 step-200 path/file/state/config SHA；披露 post-training engineering | preflight 精确匹配唯一 checkpoint；项目 prereg commit `f516920` | 1 | Closed for Phase 1 |
+| R66 | 把在线 action engineering smoke 写成 OOD/success 或 K 曲线 | 高 | Critical | schema/report claim boundary；runner 不读 OOD/success、不 rollout、不自动 Phase 2 | 结果报告保留 SMOKE、single-task/no-rollout 与 effect-size 边界 | 1 | Controlled |
+| R67 | Phase 1 代码/dry-run 被误记成真实 action 结果 | 中 | High | 只有 output decision/run status 才产生 outcome | 真实 `run_status=completed`、decision、62-file manifest 和结果报告已审计 | 1 | Closed |
+| R68 | replay 恰好为 0 导致 `1e-7` floor 极低，把确定但很小的动作差异误写成实用效应 | 高 | Critical | 同时报告 L1/L2/L∞、action cosine、相对 B0 RMS、逐样本方向与 latency | 分支 A 只表示 content sensitivity；轨迹/success relevance 必须由完整 checkpoint 和 paired rollout 证明 | 1–3 | Controlled / downstream open |
+| R69 | 八条同 task train sample 的 `8/8` 被误推广到其他 task、dev 或 OOD | 高 | Critical | cohort fingerprint、sample-level table、证据等级 | 报告固定为 one-task SMOKE；Phase 2 full 28/4 复验与多 task directional pilot 才允许推广 | 1–3 | Controlled / downstream open |
 
 ## 3. 最高优先级风险详解
 
@@ -312,14 +314,18 @@ post-run evidence，但科学分类仍失败。下一步是 Phase 1，不运行 
 
 ### Phase 1：K=1 技术反事实
 
-- [ ] B0/correct/formal-null/shuffle 四条件；
-- [ ] 同 target/action seed paired；
-- [ ] replay numerical floor；
-- [ ] correct/null/shuffle action sensitivity；
-- [ ] online no-cache；
-- [ ] P50/P95/peak memory；
-- [ ] A/B/C 分类与 frozen 后续动作；
-- [ ] 未把 action smoke 写成 success/OOD 结论。
+- [x] B0/correct/formal-null/shuffle 四条件；
+- [x] 同 target/action seed paired；
+- [x] replay numerical floor；
+- [x] correct/null/shuffle action sensitivity；
+- [x] online no-cache；
+- [x] P50/P95/peak memory；
+- [x] A/B/C 分类与 frozen 后续动作；
+- [x] 未把 action smoke 写成 success/OOD 结论。
+
+Phase 1 真实结果为分支 A。correct-null 与 correct-shuffle 均 `8/8` 超过
+`1e-7` replay floor；B0/null 精确相同。完整 effect size、latency 和工件审计见
+[thought3_phase1_k1_online_counterfactual_report.md](thought3_phase1_k1_online_counterfactual_report.md)。
 
 ## 5. 全局立即停止条件
 
@@ -365,7 +371,7 @@ post-run evidence，但科学分类仍失败。下一步是 Phase 1，不运行 
 
 | 风险 | 关闭它所需的下一证据 |
 | --- | --- |
-| R13 多样本是否实际使用 future | 通过 Gate E 后做 same-checkpoint correct/null/shuffle counterfactual |
+| R13 future 使用是否迁移到完整 checkpoint | Phase 1 已在 E6 8-sample checkpoint 上关闭技术使用问题；Phase 2 后按同协议复验 |
 | R28 正式 cache 容量 | 扩大样本前重新执行 inventory、容量估算和 free-space gate |
 | R49 hidden correction 尺度 | E.2 六轨迹尺度门槛已通过；完整 28/4 Gate E 仍须复核 |
 | R50 单 fixed flow draw 混淆 | 已受控：E.4 使用唯一 paired slots，六条 held-out reduction 均转正但未过 Gate |
@@ -373,16 +379,16 @@ post-run evidence，但科学分类仍失败。下一步是 Phase 1，不运行 
 | R52 fixed-flow objective 拟合 | 已受控：E.4 证明 diversification 有改善但不足以形成 eligible LR |
 | R53 单 objective 梯度方差 | E.5 已完成真实 full-cohort mitigation；仍需 matched-objective 证据才能分离 aggregation 与 8× exposure，但该机制分离不应先于强 A1 信号复验 |
 | R54 post-selection 候选污染 | E.6 已按披露协议运行；保持 failed/null formal selection，不把复现的 A1 信号写成 future/OOD 效果 |
-| R55 A0 样本稳定性 | audit 后定级为 normalized tail-stabilization signal；paired candidate 仍失败，不再阻塞 Phase 1 |
+| R55 A0 样本稳定性 | audit 后定级为 normalized tail-stabilization signal；Phase 2 matched A0 必须继续逐样本报告 |
 | R56 flow pseudo-replication | 排序 17–28 未读取；v2 无 candidate，E.9b 不解锁 |
 | R57 point-sign 与 confirmed harm 混淆 | v2 已同时报告 6/8 与 FWER；不得只挑 tail `2→0` 忽略 paired 失败 |
 | R58 outcome-conditioned weighting | same-schedule、固定 weight SHA 和 calibration provenance 均通过；结果未达候选门槛 |
 | R59 evaluator/status 复用缺陷 | 已关闭：v2 完成 `75..106` 四轨与 6,400 objectives |
 | R60 probe identity telemetry | 已关闭：Phase 0 audit valid，父 77 文件未改；科学 Gate 仍 failed |
-| R61 surrogate Gate 循环 | 执行一次 Phase 1 并按 A/B/C 停止规则分支，不新增 E 编号 |
-| R62–R65 在线归因有效性 | 真实 Phase 1 的 replay/null parity/shuffle/checkpoint hard checks |
-| R67 dry-run 被误作结果 | 生成并审计真实 `run_status.json`、`decision.json` 后才登记 outcome |
+| R68 技术差异与实用效应混淆 | 完整 checkpoint 复验 action effect size，并由 paired rollout 测轨迹/success |
+| R69 单 task/八样本外推 | 28/4 训练复验后执行预冻结多 task directional pilot |
 | 3-rank cache 完整性 | 正式分布式 cache 的 union/intersection/cardinality 证明 |
-| 28/4 多样本优化 | 仅 Phase 1=A 后运行 matched A0/A1 Phase 2 |
+| 28/4 多样本优化 | Phase 1=A 已解锁；先预注册唯一 normalized matched A0/A1 Phase 2 |
 
-在这些证据出现前，文档必须使用“预计”“待验证”，不能写成已完成结果。
+已关闭项可以写成其精确覆盖范围内的完成事实；上述未关闭项仍必须使用“预计”
+“待验证”，不能外推成 rollout、success 或 OOD 结果。

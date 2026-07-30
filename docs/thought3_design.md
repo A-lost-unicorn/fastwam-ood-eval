@@ -1,6 +1,7 @@
 # Thought3 设计：Partial-Future Adapter
 
-状态：Phase 0 审计完成；Phase 1 K=1 在线动作反事实已实现、真实 GPU 待运行
+状态：Phase 0 审计完成；Phase 1 K=1 在线动作反事实真实单卡完成、分支 A；
+Phase 2 待预注册
 科学问题：显式读取低成本 future latent，能否改善 Fast-WAM 的 OOD 控制，而收益不是由
 额外参数、重新训练或错误对照造成？
 

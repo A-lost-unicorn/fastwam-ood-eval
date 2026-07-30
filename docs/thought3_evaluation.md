@@ -1,6 +1,7 @@
 # Thought3 在线评测手册
 
-状态：Phase 1 真实 K=1 online counterfactual 已实现/测试/dry-run；GPU 待运行
+状态：Phase 1 真实 K=1 online counterfactual 已完成并进入分支 A；Phase 2
+与 rollout 未启动
 更新时间：2026-07-30
 
 ## 1. 最重要的边界
@@ -61,8 +62,9 @@ manifest 中另行冻结 donor 规则，不能沿用或根据结果改变 Phase 
 - paired task success change。
 
 Phase B `thought3-counterfactual` 仍保留为 mock。独立的
-`thought3-k1-online-counterfactual` 已实现真实 Fast-WAM K=1 动作指标，但真实
-GPU 尚未运行；它不读取或输出 success。正式 success change 必须来自后续
+`thought3-k1-online-counterfactual` 已完成真实 Fast-WAM K=1 动作指标：
+B0/null 精确 parity，correct-null、correct-shuffle 与 action hash 均为 `8/8`，
+冻结分类为分支 A。它不读取或输出 success。正式 success change 必须来自后续
 paired rollout。
 
 ## 4. Latency
@@ -121,7 +123,14 @@ B0 `infer_action()` 两次定义 replay floor，再运行：
 null 必须与 B0 达到 `L∞<=1e-5` parity，否则 fail closed。A/B/C 分类只回答
 future-content action sensitivity，不回答 success/OOD。配置、完整指标、恢复
 和唯一运行命令见
-[thought3_phase1_k1_online_counterfactual_protocol.md](thought3_phase1_k1_online_counterfactual_protocol.md)。
+[协议](thought3_phase1_k1_online_counterfactual_protocol.md)；真实结果、效应
+幅度、延迟、显存和工件 SHA 见
+[结果报告](thought3_phase1_k1_online_counterfactual_report.md)。
+
+本次 correct-null normalized action L2 mean 为 `0.011052`，
+correct-shuffle 为 `0.012092`；paired correct-null policy overhead mean 为
+`258.95 ms`（`+6.17%`）。动作 cosine 仍约 `0.9997`，所以应写成“内容敏感”，
+不能写成“控制有效”。
 
 ## 7. Directional OOD pilot 设计
 

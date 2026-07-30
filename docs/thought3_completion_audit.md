@@ -26,8 +26,8 @@ Gate E.9a-v1         invalid engineering run; 0 objectives/updates
 Gate E.9a-v2         four tracks complete; parent status remains invalid
 Phase 0 audit        valid read-only recovery; scientific gate failed
 E.9b replication     locked; no candidate
-Phase 1 online CF    implemented/tested/dry-run; real GPU not run
-full 28/4 A0/A1      conditional on Phase 1 branch A
+Phase 1 online CF    valid engineering smoke; branch A
+full 28/4 A0/A1      unlocked for preregistration; not started
 A2/A4 real training  not started
 directional OOD pilot not started
 Phase G formal       not started
@@ -59,15 +59,16 @@ paper claim          unavailable
   降到 0，但 paired gain 只有 8.274% < 10%。Phase 0 只读审计已证明缺失字段
   可由冻结代码路径恢复、父 77 文件未改；结果登记为
   `engineering valid + scientific failed`，无 E.9b candidate。
-- K=1 在线 B0/correct/formal-null/shuffle 的 config、schema、CLI、runner、
-  checkpoint/cohort lock、atomic resume、指标、延迟/显存和 A/B/C 决策规则已
-  实现并通过 dry-run；真实 GPU 尚未运行。
+- K=1 在线 B0/correct/formal-null/shuffle 已完成真实单卡运行：B0 replay 与
+  formal-null 逐位一致，correct-null、correct-shuffle 和 action-hash 均为
+  `8/8`；62/62 工件 SHA、frozen/no-grad/no-cache/no-future-RGB checks 通过，
+  冻结分类为分支 A。
 
 尚无证据证明：
 
 - 正确 future 相对 A0 提高 ID/OOD success；
 - A1/A2/A4 任一 K 在真实在线控制中有效；
-- shuffle future 会在真实 Fast-WAM policy 中产生超过 replay floor 的动作变化；
+- Phase 1 的小幅动作变化会改善机器人轨迹或 success；
 - OOD 收益覆盖 latency/memory；
 - 三卡正式训练/评测无重复遗漏；
 - 可以冻结论文主结论。
@@ -78,9 +79,10 @@ paper claim          unavailable
 | --- | --- | --- |
 | 动作读取 future 后 OOD 是否提高 | 尚无六组真实 rollout | **Missing** |
 | 收益是否来自 future 而非 Adapter/重训 | B0/A0 真实正式对照未运行 | **Missing** |
-| K=1/2/4 的收益–成本曲线 | 只有 Phase C/D sampler latency，无在线 action/rollout | **Missing** |
-| correct 与 shuffle 是否可预测地改变动作/success | 只有 CPU/mock counterfactual | **Missing** |
-| 收益能否覆盖延迟/显存 | 无真实在线 P50/P95 + success 联合表 | **Missing** |
+| K=1/2/4 的收益–成本曲线 | K1 已有 online action latency；K2/K4 与 success 均无 | **Missing** |
+| correct 与 shuffle 是否改变动作 | Phase 1 同 checkpoint 技术反事实 `8/8` 改变 | **Proved for one-task smoke** |
+| correct 与 shuffle 是否改变 success | 无 paired rollout | **Missing** |
+| 收益能否覆盖延迟/显存 | Phase 1 已有在线 P50/P95/peak，但没有 success 联合表 | **Missing** |
 
 无提升、负提升或 Adapter 忽略 future 都仍是允许结果；当前不是因为结果为负而
 未完成，而是关键对照尚未产生。
@@ -98,7 +100,7 @@ paper claim          unavailable
 | A1 | 真实小训练已运行 | **No rollout evidence** |
 | A2 | 配置/mock/cache 存在 | **No real training checkpoint** |
 | A4 | 配置/mock/cache 存在 | **No real training checkpoint** |
-| A-shuffle | 固定 other-episode derangement；真实 K=1 online runner 已实现 | **Real GPU not run / no rollout** |
+| A-shuffle | 固定 other-episode derangement；真实 K=1 online action CF 已运行 | **Action smoke proved / no rollout** |
 
 六组不得因 E.2 失败而减少。A-shuffle 应复用冻结 AK checkpoint，不另训练。
 
@@ -112,7 +114,7 @@ paper claim          unavailable
 | stable ID、shard、resume、checksum、corruption | Phase B/D tests 与真实 12 shards | **Proved for 32-sample pilot** |
 | K 错配拒绝 | cache reader/training schema tests | **Tested** |
 | 正式训练规模 cache 容量与三卡分片 | 只有估算和纯分片测试 | **Missing real-scale evidence** |
-| online evaluator 不读取 cache | mock API 无 cache 参数 | **Tested only for mock** |
+| online evaluator 不读取 cache | Phase 1 source telemetry 与 API hard guard | **Proved for K=1 action smoke** |
 
 Phase D cache 只能用于训练；不得把它接入 Phase F/G 在线 policy。
 
@@ -135,13 +137,13 @@ Phase D cache 只能用于训练；不得把它接入 Phase F/G 在线 policy。
 | E.9a-v1 | invalid engineering run | raw/A0 initial probe 前被旧 `1..5` flow 硬编码拒绝；0 training objective、0 optimizer update、无 checkpoint/result；frozen SHA 未变 |
 | E.9a-v2 | compute complete / engineering invalid | 四轨 800 updates、6,400 train + 2,048 held-out objectives；raw A0/A1 reduction 4.175%/12.994%，normalized 2.983%/11.010%；tail 2/0→0/0；paired 8.274% 未过 10%；RNG identity telemetry 缺失 |
 | Phase 0 E9a-v2.1 | valid audit / scientific failed | 27/27 checks true；0 forward/backward/optimizer/GPU/parent write；恢复 RNG identity，确认 `sample_tail_mitigation_not_supported` 与 E9b locked |
-| Phase 1 online CF | implemented / not run | 固定 E6 A1 step-200 与 E6 8-sample cohort；等待真实 B0/correct/null/shuffle action sensitivity |
-| full 28/4 A0/A1 | conditional | 仅在 Phase 1 分支 A 后运行 |
+| Phase 1 online CF | valid engineering smoke / branch A | 固定 E6 A1 step-200 与 E6 8-sample cohort；B0/null 精确 parity，correct-null、correct-shuffle、hash 均 `8/8` |
+| full 28/4 A0/A1 | preregistration unlocked / not started | Phase 1=A；仍须先冻结唯一 normalized matched 配方和 checkpoint rule |
 
-在 Phase 1 分支 A 产生前：
+Phase 1 分支 A 已产生。进入 Phase 2 前仍然：
 
 - 不新增 surrogate Gate；
-- 不启动 full 28/4、A2/A4 或 OOD rollout；
+- 不启动未预注册的 full 28/4、A2/A4 或 OOD rollout；
 - 不按动作差异或 OOD outcome 选 LR/K/checkpoint；
 - 不把 E.2–E.9 的 A1/A0 loss 差写成 future 动作效应。
 
@@ -162,8 +164,9 @@ Phase D cache 只能用于训练；不得把它接入 Phase F/G 在线 policy。
 8. replay floor、B0/null parity、A/B/C fail-closed 分类；
 9. frozen checkpoint/cohort/config/SHA、atomic artifacts 与 checksum resume。
 
-当前缺口已经从“代码未实现”收缩为“真实单卡命令尚未运行”。Phase 1 只测动作
-敏感性；得到分支 A 后才设计完整训练和 LIBERO/LIBERO-Plus paired rollout。
+真实单卡命令已经完成，Phase 1 只测动作敏感性并得到分支 A。当前缺口已转为：
+完整 28/4 A0/A1 配方尚未预注册/训练，完整 checkpoint 上的内容敏感性尚未复验，
+LIBERO/LIBERO-Plus paired rollout 尚未开始。
 
 ## 7. 数据、评测与统计
 
@@ -172,7 +175,7 @@ Phase D cache 只能用于训练；不得把它接入 Phase F/G 在线 policy。
 | 标准 LIBERO demo only | Phase C–E 满足 |
 | episode-level 90/10 split | Phase D 28/4 pilot 满足 |
 | 不用 Thought1/2 rollout 训练 | 数据 API/审计满足 |
-| 独立 Phase 1 技术 cohort | E6 已消耗 8 条 train ID 已冻结；真实 GPU 未运行 |
+| 独立 Phase 1 技术 cohort | E6 已消耗 8 条 train ID 已冻结并完成真实 GPU action CF |
 | 新 Phase G seed/job manifest | 未生成 |
 | task-equal OOD 主指标 | DRAFT 中定义，未产生 |
 | 五类 OOD + Clean | Phase G 未运行 |
@@ -200,7 +203,7 @@ Phase 0 E9a-v2.1 audit completed:
 engineering valid + scientific failed; E9b locked
   ↓
 Phase 1 real K=1 B0/correct/null/shuffle action counterfactual
-  ├─ A future-content sensitivity
+  ├─ A future-content sensitivity（已观测）
   │    ↓
   │  Phase 2: one matched 28/4 A0/A1 recipe
   │    ↓
@@ -218,8 +221,8 @@ Phase 1 real K=1 B0/correct/null/shuffle action counterfactual
      stop Adapter-only/full/A2/A4/OOD route
 ```
 
-首次 Phase 1 前不允许再增加 surrogate Gate。负结果也必须完整登记，不得跳过
-A0、shuffle、online no-cache 或统计冻结要求。
+Phase 1 已结束 surrogate 循环并进入 A。后续不得用新的 surrogate Gate 延迟或
+改写该结果，也不得跳过 A0、shuffle、online no-cache 或统计冻结要求。
 
 ## 10. 当前最近一步
 
@@ -228,14 +231,20 @@ forward/backward/optimizer/checkpoint tensor load、0 CUDA、父目录 0 write�
 因此 v2 训练可登记为工程有效；但 normalized paired `8.274%<10%` 不变，
 科学分类为 `sample_tail_mitigation_not_supported`，E9b locked。
 
-Phase 1 的 config/schema/CLI/runner/tests/dry-run 已完成。固定主 checkpoint 为
-E6 A1@3e-4 step-200，cohort 为 E6 已消耗的八条 train demonstration；正式
-null 不创建零 tensor，shuffle 只更换 online future latent，B0 replay/null
-parity 均 fail closed。当前最近一步是运行唯一单卡确认命令；不启动 Phase 2。
+Phase 1 已用固定 E6 A1@3e-4 step-200 和八条 E6 train demonstration 完成
+真实单卡运行。正式 null 不创建零 tensor；B0 replay/null parity 精确为 0；
+correct-null、correct-shuffle 与 action hash 均为 `8/8`，分类为
+`future_content_sensitivity_observed`。paired correct-null overhead mean 为
+`258.95 ms`，但 normalized action L2 mean 只有 `0.011052`，且没有 rollout。
+
+当前最近一步是预注册 Phase 2，而不是直接启动长训练：冻结唯一 28/4
+normalized matched A0/A1 配方、一个 LR/seed/update budget、paired flow
+identity 和 dev-only checkpoint rule。Phase 2 仍未启动。
 
 相关协议、结果与父结果见
 [thought3_accelerated_roadmap.md](thought3_accelerated_roadmap.md)、
 [thought3_phase1_k1_online_counterfactual_protocol.md](thought3_phase1_k1_online_counterfactual_protocol.md)、
+[thought3_phase1_k1_online_counterfactual_report.md](thought3_phase1_k1_online_counterfactual_report.md)、
 [thought3_phase_e9_v2_1_readonly_audit_report.md](thought3_phase_e9_v2_1_readonly_audit_report.md)、
 [thought3_phase_e9_v2_1_readonly_audit_protocol.md](thought3_phase_e9_v2_1_readonly_audit_protocol.md)、
 [thought3_phase_e8_protocol.md](thought3_phase_e8_protocol.md)、

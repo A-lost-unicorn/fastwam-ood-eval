@@ -1,6 +1,6 @@
 # Thought3 当前限制与未决问题
 
-状态：Phase 0 完成、Phase 1 实现完成后的诚实边界
+状态：Phase 0 完成、Phase 1 真实分支 A 后的诚实边界
 更新时间：2026-07-30
 
 ## 1. 已有工程证据与仍缺的下游结果
@@ -11,17 +11,19 @@
 - 真实 Adapter action-loss backward、Adapter-only checkpoint 和冻结 SHA；
 - E5/E6 两个 cohort 的 A1 离线 action-loss 信号；
 - E9a-v2.1 engineering-valid/scientific-failed 审计；
-- K=1 online B0/correct/null/shuffle runner、tests 与 dry-run。
+- K=1 online B0/correct/null/shuffle 真实分支 A：B0/null 精确 parity，
+  correct-null、correct-shuffle 与 action hash 均 `8/8`。
 
 当前仍没有：
 
-- 真实 Phase 1 correct/null/shuffle action outcome；
 - ID/OOD success rate；
-- Phase 1 在线 GPU latency/显存；
-- A-shuffle 机器人 rollout。
+- A-shuffle 机器人 rollout；
+- 完整 28/4 A0/A1 checkpoint；
+- K=2/K=4 的真实训练、在线动作反事实或收益—成本曲线。
 
-Phase C–E 的真实离线工程结果也不支持 future 改善 OOD。Phase 1 的代码和
-dry-run 仍是 `TEST/PLAN`；只有真实 `decision.json` 才能登记动作敏感性。
+Phase C–E 的真实离线工程结果不支持 future 改善 OOD。Phase 1 的真实
+`decision.json` 只登记固定 checkpoint 的动作内容敏感性；它仍是 `SMOKE`，
+不能升级成轨迹、success 或 OOD 结论。
 
 ## 2. Native latent contract 已在小规模真实运行确认
 
@@ -35,19 +37,19 @@ training sample 上确认，包括：
 - 无 VAE decode/re-encode；
 - current slice 每 update 不漂移。
 
-该证据仍只覆盖小规模 offline cache；Phase 1 将首次计量同一 native latent
-进入 20-step Action DiT 后的真实动作响应。
+该证据仍只覆盖小规模 offline cache。Phase 1 已首次计量同一 native latent
+进入 20-step Action DiT 后的真实动作响应，但仅覆盖一个 task 的八条 train
+sample。
 
-## 3. Video-only sampler parity 未关闭
+## 3. Video-only sampler parity 已在小规模关闭
 
-项目侧 K-step loop 已实现完整 shifted schedule与固定 seed，但尚未绑定真实
-Video DiT，也未与 upstream joint path 做数值 parity。若 parity 失败，必须先修正
-condition、cache、mask 或 scheduler 调用，不能用“看起来合理”的 latent 进入训练。
+Phase C 已把项目侧 K-step loop 绑定真实 Video DiT，并在相同 input/seed 下与
+upstream joint path 做数值 parity；K=1/2/4 的最大差为 0。该结论覆盖当前
+checkpoint/config 的小规模 smoke，不自动保证未来上游版本变更。
 
-## 4. Action loss 只完成 mock 语义
+## 4. Action loss 已完成真实小规模语义核对
 
-mock trainer 使用 action velocity MSE 验证 Adapter 能收到梯度、loss 能下降和 resume
-一致。真实 Phase C 必须逐项对照官方：
+Phase C 与 E 系列已在真实 Fast-WAM 上逐项复用官方：
 
 - timestep/sigma sampling；
 - noisy action 公式；
@@ -56,17 +58,17 @@ mock trainer 使用 action velocity MSE 验证 Adapter 能收到梯度、loss �
 - loss weighting/reduction；
 - normalization/denormalization。
 
-在 parity 前不能称“保持官方 action loss 已实证通过”。
+该实证只覆盖现有 action-only smoke/training path；完整 28/4 配方仍须继续绑定
+相同 scheduler/stats SHA。
 
-## 5. 训练数据尚缺
+## 5. 训练数据已完成 task-level inventory，但正式规模仍未训练
 
-当前缺标准 LIBERO 正式 LeRobot training directories 和不可变 revision/inventory。
-下载后还需确认：
+标准 LIBERO LeRobot 数据已可读，`libero_goal/task_0` 的 42 episode inventory、
+37/5 episode split 和 32-sample cache pilot 已审计。仍需在 Phase 2 冻结：
 
 - license 与分发边界；
-- demonstration identity；
-- frame/action alignment；
-- suite×task episode 数足以做 90/10 split；
+- 28/4 实际训练/development identity；
+- 完整 action/frame selection 和 update schedule；
 - 数据没有混入 LIBERO-Plus/test trajectory。
 
 ## 6. Hook 依赖上游调用次数
@@ -78,20 +80,21 @@ mock trainer 使用 action velocity MSE 验证 Adapter 能收到梯度、loss �
 - 多次 action sub-call；
 - DDP wrapping
 
-下改变调用次数。exact-call guard 会 fail-fast，而不是静默多注入；Phase C 要确认训练和
-推理各自的合法 count。
+下改变调用次数。exact-call guard 会 fail-fast，而不是静默多注入。Phase C/E
+已确认训练调用边界，Phase 1 已确认 online 20-step action path 每个 condition
+精确调用；未来 DDP/compile 配方仍须重新验证。
 
 ## 7. Zero gate 的优化动力学
 
 gate=0 保证初始 parity，但第一步主要只有 gate 获得梯度，projector/attention 信号会在
-gate 打开后出现。真实 100–500 step smoke 需要观察：
+gate 打开后出现。E 系列真实训练已经观察：
 
-- gate 是否离开零；
--各子模块 grad norm；
-- Adapter 是否只学会常数偏置；
-- null/correct/shuffle action sensitivity。
+- gate 离开零；
+- 第 2 step 起非 gate 子模块出现 finite nonzero gradient；
+- Phase 1 correct/null/shuffle 对 future 内容有动作响应。
 
-gate 保持接近零是允许结果，不应在正式 OOD 上反复调到“有效”。
+仍未关闭的是完整 28/4 checkpoint 的泛化与 correction scale；不应在正式 OOD
+上反复调到“有效”。
 
 ## 8. A-shuffle 的部署语义和成本
 
@@ -104,17 +107,19 @@ gate 保持接近零是允许结果，不应在正式 OOD 上反复调到“有�
 
 A-shuffle 是因果干预诊断，不是可部署策略。
 
-## 9. Cache 容量只完成公式与 mock 校验
+## 9. Cache 容量只完成 32-sample 真实 pilot
 
-纯 bf16 latent 为约 220.5 KiB/sample（K1+K2+K4）；真实 metadata、mask、文件系统和
-inventory 规模未知。只有下载数据后才能报告实际总 GiB、throughput、inode 和 20%
-空间余量。
+纯 bf16 latent 为约 220.5 KiB/sample（K1+K2+K4）。Phase D 已对 32 sample、
+96 entries、12 shards 实测 `7,687,316 bytes`、throughput、inode、checksum 和
+20% 空间余量。扩大到正式多 task cache 前仍须重新做容量与 rank
+union/intersection gate。
 
 ## 10. 3×4090 仍需真实验证
 
-现有 Thought2 shadow 峰值约 24,841 MiB，不能直接推断 action backward。Phase C
-单卡硬上限 43 GiB；Phase E 后才决定是否需要 gradient checkpoint、CPU offload、
-FSDP 或 ZeRO。第一版不同时启用多个回退手段。
+单卡 Phase C/E/Phase 1 已实测可运行；Phase 1 模型加载峰值
+`23,679.51 MiB`、policy 峰值 `13,009.92 MiB`。这仍不能证明三卡 cache/training
+shard union/intersection 或 DDP 恢复正确。只有实测 OOM 才考虑 gradient
+checkpoint、CPU offload、FSDP 或 ZeRO，第一版不同时启用多个回退手段。
 
 ## 11. Statistical protocol 仍是 DRAFT
 

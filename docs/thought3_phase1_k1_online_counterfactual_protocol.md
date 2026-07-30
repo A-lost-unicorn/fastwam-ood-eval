@@ -1,10 +1,18 @@
 # Thought3 Phase 1：K=1 在线动作反事实协议与运行手册
 
-状态：`IMPLEMENTED / TESTED / DRY-RUN PASSED / REAL GPU NOT RUN`
+状态：`COMPLETED / VALID ENGINEERING SMOKE / BRANCH A`
 
 配置：`configs/thought3/online/phase1_k1_action_counterfactual.yaml`
 
 输出：`outputs/thought3/phase1_k1_online_counterfactual_v1/`
+
+结果：
+[thought3_phase1_k1_online_counterfactual_report.md](thought3_phase1_k1_online_counterfactual_report.md)
+
+> 2026-07-30 已按下述唯一命令完成真实单卡运行。B0 replay 与 B0-null parity
+> 均逐位一致；correct-null、correct-shuffle 和 action-hash 三项均为 `8/8`，
+> 冻结分类为 `future_content_sensitivity_observed`（分支 A）。这只支持技术
+> action sensitivity，不支持 success/OOD/K 排序结论。
 
 ## 1. 研究问题
 
@@ -202,9 +210,9 @@ PYTHONPATH=src python -m fastwam_ood_eval.cli \
 结果确认：8 samples、四条件、固定 mapping SHA；不导入 Torch/Safetensors，
 不加载 checkpoint/Fast-WAM，不写工件，不启动 rollout。
 
-## 9. 唯一真实运行命令
+## 9. 已执行的唯一真实运行命令
 
-确认 GPU 1 空闲后，只运行：
+2026-07-30 在 GPU 1 只运行了一次：
 
 ```bash
 CONFIRM_THOUGHT3_K1_ONLINE_CF=YES \
@@ -216,6 +224,10 @@ bash scripts/run_thought3_k1_online_counterfactual.sh
 live model、相同确定性状态和逐样本配对。预计热缓存约 12–25 分钟；首次冷
 加载或 HF cache 重建可预留 20–35 分钟。模型加载与前后参数 SHA 通常比 8 条
 K=1 update 更耗时。
+
+本次实测 wall time 为 `14.96 min`，其中模型加载 `552.82 s`。最终
+`run_status.status=completed`、`phase2_started=false`；输出 manifest 的 62 个
+文件已逐项重算 SHA 通过。
 
 运行后查看：
 

@@ -4,7 +4,7 @@
 
 ## 1. 当前事实快照
 
-截至 2026-07-29：
+截至 2026-07-30：
 
 | 项目 | 状态 | 可用证据 |
 | --- | --- | --- |
@@ -34,6 +34,8 @@
 | 阶段三 Gate E.6 fresh-cohort replication | FAILED-GATE，400 updates 完整 | 新 8-sample cohort、3,200 train objectives、160 held-out objectives；A1 降 14.842%/7-of-8 且相对 A0 final mean 低 13.815%，但 A0 仅 4/8 stable |
 | 阶段三 Gate E.7 checkpoint trajectory | COMPLETED READ-ONLY DIAGNOSTIC | 8 个既有 checkpoint、800/800 objectives、0 backward/optimizer/write；工程 Gate 通过，primary 不支持实质晚期退化且无 joint candidate |
 | 阶段三 Gate E.8 A0 flow variance | COMPLETED READ-ONLY DIAGNOSTIC | 1,536/1,536 forward、0 backward/optimizer/write；step-200 pooled loss 改善 3.728%，但 full/双 block 稳定性为 4/8、4/8、5/8；分类 `mixed_or_inconclusive` |
+| 阶段三 Gate E.9 + Phase 0 audit | ENGINEERING VALID / SCIENTIFIC FAILED | 四轨 6,400 train + 2,048 held-out objectives；CPU-only audit 27/27 checks、父 77 文件 0 write；normalized paired `8.274%<10%`，E9b locked |
+| 阶段三 Phase 1 K=1 online CF | VALID ENGINEERING SMOKE / BRANCH A | 单卡 8 sample；B0/null 精确 parity；correct-null、correct-shuffle 与 action hash 均 `8/8`；62/62 工件 SHA 通过；只支持 future-content action sensitivity |
 
 ## 2. 可以对外说明的工程亮点
 
@@ -502,9 +504,14 @@
   synchronized latency/memory、protocol lock、atomic prefix resume 和自动
   A/B/C 决策报告均由独立真实 runner 生成。
 - 研究停止规则：A 才进 28/4 A0/A1；B 最多一次单变量结构修复；C 停止
-  Adapter-only。首次结果前不再新增 flow/LR/checkpoint/sample-weight Gate。
-- 当前证据等级：实现、73 个相关 targeted tests 与 no-Torch dry-run 已通过；
-  真实 GPU 尚未运行，不能写成动作效果或 OOD 成功率。
+  Adapter-only。本次真实结果为 A；下一步只允许预注册 28/4 A0/A1，不再新增
+  flow/LR/checkpoint/sample-weight Gate。
+- 真实证据：B0 replay 与 formal-null 在 8/8 sample 上逐位一致；
+  correct-null、correct-shuffle 与 action-hash 均 8/8 过冻结门槛；paired
+  correct-null overhead mean `258.95 ms`，62/62 工件 SHA 与 frozen/no-grad/
+  no-cache/no-RGB checks 通过。
+- 结论边界：这是单 task 八条 train sample 的 engineering action-sensitivity
+  smoke；action L2 mean 仅 `0.011052/0.012092`，不能写成 OOD 成功率或控制增益。
 
 ## 4. 简历表达素材
 
@@ -518,8 +525,9 @@
   256 个唯一 RNG identity、验证父 77 文件 0 改写，同时保留科学负结果。
 - 为 K=1 online future-to-action 技术反事实实现官方 B0 replay、无 tensor
   formal null 与 other-episode shuffle，冻结 checkpoint/cohort/noise，
-  原子保存 action/future tensor 与分段 CUDA telemetry；当前为测试/dry-run
-  完成状态，不宣称真实 action/OOD 效果。
+  原子保存 action/future tensor与分段 CUDA telemetry；真实单卡 8-sample
+  运行中 B0/null 精确一致、correct-null/correct-shuffle/action-hash 均
+  `8/8`，验证 future 内容进入动作，同时明确不宣称 rollout/OOD 效果。
 - 将 Clean 多 seed 与 LIBERO-Plus 预生成 task-instance 协议显式分离，通过配置门禁阻止每变体重复采样造成的数量级计算浪费。
 - 建立相同 checkpoint/配对 seed 的鲁棒性评测与统计链路，覆盖成功率下降、bootstrap CI、失败分类和跨策略配方一致性约束。
 - 在 3 张 GPU 上完成 7,571 个真实 rollout 和 2,399,314 个 action step，
@@ -605,6 +613,13 @@
 > gradient-to-parameter telemetry 和全参数 pre/post SHA，验证 A0/A1 在固定
 > LIBERO 目标上的 loss 分别下降 92.93%/99.58%，并识别出 hidden correction
 > 尺度膨胀这一多样本训练前的关键风险。
+
+> 为冻结 Fast-WAM checkpoint 预注册并执行 K=1 online future-to-action
+> 技术反事实：在 8 条固定 LIBERO train sample 上验证 B0 重放与 parameter-free
+> null 逐位一致；other-episode future shuffle 使 8/8 action tensor hash 改变，
+> correct-null/correct-shuffle 的 normalized action RMS 差异均超过冻结 floor；
+> K=1 paired 在线开销均值为 258.95 ms，并完成 62/62 tensor/provenance SHA
+> 审计。该表述只代表动作内容敏感性，不代表 OOD 成功率提升。
 
 在人工标注完成前，不要追加“归纳出 K 类失败模式”。可以写“保存并审计
 3,563 个失败视频”，但“reviewed/labelled”分母目前仍为 0。

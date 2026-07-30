@@ -1,6 +1,7 @@
 # Thought3 训练与恢复手册
 
-状态：Phase 0 E9a-v2.1 审计完成；Phase 1 在线反事实待真实 GPU；full 28/4 仅在分支 A 后解锁
+状态：Phase 0 完成；Phase 1 在线反事实真实单卡完成并进入分支 A；full 28/4
+Phase 2 待预注册
 更新时间：2026-07-30
 
 ## 1. 当前能做什么
@@ -41,6 +42,10 @@ Phase D 已额外验证：
 - 把 32-sample cache 当作完整训练集或论文数据；
 - 声称 mock loss 下降代表机器人控制有效；
 - 自动启动 3 GPU 长训练。
+
+Phase 1 已额外确认固定 E6 A1 checkpoint 的 correct/null/shuffle
+future-content action sensitivity，并按预注册规则解锁 Phase 2 的设计。该解锁
+不等于授权未冻结的长训练，也不允许跳过 matched A0。
 
 ## 2. Adapter 结构
 
@@ -566,19 +571,23 @@ v1 故障证据、完整权重表、RNG SHA、预算、分类、工件 SHA 与 v
 
 ### 11.11 加速后的训练授权
 
-当前不得继续新增 surrogate training Gate。先运行 K=1 在线动作反事实：
+当前不得继续新增 surrogate training Gate。K=1 在线动作反事实已经完成：
 
-- 分支 A：才允许冻结一次 28 train / 4 development 的 matched A0/A1 配方；
-- 分支 B：最多一次单变量注入结构修复，不进入 full training；
-- 分支 C：停止 Adapter-only full training；
-- 任一分支在 directional OOD pilot 正向前都不得训练 A2/A4。
+- 实测分支 A：允许冻结一次 28 train / 4 development 的 matched A0/A1
+  Phase 2 配方；
+- B/C 分支未触发；
+- directional OOD pilot 正向前仍不得训练 A2/A4。
 
-由于 E9a-v2.1 audit valid，若分支 A 解锁 Phase 2，草案使用 normalized
+由于 E9a-v2.1 audit valid 且 Phase 1=A，Phase 2 草案使用 normalized
 sample-loss recipe；必须披露这是 post-E8 engineering development，不能称
 E9 Gate 通过。Phase 2 只允许一个 LR、一个 seed、同一 sample/flow schedule
-的 A0/A1，不做 LR/sample-weight sweep，也不读取 OOD。
+的 A0/A1，不做 LR/sample-weight sweep，也不读取 OOD。正式训练前仍需新
+config/commit 冻结 update budget、LR、flow identity、checkpoint rule 和停止
+条件；本文件不自动授权启动。
 
 完整路径与停止规则见
 [thought3_accelerated_roadmap.md](thought3_accelerated_roadmap.md)；在线技术
 协议见
 [thought3_phase1_k1_online_counterfactual_protocol.md](thought3_phase1_k1_online_counterfactual_protocol.md)。
+真实分支 A 的数值与边界见
+[thought3_phase1_k1_online_counterfactual_report.md](thought3_phase1_k1_online_counterfactual_report.md)。

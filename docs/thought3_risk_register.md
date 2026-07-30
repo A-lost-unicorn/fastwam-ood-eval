@@ -96,6 +96,7 @@
 | R71 | 查看 step 50/100/150 dev 后挑 checkpoint，重建 trajectory selection | 高 | Critical | fixed endpoint、checkpoint manifest、无 fallback | checkpoint 可用于恢复，但主终点固定 step 200；development 只评 step 0/200 | 2 | Controlled / not run |
 | R72 | E9-derived normalized recipe 被误写成预先独立发现或 E9 科学通过 | 高 | High | recipe disclosure、E9 audit SHA、protocol timestamp | 明确登记 post-E8 engineering selection，paired 8.274%<10% 与 E9b locked 同时报告 | 2 | Controlled |
 | R73 | Phase 2 dev 方向通过后直接进入 rollout，却未确认完整 A1 checkpoint 仍读取 future 内容 | 中 | Critical | finalize 强制 `phase3_unlocked=false`、下一 stage 字段 | 完整 checkpoint 必须再做一次 correct/null/shuffle；未通过则不生成 pilot manifest | 2–3 | Controlled / downstream open |
+| R74 | config-relative artifact path 与 resolved safety root 混用，导致计算完成后 manifest 写入失败 | 中 | High | mixed relative/absolute path regression、outside-root rejection、原 rows SHA、resume status | calibration/track/checkpoint 统一通过 resolve-both helper 生成 key；保留 1,024 rows，仅允许原目录 resume | 2 | Controlled / real resume pending |
 
 ## 3. 最高优先级风险详解
 
@@ -394,6 +395,7 @@ Phase 1 真实结果为分支 A。correct-null 与 correct-shuffle 均 `8/8` 超
 | R70 双卡 weight identity | Phase 2 calibration 与 A0/A1 track 的 weight/artifact SHA 全部匹配 |
 | R71 dev checkpoint selection | Phase 2 只出现 step 0/200 dev metric，主 checkpoint manifest 固定 200 |
 | R73 完整 checkpoint future 使用 | Phase 2 完成后执行一次 online correct/null/shuffle recheck |
+| R74 manifest 路径恢复 | 原目录 `--resume` 后 calibration artifact SHA 验证、A0/A1 正常启动且最终 manifest complete |
 | 3-rank cache 完整性 | 正式分布式 cache 的 union/intersection/cardinality 证明 |
 | 28/4 多样本优化 | 唯一 normalized matched A0/A1 Phase 2 已预注册/实现，等待真实双卡运行 |
 

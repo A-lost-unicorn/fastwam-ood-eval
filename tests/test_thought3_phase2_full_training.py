@@ -8,6 +8,7 @@ import pytest
 from fastwam_ood_eval.thought3.config import load_thought3_config
 from fastwam_ood_eval.thought3.phase2_full_training import (
     Phase2ExecutionError,
+    _artifact_relative_key,
     _validate_training_prefix,
     classify_phase2_training_direction,
     derive_phase2_thought3_config,
@@ -29,6 +30,32 @@ from fastwam_ood_eval.thought3.real_training import (
 
 
 CONFIG = Path("configs/thought3/phase2_full_28_4_a0_a1.yaml")
+
+
+def test_phase2_artifact_key_normalizes_relative_path_against_absolute_root(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    relative_root = Path("outputs/thought3/phase2/calibration")
+    relative_artifact = relative_root / "calibration.json"
+
+    assert (
+        _artifact_relative_key(relative_artifact, relative_root.resolve())
+        == "calibration.json"
+    )
+    assert (
+        _artifact_relative_key(
+            relative_root / "nested" / "metrics.jsonl",
+            relative_root.resolve(),
+        )
+        == "nested/metrics.jsonl"
+    )
+    with pytest.raises(Phase2ExecutionError, match="outside"):
+        _artifact_relative_key(
+            Path("outputs/thought3/outside.json"),
+            relative_root.resolve(),
+        )
 
 
 def test_phase2_config_freezes_one_28_4_recipe() -> None:

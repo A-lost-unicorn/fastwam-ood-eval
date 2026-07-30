@@ -526,9 +526,13 @@
 - 防选择：development 只评 step 0/200，主 checkpoint 固定 step 200、无
   fallback；CPU finalize 永远写 `phase3_unlocked=false`，完整 A1 checkpoint
   的 online correct/null/shuffle recheck 才能继续。
-- 验证：config/schema/CLI/runner、两卡 launcher、四 stage no-torch dry-run 和
-  58 项定向测试已完成；真实 GPU 状态仍是 `NOT RUN`，不能写成 loss 或 OOD
-  结果。
+- 首次真实 calibration 已保存 896 条 train 与 128 条 development objective；
+  随后在 artifact manifest 写入处发现 relative config path 与 resolved safety
+  root 混用。修复统一覆盖 calibration/track/checkpoint，并拒绝 outside-root
+  工件；原 rows 与 weight SHA 保留，只允许原目录 resume。
+- 验证：config/schema/CLI/runner、两卡 launcher、四 stage no-torch dry-run、
+  63 项相关测试和 397 项全量测试通过；A0/A1 optimizer update 仍为 0，不能
+  写成训练改善、success 或 OOD 结果。
 
 ## 4. 简历表达素材
 

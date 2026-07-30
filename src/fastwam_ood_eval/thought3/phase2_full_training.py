@@ -748,6 +748,31 @@ def _artifact_descriptor(path: Path) -> dict[str, Any]:
     return {"bytes": path.stat().st_size, "sha256": sha256_file(path)}
 
 
+def _artifact_relative_key(path: Path, root: Path) -> str:
+    """Return one normalized artifact key contained by ``root``.
+
+    Phase 2 configs intentionally keep repository-relative output paths, while
+    ``ensure_thought3_output_path`` returns a resolved safety root.  Resolve
+    both operands before comparing them so artifact bookkeeping is independent
+    of that representation difference.
+    """
+
+    resolved_root = root.resolve()
+    resolved_path = path.resolve()
+    try:
+        relative = resolved_path.relative_to(resolved_root)
+    except ValueError as exc:
+        raise Phase2ExecutionError(
+            f"Phase 2 artifact is outside its output root: "
+            f"{resolved_path} not under {resolved_root}"
+        ) from exc
+    if relative == Path("."):
+        raise Phase2ExecutionError(
+            f"Phase 2 artifact path names its output root: {resolved_path}"
+        )
+    return relative.as_posix()
+
+
 def _calibration_paths(cfg: Phase2FullTrainingConfig) -> dict[str, Path]:
     root = cfg.output_dir / "calibration"
     return {
@@ -993,7 +1018,7 @@ def run_phase2_calibration(
             "preflight",
         ):
             path = paths[key]
-            manifest_files[str(path.relative_to(root))] = (
+            manifest_files[_artifact_relative_key(path, root)] = (
                 _artifact_descriptor(path)
             )
         calibration_sha = sha256_file(paths["result"])
@@ -1884,7 +1909,7 @@ def run_phase2_track(
             "preflight",
         ):
             path = paths[key]
-            artifact_files[str(path.relative_to(paths["root"]))] = (
+            artifact_files[_artifact_relative_key(path, paths["root"])] = (
                 _artifact_descriptor(path)
             )
         checkpoint_root = Path(result["checkpoint"])
@@ -1894,7 +1919,7 @@ def run_phase2_track(
             checkpoint_root / "manifest.json",
         ):
             artifact_files[
-                str(checkpoint_file.relative_to(paths["root"]))
+                _artifact_relative_key(checkpoint_file, paths["root"])
             ] = _artifact_descriptor(checkpoint_file)
         atomic_write_json(
             paths["artifacts"],

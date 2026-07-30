@@ -1,7 +1,7 @@
 # Thought3 训练与恢复手册
 
 状态：Phase 0 完成；Phase 1 在线反事实真实单卡完成并进入分支 A；full 28/4
-Phase 2 已预注册/实现，尚未真实运行
+Phase 2 calibration 已计算，manifest bookkeeping 中断，A0/A1 尚未启动
 更新时间：2026-07-30
 
 ## 1. 当前能做什么
@@ -47,8 +47,10 @@ Phase 1 已额外确认固定 E6 A1 checkpoint 的 correct/null/shuffle
 future-content action sensitivity，并按预注册规则解锁 Phase 2 的设计。该解锁
 不等于授权未冻结的长训练，也不允许跳过 matched A0。
 
-Phase 2 现已冻结为唯一 28/4 normalized matched A0/A1 配方。代码和 dry-run
-完成不等于训练结果；真实计算仍要求独立确认。
+Phase 2 现已冻结为唯一 28/4 normalized matched A0/A1 配方。首次启动已保存
+896 条 train 与 128 条 development calibration objective，但在 artifact manifest
+写入时因相对/绝对路径表示混用中断；A0/A1 optimizer update 仍为 0。恢复补丁
+不改变任何科学配方，只允许在原目录使用 `--resume`。
 
 ## 2. Adapter 结构
 

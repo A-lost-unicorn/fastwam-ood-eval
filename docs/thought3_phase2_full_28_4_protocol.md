@@ -1,11 +1,43 @@
 # Thought3 Phase 2：完整 28/4 A0/A1 单配方训练协议
 
-状态：`PRE-REGISTERED / IMPLEMENTED / NOT RUN`
+状态：`CALIBRATION COMPUTED / TRAINING NOT STARTED / RESUME REQUIRED`
 
 冻结日期：2026-07-30
 配置：`configs/thought3/phase2_full_28_4_a0_a1.yaml`
 配置 fingerprint：
 `fabb96a97b7e137ca39a5477c2090deab1844909887b10cd22fa92ebbee66468`
+
+## 0. 2026-07-30 calibration 中断与恢复边界
+
+首次真实启动使用冻结项目 commit `96ace8b`。所有 calibration objective 已经
+完成并原子落盘：
+
+- train：`28 × 32 = 896` rows，文件 SHA
+  `0f812c75...4b997`；
+- development：`4 × 32 = 128` rows，文件 SHA
+  `07f29ba3...3a5d`；
+- normalized weight SHA：`4c36dece...1dc22`；
+- train/development initial mean loss：
+  `0.0049083332 / 0.0042341036`；
+- frozen Fast-WAM SHA before/after 相同；
+- future RGB、OOD 与 success 均未读取。
+
+中断发生在 `calibration.json` 已写完之后、`artifact_manifest.json` 写入之前。
+原因是 config 保留 repository-relative output path，而 safety helper 返回 resolved
+absolute root；旧代码直接对二者调用 `Path.relative_to()`。这只是工件路径表示
+错误，不是 model、objective、weight、显存或数据错误。
+
+中断边界：
+
+- calibration `run_status=failed`；
+- A0/A1 track 均未创建；
+- optimizer update、backward 和新 checkpoint 均为 0；
+- 已保存的 1,024 rows 保留，禁止删除或另建 outcome-conditioned run。
+
+恢复补丁只在 manifest bookkeeping 前统一 resolve path/root，并将相同 helper
+用于 calibration、track 与 checkpoint 工件；不改变 config fingerprint、数据、
+flow、loss、weight、LR、训练预算、endpoint 或门槛。恢复必须在原目录执行
+`--resume`，先复验并复用已完成 rows，再启动 matched A0/A1。
 
 ## 1. 研究问题与进入条件
 

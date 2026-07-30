@@ -37,6 +37,7 @@ THOUGHT3_COMMANDS = (
     "thought3-aggregate",
     "thought3-report",
 )
+PHASE2_FULL_COMMAND = "thought3-train-phase2-full"
 E9_V21_AUDIT_CONFIG = Path(
     "configs/thought3/audits/phase_e9_v2_1_readonly_audit.yaml"
 )
@@ -82,6 +83,42 @@ def test_dry_run_never_loads_checkpoint_or_writes(
     assert payload["would_load_fastwam"] is False
     assert payload["would_write"] is False
     assert not (tmp_path / "thought3").exists()
+
+
+def test_phase2_full_help_and_dry_run_do_not_import_torch_or_write(
+    capsys,
+):
+    with pytest.raises(SystemExit) as captured:
+        build_parser().parse_args([PHASE2_FULL_COMMAND, "--help"])
+    assert captured.value.code == 0
+    help_text = capsys.readouterr().out
+    for flag in (
+        "--config",
+        "--stage",
+        "--dry-run",
+        "--resume",
+        "--device",
+    ):
+        assert flag in help_text
+
+    script = (
+        "import sys\n"
+        "from fastwam_ood_eval.cli import main\n"
+        "code=main(["
+        f"{PHASE2_FULL_COMMAND!r},"
+        "'--config','configs/thought3/phase2_full_28_4_a0_a1.yaml',"
+        "'--stage','calibrate','--dry-run'])\n"
+        "assert code == 0\n"
+        "assert 'torch' not in sys.modules\n"
+        "assert 'safetensors' not in sys.modules\n"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_cpu_mock_cli_pipeline_is_complete_and_isolated(tmp_path, capsys):

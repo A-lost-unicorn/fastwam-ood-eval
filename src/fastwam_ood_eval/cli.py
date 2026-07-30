@@ -487,6 +487,40 @@ def build_parser() -> argparse.ArgumentParser:
         )
         command.add_argument("--rank", type=int, default=0)
         command.add_argument("--world-size", type=int, default=1)
+    phase2_full = subparsers.add_parser(
+        "thought3-train-phase2-full",
+        help="Run one explicit stage of matched Phase 2 full 28/4 A0/A1 training",
+    )
+    phase2_full.add_argument("--config", required=True, type=Path)
+    phase2_full.add_argument(
+        "--stage",
+        required=True,
+        choices=("calibrate", "A0", "A1", "finalize"),
+        help="Run only this preregistered stage; stages never chain implicitly",
+    )
+    phase2_full.add_argument(
+        "--set",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="Present for CLI consistency; Phase 2 forbids overrides",
+    )
+    phase2_full.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate schema and describe work without torch/model load or writes",
+    )
+    phase2_full.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume only from checksum/provenance-valid Phase 2 artifacts",
+    )
+    phase2_full.add_argument(
+        "--device",
+        help="Present for CLI consistency; Phase 2 device is frozen",
+    )
+    phase2_full.add_argument("--rank", type=int, default=0)
+    phase2_full.add_argument("--world-size", type=int, default=1)
     return parser
 
 

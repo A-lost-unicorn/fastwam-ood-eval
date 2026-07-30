@@ -2,7 +2,8 @@
 
 更新日期：2026-07-30
 
-当前节点：Phase 0 完成；Phase 1 真实单卡完成并进入分支 A；Phase 2 待预注册
+当前节点：Phase 0 完成；Phase 1 真实单卡完成并进入分支 A；Phase 2 已预注册、
+实现并通过 dry-run，等待显式双卡运行确认
 
 ## 1. 为什么改线
 
@@ -42,11 +43,11 @@ Phase 1 已于 2026-07-30 得到分支 A。此后仍禁止新增 flow-variance�
 checkpoint-trajectory、sample-weight、LR 或 surrogate-threshold Gate，也不训练
 A2/A4；下一项工作只能是冻结 Phase 2 的唯一 matched A0/A1 配方。
 
-## 3. Phase 2 草案：完整 28/4 A0/A1
+## 3. Phase 2 已冻结：完整 28/4 A0/A1
 
-Phase 1 已满足分支 A，因此允许进入本阶段的**预注册与配置冻结**。运行前仍须
-另行冻结正式 config、commit、update budget 和 checkpoint rule；本节只是设计
-草案，不是训练启动授权。
+Phase 1 已满足分支 A。本阶段的 config、单配方、flow namespace、update budget、
+固定 step-200 checkpoint rule、双卡 runner、resume 和 CPU finalize 已冻结；
+真实 GPU 尚未启动，仍需显式确认。
 
 ### 配方
 
@@ -62,9 +63,12 @@ Phase 1 已满足分支 A，因此允许进入本阶段的**预注册与配置�
 
 - 完整 `libero_goal/task_0` split：28 train / 4 development；
 - 只训练 A0 和 A1；
-- 唯一 LR、Adapter 结构、train seed 与更新预算；
+- 唯一 LR `3e-4`、Adapter 结构、train seed `3407`；
+- 200 optimizer updates，每 update 28 个完整 cohort objective；
+- calibration flows `139..170`，development flows `171..202`；
+- training slots `50001..55600`；
 - A0/A1 完全匹配 sample/flow schedule；
-- development 只用于运行前冻结的 checkpoint rule；
+- development 只评估 step 0/200，主 checkpoint 固定 step 200、无 fallback；
 - 不读 OOD，不根据 rollout success 调参；
 - 不训练 A2/A4，不做 LR/sample-weight sweep。
 
@@ -79,6 +83,11 @@ Phase 1 已满足分支 A，因此允许进入本阶段的**预注册与配置�
 
 目标是产生进入 directional pilot 的工程候选，不重建 E5–E9 式“所有 surrogate
 样本必须完美”的总门禁。
+
+为使用两张空闲卡而不引入 DDP 混淆，先在卡 1 生成唯一 normalized weight
+artifact，再让 A0/A1 分别在卡 1/2 并行；CPU finalize 不会直接解锁 Phase 3。
+完整协议、唯一命令、恢复方法和 1.5–2 小时时间估计见
+[thought3_phase2_full_28_4_protocol.md](thought3_phase2_full_28_4_protocol.md)。
 
 ## 4. Phase 3 草案：最小 Clean/OOD paired pilot
 
@@ -126,7 +135,8 @@ pilot outcome 前冻结，并与未来正式 Phase G seed namespace 分离。
 ## 5. 从现在到 directional OOD 的最短路径
 
 1. ~~单卡运行一次 Phase 1，获得 A/B/C。~~ 已完成，结果为 A。
-2. 现在冻结并训练一次 28/4 A0/A1；不得重选 Phase 1 checkpoint 或门槛。
+2. ~~冻结 Phase 2。~~ 已完成；现在只运行一次 28/4 A0/A1，不得重选
+   Phase 1 checkpoint、LR、权重或门槛。
 3. 在完整 checkpoint 上复验一次 K=1 内容敏感性。
 4. 冻结 240-rollout paired manifest。
 5. 运行 B0/A0/A1/A-shuffle 的 Clean/camera/robot-init pilot。

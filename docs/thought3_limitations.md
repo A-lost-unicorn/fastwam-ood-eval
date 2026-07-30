@@ -18,7 +18,7 @@
 
 - ID/OOD success rate；
 - A-shuffle 机器人 rollout；
-- 完整 28/4 A0/A1 checkpoint；
+- 完整 28/4 A0/A1 checkpoint（协议/代码已冻结，但 GPU 尚未运行）；
 - K=2/K=4 的真实训练、在线动作反事实或收益—成本曲线。
 
 Phase C–E 的真实离线工程结果不支持 future 改善 OOD。Phase 1 的真实
@@ -58,18 +58,20 @@ Phase C 与 E 系列已在真实 Fast-WAM 上逐项复用官方：
 - loss weighting/reduction；
 - normalization/denormalization。
 
-该实证只覆盖现有 action-only smoke/training path；完整 28/4 配方仍须继续绑定
-相同 scheduler/stats SHA。
+该实证只覆盖现有 action-only smoke/training path；完整 28/4 配方已绑定相同
+scheduler/stats SHA，但真实训练尚未产生 checkpoint。
 
 ## 5. 训练数据已完成 task-level inventory，但正式规模仍未训练
 
 标准 LIBERO LeRobot 数据已可读，`libero_goal/task_0` 的 42 episode inventory、
-37/5 episode split 和 32-sample cache pilot 已审计。仍需在 Phase 2 冻结：
+37/5 episode split 和 32-sample cache pilot 已审计。Phase 2 已冻结：
 
-- license 与分发边界；
 - 28/4 实际训练/development identity；
 - 完整 action/frame selection 和 update schedule；
 - 数据没有混入 LIBERO-Plus/test trajectory。
+
+仍待真实 GPU run 验证完整 28/4 loss、checkpoint 与 frozen hash；license 与
+公开分发边界仍是独立未决项。
 
 ## 6. Hook 依赖上游调用次数
 

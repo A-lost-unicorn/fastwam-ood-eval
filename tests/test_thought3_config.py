@@ -8,12 +8,15 @@ from fastwam_ood_eval.thought3.config import (
     Thought3ConfigError,
     load_thought3_config,
 )
+from fastwam_ood_eval.thought3.phase2_protocol import (
+    load_phase2_full_training_config,
+)
 from thought3_test_utils import write_thought3_config
 
 
 def test_all_committed_thought3_configs_validate():
     paths = sorted(Path("configs/thought3").glob("*.yaml"))
-    assert len(paths) == 26
+    assert len(paths) == 27
     assert Path("configs/thought3/phase_c_single_sample.yaml") in paths
     assert Path("configs/thought3/phase_d_cache_smoke.yaml") in paths
     assert Path("configs/thought3/phase_e_training_smoke.yaml") in paths
@@ -75,11 +78,18 @@ def test_all_committed_thought3_configs_validate():
         )
         in paths
     )
-    for path in paths:
+    phase2 = Path(
+        "configs/thought3/phase2_full_28_4_a0_a1.yaml"
+    )
+    assert phase2 in paths
+    for path in (value for value in paths if value != phase2):
         cfg = load_thought3_config(path)
         assert cfg.schema_version == "thought3.config.v1"
         assert "thought3" in cfg.experiment.output_dir.parts
         assert "thought3" in cfg.cache.root.parts
+    phase2_cfg = load_phase2_full_training_config(phase2)
+    assert phase2_cfg.train_count == 28
+    assert phase2_cfg.development_count == 4
 
 
 def test_variant_k_and_adapter_invariants_are_fail_closed(tmp_path):

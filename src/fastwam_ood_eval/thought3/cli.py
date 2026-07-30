@@ -383,6 +383,36 @@ def _report(cfg: Thought3Config) -> dict[str, Any]:
 
 
 def dispatch(args: Any) -> int:
+    if args.command == "thought3-train-phase2-full":
+        from fastwam_ood_eval.thought3.phase2_full_training import (
+            phase2_dry_run_payload,
+            run_phase2_stage,
+        )
+        from fastwam_ood_eval.thought3.phase2_protocol import (
+            load_phase2_full_training_config,
+        )
+
+        if args.set or args.device or args.rank != 0 or args.world_size != 1:
+            raise ValueError(
+                "Phase 2 full training forbids config/device/rank overrides"
+            )
+        phase2_cfg = load_phase2_full_training_config(args.config)
+        if args.dry_run:
+            _emit(
+                phase2_dry_run_payload(
+                    phase2_cfg,
+                    stage=args.stage,
+                )
+            )
+            return 0
+        result = run_phase2_stage(
+            phase2_cfg,
+            stage=args.stage,
+            resume=args.resume,
+        )
+        _emit(result)
+        return 0
+
     if args.command == "thought3-audit-e9-v2-artifacts":
         from fastwam_ood_eval.thought3.phase_e9_v21_readonly_audit import (
             audit_dry_run_payload,

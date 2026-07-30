@@ -1,0 +1,70 @@
+schema_version: thought3.phase2.full_28_4.config.v1
+experiment:
+  name: thought3_phase2_full_28_4_a0_a1_v1
+  output_dir: outputs/thought3/phase2_full_28_4_a0_a1_v1
+  seed: 3407
+source:
+  thought3_base_config_path: configs/thought3/phase_e6_fresh_cohort_replication.yaml
+  thought3_base_config_sha256: 84992a4fa96fef643ff6273f1ed1ba27a69154b0bb52517317f517a3bda3849a
+  phase_d_gate_path: outputs/thought3/phase_d_cache_smoke_v1/gate_d_result.json
+  phase_d_gate_sha256: a636d649491ad9df67a1ea2cb91d8e9bf708784a410ba7b8304248f33ed1882d
+  phase1_aggregate_path: outputs/thought3/phase1_k1_online_counterfactual_v1/aggregate.json
+  phase1_aggregate_sha256: 7b6e131fbb01f2eb66fe78a3365fa8b681667b216ecdbd19945fda9b58d899ea
+  phase1_artifact_manifest_path: outputs/thought3/phase1_k1_online_counterfactual_v1/artifact_manifest.json
+  phase1_artifact_manifest_sha256: a0fb8986cdbfcefebcdea3f2272891fb46c5410fe885026a95911b45bbe5a45c
+  e9_audit_path: outputs/thought3/phase_e9_v2_1_readonly_audit_v1/audit_result.json
+  e9_audit_sha256: 20f0662d6260563ddde7cc68614e7477b85d81fd7204f80ed98361a5f75a22b9
+  cache_fingerprint: 63a70e1af38f68bc894fc11d03c84f212e6c6328a5051256c9d045741156d9c5
+  split_fingerprint: ea5402955023ccd48d790d821a73f98549b31d1ace8af035a90ceae2ad3951eb
+  expected_phase1_classification: future_content_sensitivity_observed
+recipe:
+  variants: [A0, A1]
+  train_count: 28
+  development_count: 4
+  optimizer: AdamW
+  optimizer_updates: 200
+  objectives_per_update: 28
+  learning_rate: 0.0003
+  weight_decay: 0.01
+  train_seed: 3407
+  checkpoint_interval: 50
+  training_flow_slot_offset: 50000
+  calibration_flow_steps:
+    [139, 140, 141, 142, 143, 144, 145, 146,
+     147, 148, 149, 150, 151, 152, 153, 154,
+     155, 156, 157, 158, 159, 160, 161, 162,
+     163, 164, 165, 166, 167, 168, 169, 170]
+  development_flow_steps:
+    [171, 172, 173, 174, 175, 176, 177, 178,
+     179, 180, 181, 182, 183, 184, 185, 186,
+     187, 188, 189, 190, 191, 192, 193, 194,
+     195, 196, 197, 198, 199, 200, 201, 202]
+  sample_weight_recipe: inverse_initial_loss_unit_mean_v1
+  calibration_variant: A0
+  primary_checkpoint_step: 200
+  primary_checkpoint_rule: fixed_step_200_no_selection_no_fallback
+  development_direction_rule: a1_final_mean_loss_lt_a0_final_mean_loss_and_a1_reduction_positive
+  catastrophic_loss_multiplier: 10.0
+  recipe_selection_disclosure: >-
+    Selected after the valid E9a-v2.1 read-only audit because normalized A0/A1
+    had no confirmed harm. This is post-E8 engineering recipe selection; E9 did
+    not pass its frozen scientific threshold, and no Phase 2 outcome may change
+    this recipe.
+runtime:
+  device: cuda:0
+  visible_gpu_count: 1
+  parallel_track_count: 2
+  max_gpu_memory_gb: 23.8
+  deterministic_algorithms: true
+  cublas_workspace_config: ":4096:8"
+scope:
+  read_training_action_target: true
+  read_training_future_cache: true
+  read_development: true
+  read_future_rgb: false
+  read_ood: false
+  read_rollout_success: false
+  start_rollout: false
+  train_a2_or_a4: false
+  select_checkpoint_from_development: false
+  tune_from_phase2_outcome: false

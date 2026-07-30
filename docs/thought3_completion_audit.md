@@ -27,7 +27,7 @@ Gate E.9a-v2         four tracks complete; parent status remains invalid
 Phase 0 audit        valid read-only recovery; scientific gate failed
 E.9b replication     locked; no candidate
 Phase 1 online CF    valid engineering smoke; branch A
-full 28/4 A0/A1      unlocked for preregistration; not started
+full 28/4 A0/A1      preregistered/implemented/dry-run passed; GPU not started
 A2/A4 real training  not started
 directional OOD pilot not started
 Phase G formal       not started
@@ -138,7 +138,7 @@ Phase D cache 只能用于训练；不得把它接入 Phase F/G 在线 policy。
 | E.9a-v2 | compute complete / engineering invalid | 四轨 800 updates、6,400 train + 2,048 held-out objectives；raw A0/A1 reduction 4.175%/12.994%，normalized 2.983%/11.010%；tail 2/0→0/0；paired 8.274% 未过 10%；RNG identity telemetry 缺失 |
 | Phase 0 E9a-v2.1 | valid audit / scientific failed | 27/27 checks true；0 forward/backward/optimizer/GPU/parent write；恢复 RNG identity，确认 `sample_tail_mitigation_not_supported` 与 E9b locked |
 | Phase 1 online CF | valid engineering smoke / branch A | 固定 E6 A1 step-200 与 E6 8-sample cohort；B0/null 精确 parity，correct-null、correct-shuffle、hash 均 `8/8` |
-| full 28/4 A0/A1 | preregistration unlocked / not started | Phase 1=A；仍须先冻结唯一 normalized matched 配方和 checkpoint rule |
+| full 28/4 A0/A1 | preregistered / implemented / not run | normalized matched A0/A1、3e-4、200×28、flows 与 fixed step-200 rule 已冻结；等待显式双卡运行 |
 
 Phase 1 分支 A 已产生。进入 Phase 2 前仍然：
 
@@ -165,7 +165,7 @@ Phase 1 分支 A 已产生。进入 Phase 2 前仍然：
 9. frozen checkpoint/cohort/config/SHA、atomic artifacts 与 checksum resume。
 
 真实单卡命令已经完成，Phase 1 只测动作敏感性并得到分支 A。当前缺口已转为：
-完整 28/4 A0/A1 配方尚未预注册/训练，完整 checkpoint 上的内容敏感性尚未复验，
+完整 28/4 A0/A1 配方已预注册但尚未训练，完整 checkpoint 上的内容敏感性尚未复验，
 LIBERO/LIBERO-Plus paired rollout 尚未开始。
 
 ## 7. 数据、评测与统计
@@ -237,14 +237,17 @@ correct-null、correct-shuffle 与 action hash 均为 `8/8`，分类为
 `future_content_sensitivity_observed`。paired correct-null overhead mean 为
 `258.95 ms`，但 normalized action L2 mean 只有 `0.011052`，且没有 rollout。
 
-当前最近一步是预注册 Phase 2，而不是直接启动长训练：冻结唯一 28/4
-normalized matched A0/A1 配方、一个 LR/seed/update budget、paired flow
-identity 和 dev-only checkpoint rule。Phase 2 仍未启动。
+Phase 2 已冻结唯一 28/4 normalized matched A0/A1 配方：LR 3e-4、seed
+3407、200×28 objectives、calibration `139..170`、development `171..202`、
+training `50001..55600`，主 checkpoint 固定 step 200。双卡 runner、resume、
+CPU finalize 和 dry-run 已通过；Phase 2 真实 GPU 仍未启动。当前最近一步是按
+唯一确认命令运行它，而不是增加新 Gate、改 LR/权重或训练 A2/A4。
 
 相关协议、结果与父结果见
 [thought3_accelerated_roadmap.md](thought3_accelerated_roadmap.md)、
 [thought3_phase1_k1_online_counterfactual_protocol.md](thought3_phase1_k1_online_counterfactual_protocol.md)、
 [thought3_phase1_k1_online_counterfactual_report.md](thought3_phase1_k1_online_counterfactual_report.md)、
+[thought3_phase2_full_28_4_protocol.md](thought3_phase2_full_28_4_protocol.md)、
 [thought3_phase_e9_v2_1_readonly_audit_report.md](thought3_phase_e9_v2_1_readonly_audit_report.md)、
 [thought3_phase_e9_v2_1_readonly_audit_protocol.md](thought3_phase_e9_v2_1_readonly_audit_protocol.md)、
 [thought3_phase_e8_protocol.md](thought3_phase_e8_protocol.md)、

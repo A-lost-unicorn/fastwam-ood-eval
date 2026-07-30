@@ -83,7 +83,7 @@
 | R58 | 根据 E.8 的已知 tail outcome 调权或只跑 normalized 配方，造成 outcome-conditioned weight 与新 flow 混淆 | 高 | Critical | calibration field audit、weight SHA、raw same-flow controls、protocol timestamp | 四轨 pairing/weight/schedule checks 通过；normalization 降低 tail harm 但同时降低 pooled/paired gain，未被选择为候选 | E | Controlled |
 | R59 | 复用旧 Gate evaluator 时隐含 flow 数/取值硬编码，导致新协议在 objective 前失败且子轨状态误留 `running` | 中 | High | 任意正整数 flow contract、75–106 完整 grid 回归、invocation-scoped failed-status test、v1 SHA 冻结 | v2 成功完成四轨 `75..106`，证明 generic evaluator 与 initial-probe 路径修复有效 | E | Closed |
 | R60 | checker 强制验证 RNG identity 字段，但 probe writer 未持久化这些字段，导致完整运行被标 invalid | 高 | High | writer/checker schema contract、artifact SHA、完整 grid/timestep/weight/zero-position 只读审计 | Phase 0 27/27 checks 通过，父 77 文件未改；登记 engineering valid + scientific failed | E | Closed |
-| R61 | surrogate Gate 无限增长，长期不触达动作或 success 变量 | 高 | Critical | 加速路线和硬停止规则；Phase 1 前禁止新 flow/checkpoint/LR/weight Gate | Phase 1 已真实触达 action 并得到 A；下一步直接冻结 Phase 2，不再新增 surrogate Gate | 1–4 | Closed for action boundary |
+| R61 | surrogate Gate 无限增长，长期不触达动作或 success 变量 | 高 | Critical | 加速路线和硬停止规则；Phase 1 前禁止新 flow/checkpoint/LR/weight Gate | Phase 1 已真实触达 action 并得到 A；Phase 2 唯一配方已冻结，不再新增 surrogate Gate | 1–4 | Closed for action boundary |
 | R62 | 用零 future tensor 冒充 formal null，使 correct-null 混入 projector 响应 | 高 | Critical | request-scoped parameter-free bypass；不构造 tensor、不跑 Video DiT、Adapter call=0；B0 hard parity | 真实 8/8 null 为 0 Video DiT/Adapter call，B0-null L∞ 精确 0 | 1 | Closed |
 | R63 | shuffle 同时改变 target current/context/action noise，无法归因于 future 内容 | 高 | Critical | other-episode 一一 derangement；target RGB/language/proprio/cache/action seed 不变；复用 recipient future noise | 8/8 other-episode、only-future-replaced、same recipient seed/context/initial-state checks 通过 | 1 | Closed for Phase 1 |
 | R64 | B0 非确定性被误报为 future sensitivity | 中 | Critical | 每样本 B0×2；预先定义 `max(1e-7,10×p95 replay L2)`；`L∞>1e-5` fail closed | 真实 B0 replay 的 L1/L2/L∞ 全 0；floor 冻结为 `1e-7` 后才运行 intervention | 1 | Closed |
@@ -92,6 +92,10 @@
 | R67 | Phase 1 代码/dry-run 被误记成真实 action 结果 | 中 | High | 只有 output decision/run status 才产生 outcome | 真实 `run_status=completed`、decision、62-file manifest 和结果报告已审计 | 1 | Closed |
 | R68 | replay 恰好为 0 导致 `1e-7` floor 极低，把确定但很小的动作差异误写成实用效应 | 高 | Critical | 同时报告 L1/L2/L∞、action cosine、相对 B0 RMS、逐样本方向与 latency | 分支 A 只表示 content sensitivity；轨迹/success relevance 必须由完整 checkpoint 和 paired rollout 证明 | 1–3 | Controlled / downstream open |
 | R69 | 八条同 task train sample 的 `8/8` 被误推广到其他 task、dev 或 OOD | 高 | Critical | cohort fingerprint、sample-level table、证据等级 | 报告固定为 one-task SMOKE；Phase 2 full 28/4 复验与多 task directional pilot 才允许推广 | 1–3 | Controlled / downstream open |
+| R70 | 两卡分别重算 normalized weights，微小差异破坏 A0/A1 单变量配对 | 中 | High | calibration artifact SHA、两轨 weight SHA | 先单卡生成唯一 28-sample weight artifact，两轨只读同一 SHA；不容忍近似匹配 | 2 | Controlled / not run |
+| R71 | 查看 step 50/100/150 dev 后挑 checkpoint，重建 trajectory selection | 高 | Critical | fixed endpoint、checkpoint manifest、无 fallback | checkpoint 可用于恢复，但主终点固定 step 200；development 只评 step 0/200 | 2 | Controlled / not run |
+| R72 | E9-derived normalized recipe 被误写成预先独立发现或 E9 科学通过 | 高 | High | recipe disclosure、E9 audit SHA、protocol timestamp | 明确登记 post-E8 engineering selection，paired 8.274%<10% 与 E9b locked 同时报告 | 2 | Controlled |
+| R73 | Phase 2 dev 方向通过后直接进入 rollout，却未确认完整 A1 checkpoint 仍读取 future 内容 | 中 | Critical | finalize 强制 `phase3_unlocked=false`、下一 stage 字段 | 完整 checkpoint 必须再做一次 correct/null/shuffle；未通过则不生成 pilot manifest | 2–3 | Controlled / downstream open |
 
 ## 3. 最高优先级风险详解
 
@@ -387,8 +391,11 @@ Phase 1 真实结果为分支 A。correct-null 与 correct-shuffle 均 `8/8` 超
 | R60 probe identity telemetry | 已关闭：Phase 0 audit valid，父 77 文件未改；科学 Gate 仍 failed |
 | R68 技术差异与实用效应混淆 | 完整 checkpoint 复验 action effect size，并由 paired rollout 测轨迹/success |
 | R69 单 task/八样本外推 | 28/4 训练复验后执行预冻结多 task directional pilot |
+| R70 双卡 weight identity | Phase 2 calibration 与 A0/A1 track 的 weight/artifact SHA 全部匹配 |
+| R71 dev checkpoint selection | Phase 2 只出现 step 0/200 dev metric，主 checkpoint manifest 固定 200 |
+| R73 完整 checkpoint future 使用 | Phase 2 完成后执行一次 online correct/null/shuffle recheck |
 | 3-rank cache 完整性 | 正式分布式 cache 的 union/intersection/cardinality 证明 |
-| 28/4 多样本优化 | Phase 1=A 已解锁；先预注册唯一 normalized matched A0/A1 Phase 2 |
+| 28/4 多样本优化 | 唯一 normalized matched A0/A1 Phase 2 已预注册/实现，等待真实双卡运行 |
 
 已关闭项可以写成其精确覆盖范围内的完成事实；上述未关闭项仍必须使用“预计”
 “待验证”，不能外推成 rollout、success 或 OOD 结果。

@@ -1,7 +1,7 @@
 # Thought3 训练与恢复手册
 
 状态：Phase 0 完成；Phase 1 在线反事实真实单卡完成并进入分支 A；full 28/4
-Phase 2 待预注册
+Phase 2 已预注册/实现，尚未真实运行
 更新时间：2026-07-30
 
 ## 1. 当前能做什么
@@ -46,6 +46,9 @@ Phase D 已额外验证：
 Phase 1 已额外确认固定 E6 A1 checkpoint 的 correct/null/shuffle
 future-content action sensitivity，并按预注册规则解锁 Phase 2 的设计。该解锁
 不等于授权未冻结的长训练，也不允许跳过 matched A0。
+
+Phase 2 现已冻结为唯一 28/4 normalized matched A0/A1 配方。代码和 dry-run
+完成不等于训练结果；真实计算仍要求独立确认。
 
 ## 2. Adapter 结构
 
@@ -578,12 +581,40 @@ v1 故障证据、完整权重表、RNG SHA、预算、分类、工件 SHA 与 v
 - B/C 分支未触发；
 - directional OOD pilot 正向前仍不得训练 A2/A4。
 
-由于 E9a-v2.1 audit valid 且 Phase 1=A，Phase 2 草案使用 normalized
+由于 E9a-v2.1 audit valid 且 Phase 1=A，Phase 2 使用 normalized
 sample-loss recipe；必须披露这是 post-E8 engineering development，不能称
 E9 Gate 通过。Phase 2 只允许一个 LR、一个 seed、同一 sample/flow schedule
-的 A0/A1，不做 LR/sample-weight sweep，也不读取 OOD。正式训练前仍需新
-config/commit 冻结 update budget、LR、flow identity、checkpoint rule 和停止
-条件；本文件不自动授权启动。
+的 A0/A1，不做 LR/sample-weight sweep，也不读取 OOD。
+
+现已冻结：
+
+- 28 train / 4 development；
+- LR 3e-4、seed 3407、200 updates；
+- 每 update 聚合 28 个 sample objective；
+- calibration `139..170`、development `171..202`、training
+  `50001..55600`；
+- 主 checkpoint 固定 step 200，无 dev selection/fallback；
+- 先单卡 calibration，再两卡 A0/A1 并行，最后 CPU finalize；
+- 完整 checkpoint online sensitivity recheck 前，Phase 3 始终锁定。
+
+真实首次运行：
+
+```bash
+CONFIRM_THOUGHT3_PHASE2_FULL=YES \
+THOUGHT3_GPU_IDS=1,2 \
+bash scripts/run_thought3_phase2_full_28_4.sh
+```
+
+中断后不得删改已有工件，使用：
+
+```bash
+CONFIRM_THOUGHT3_PHASE2_FULL=YES \
+THOUGHT3_GPU_IDS=1,2 \
+bash scripts/run_thought3_phase2_full_28_4.sh --resume
+```
+
+预计双卡墙钟 1.5–2 小时。当前代码、测试和 dry-run 完成，但真实训练尚未
+启动。
 
 完整路径与停止规则见
 [thought3_accelerated_roadmap.md](thought3_accelerated_roadmap.md)；在线技术
@@ -591,3 +622,5 @@ config/commit 冻结 update budget、LR、flow identity、checkpoint rule 和停
 [thought3_phase1_k1_online_counterfactual_protocol.md](thought3_phase1_k1_online_counterfactual_protocol.md)。
 真实分支 A 的数值与边界见
 [thought3_phase1_k1_online_counterfactual_report.md](thought3_phase1_k1_online_counterfactual_report.md)。
+Phase 2 的全部配方、泄漏边界、resume 与分类见
+[thought3_phase2_full_28_4_protocol.md](thought3_phase2_full_28_4_protocol.md)。

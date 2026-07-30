@@ -513,6 +513,23 @@
 - 结论边界：这是单 task 八条 train sample 的 engineering action-sensitivity
   smoke；action L2 mean 仅 `0.011052/0.012092`，不能写成 OOD 成功率或控制增益。
 
+### 3.33 把完整 28/4 训练做成双卡单变量、可恢复协议
+
+- 问题：Phase 1 分支 A 后若继续试 LR、sample weight 或 checkpoint，会再次陷入
+  surrogate 选择；若 A0/A1 在两卡各自重算权重，又会破坏单变量配对。
+- 方案：冻结唯一 normalized recipe，由单卡先在 28 条 train sample、32 个新
+  flow 上生成 inverse-initial-loss unit-mean 权重和 SHA；随后 A0/A1 分别占用
+  两张卡并行，共享同一 200×28 sample/flow schedule。
+- 恢复：每 50 update 保存 Adapter-only safetensors、optimizer 和 manifest，
+  checkpoint 同时绑定 calibration、weight、metric-prefix 与 flow-schedule
+  SHA；中断后另一条已完成 track 只读校验并跳过。
+- 防选择：development 只评 step 0/200，主 checkpoint 固定 step 200、无
+  fallback；CPU finalize 永远写 `phase3_unlocked=false`，完整 A1 checkpoint
+  的 online correct/null/shuffle recheck 才能继续。
+- 验证：config/schema/CLI/runner、两卡 launcher、四 stage no-torch dry-run 和
+  58 项定向测试已完成；真实 GPU 状态仍是 `NOT RUN`，不能写成 loss 或 OOD
+  结果。
+
 ## 4. 简历表达素材
 
 ### 当前即可使用的版本
@@ -588,6 +605,10 @@
   weighting 与新 flow draw 解耦，并用权重/调度 SHA、逐 objective telemetry、
   32-comparison FWER 和一次性未使用 cohort 边界防止配方与验证集反复选择；
   当前只可表述为协议与工程实现，不可宣称 mitigation 已通过。
+- 将 Phase 1 正向动作敏感性转化为可审计的 28/4 A0/A1 训练协议：冻结单一
+  normalized weight artifact、200×28 matched flow schedule、step-200 endpoint
+  和双卡 track isolation，并实现 Adapter/optimizer/metric-prefix checksum
+  resume。真实 Phase 2 尚未运行，因此该条只可作为系统设计与工程实现经历。
 
 ### 可直接使用的量化表述
 

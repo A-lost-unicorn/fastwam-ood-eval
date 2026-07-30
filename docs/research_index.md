@@ -25,7 +25,7 @@
 | 阶段二正式抽样 | outcome-blind planner、anchor、exact-ratification 与 formal gate 已实现 | 200 Clean + 532 OOD 已 exact-ratify 并全部运行 | **完成**。只认证 Phase 2 future 指标前 job ID 不变；不冒充阶段一 outcome 前 preregistration |
 | 阶段二统计协议 | episode→task 分层、task bootstrap、首 probe/outcome gate 已实现 | 10,000 次 suite-stratified task bootstrap；730/732 outcome match | **post-run analysis 完成，非 preregistered confirmatory**。DRAFT 未在正式指标前冻结；人工 endpoint 待完成 |
 | 阶段二 B：action-conditioned future consistency | 严格门禁、schema、runner、测试已实现 | CPU/mock 与门禁测试通过 | **阻塞**。官方 release 为 `action_conditioned=false`，且没有可信匹配 checkpoint |
-| 阶段三：Future-to-Action Adapter | Phase 0 审计完成；Phase 1 K=1 在线反事实真实单卡完成 | 固定 E6 A1@3e-4 step-200 与 8 条已消耗 train sample；B0 replay/null parity 精确为 0；correct-null、correct-shuffle、action-hash 均 `8/8`；62/62 工件 SHA 通过 | **Phase 1 分支 A**：`future_content_sensitivity_observed`。只证明固定 checkpoint 的 future-content action sensitivity；Phase 2 设计已解锁但未启动，success/OOD/A2/A4 仍无结果 |
+| 阶段三：Future-to-Action Adapter | Phase 0 审计完成；Phase 1 分支 A；Phase 2 已预注册/实现、未运行 | 固定 E6 A1@3e-4 step-200 的 correct-null、correct-shuffle、action-hash 均 `8/8`；Phase 2 冻结 28/4、A0/A1、3e-4、200×28、step-200 endpoint 与双卡 runner | **当前最近一步**：显式确认后运行唯一 Phase 2 配方。仍只证明固定 checkpoint 的 action sensitivity；success/OOD/A2/A4 无结果 |
 
 因此，“阶段一已经完成”的准确说法是：**阶段一工程、正式全量计算、聚合与
 完整性审计均已完成；失败机制人工 taxonomy 尚未完成，但不阻塞主成功率结论。**
@@ -147,6 +147,7 @@ outcome JSONL 前使用 `frozen_before_source_outcomes`；现有 v2 则走更窄
 | 阶段三 Gate E.9a-v1/v2 | v1 为 0-objective invalid；v2 四轨各完成 200 updates/1,600 objectives，held-out `75..106`，88.60 分钟 | v2 raw A0/A1 reduction `4.175%/12.994%`，normalized `2.983%/11.010%`；tail harm `2/0→0/0`，但 normalized paired `8.274%<10%`。RNG identity 字段未落盘使 engineering Gate invalid；无 E.9b candidate |
 | 阶段三 Phase 0 E9a-v2.1 audit | CPU-only、0 forward/backward/optimizer/checkpoint tensor load、0 CUDA、父目录 0 write；27/27 checks true | 恢复登记为 `audit_valid_scientific_failed`；normalization tail signal 合法，但 `sample_tail_mitigation_not_supported`、无独立复验 candidate、E9b locked |
 | 阶段三 Phase 1 K=1 online CF | 单卡 8 sample；B0 replay/null L2/L∞ 均 0；correct-null L2 mean/p50/p95 `0.011052/0.011001/0.015738`；correct-shuffle `0.012092/0.011685/0.017690`；两者及 action hash 均 `8/8` 过冻结门槛；paired correct-null overhead `258.95 ms` mean | **有效 SMOKE、分支 A**：future 内容会改变该 checkpoint 的动作，但 action cosine 仍约 `0.9997`、单 task/无 rollout；不能写 success/OOD。模型加载峰值 `23,679.51 MiB`，policy 峰值 `13,009.92 MiB` |
+| 阶段三 Phase 2 full 28/4 | config fingerprint `fabb96a...468`；A0/A1、LR 3e-4、200×28、calibration `139..170`、dev `171..202`、train `50001..55600`；双卡 launcher、resume、CPU finalize；58 项定向测试 | **PRE-REGISTERED / NOT RUN**：没有 Phase 2 loss/checkpoint。finalize 固定 `phase3_unlocked=false`，完整 checkpoint online sensitivity recheck 前不进入 rollout |
 
 20-step pilot 的 episode-weighted Clean→OOD 描述值为：latent L1
 `0.1512→0.2002`、cosine distance `0.1168→0.1942`、motion-direction cosine
@@ -212,6 +213,8 @@ OOD 一致性下降假设”，不能进入论文结论表。
 - 阶段三 Phase 1 K=1 在线动作反事实协议与结果：
   [thought3_phase1_k1_online_counterfactual_protocol.md](thought3_phase1_k1_online_counterfactual_protocol.md)、
   [thought3_phase1_k1_online_counterfactual_report.md](thought3_phase1_k1_online_counterfactual_report.md)
+- 阶段三 Phase 2 完整 28/4 A0/A1 单配方协议：
+  [thought3_phase2_full_28_4_protocol.md](thought3_phase2_full_28_4_protocol.md)
 - 阶段三加速路线、Phase 2/3 草案与硬停止规则：
   [thought3_accelerated_roadmap.md](thought3_accelerated_roadmap.md)
 - 阶段三数据/训练/评测：[thought3_data_protocol.md](thought3_data_protocol.md)、[thought3_training.md](thought3_training.md)、[thought3_evaluation.md](thought3_evaluation.md)

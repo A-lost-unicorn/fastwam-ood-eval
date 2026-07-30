@@ -448,6 +448,10 @@ def build_parser() -> argparse.ArgumentParser:
             "thought3-audit-e9-v2-artifacts",
             "Run CPU-only E.9a-v2.1 artifact identity audit",
         ),
+        (
+            "thought3-k1-online-counterfactual",
+            "Run real K=1 B0/correct/null/shuffle action sensitivity",
+        ),
         ("thought3-plan-cache", "Plan paired K=1/2/4 future cache shards"),
         ("thought3-build-cache", "Build this rank's future cache shards"),
         ("thought3-validate-cache", "Validate cache schema, pairing and checksums"),

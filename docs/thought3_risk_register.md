@@ -1,6 +1,6 @@
 # Thought3 风险登记与停止条件
 
-状态：Phase A–D 已通过；Gate E 未通过；E.2–E.8 已完成；E.9a-v1/v2 均 engineering-invalid
+状态：Phase 0 E9a-v2.1 审计完成；Phase 1 在线反事实实现完成、真实 GPU 待运行
 范围：Partial-Future Adapter 的数据、cache、训练、推理、统计和阶段隔离
 
 ## 1. 等级
@@ -82,7 +82,14 @@
 | R57 | `6/8` 点符号 Gate 把校正后未确认的小波动与稳定 harm 等价计数 | 高 | High | point sign、双 block、FWER paired bootstrap、material flag | v2 同时报告 6/8 point Gate 和 32-comparison FWER：raw/A0 2 harms，normalized 四轨 0；结果受 R60 invalid 边界约束 | E | Controlled / invalid-run evidence |
 | R58 | 根据 E.8 的已知 tail outcome 调权或只跑 normalized 配方，造成 outcome-conditioned weight 与新 flow 混淆 | 高 | Critical | calibration field audit、weight SHA、raw same-flow controls、protocol timestamp | 四轨 pairing/weight/schedule checks 通过；normalization 降低 tail harm 但同时降低 pooled/paired gain，未被选择为候选 | E | Controlled |
 | R59 | 复用旧 Gate evaluator 时隐含 flow 数/取值硬编码，导致新协议在 objective 前失败且子轨状态误留 `running` | 中 | High | 任意正整数 flow contract、75–106 完整 grid 回归、invocation-scoped failed-status test、v1 SHA 冻结 | v2 成功完成四轨 `75..106`，证明 generic evaluator 与 initial-probe 路径修复有效 | E | Closed |
-| R60 | checker 强制验证 RNG identity 字段，但 probe writer 未持久化这些字段，导致完整运行被标 invalid | 高 | High | writer/checker schema contract、artifact SHA、完整 grid/timestep/weight/zero-position 只读审计 | v2 四轨唯一 false check；77 个工件冻结，禁止重训/覆盖；下一步预注册 read-only audit | E | Open / blocks valid result |
+| R60 | checker 强制验证 RNG identity 字段，但 probe writer 未持久化这些字段，导致完整运行被标 invalid | 高 | High | writer/checker schema contract、artifact SHA、完整 grid/timestep/weight/zero-position 只读审计 | Phase 0 27/27 checks 通过，父 77 文件未改；登记 engineering valid + scientific failed | E | Closed |
+| R61 | surrogate Gate 无限增长，长期不触达动作或 success 变量 | 高 | Critical | 加速路线和硬停止规则；Phase 1 前禁止新 flow/checkpoint/LR/weight Gate | Phase 0 不阻塞；当前唯一实验是在线 K=1 action CF | 1–4 | Controlled |
+| R62 | 用零 future tensor 冒充 formal null，使 correct-null 混入 projector 响应 | 高 | Critical | request-scoped parameter-free bypass；不构造 tensor、不跑 Video DiT、Adapter call=0；B0 hard parity | null hook 单元测试与 fail-closed runner 已实现 | 1 | Controlled / real run pending |
+| R63 | shuffle 同时改变 target current/context/action noise，无法归因于 future 内容 | 高 | Critical | other-episode 一一 derangement；target RGB/language/proprio/cache/action seed 不变；复用 recipient future noise | mapping SHA 已冻结，source/row telemetry 落盘 | 1 | Controlled / real run pending |
+| R64 | B0 非确定性被误报为 future sensitivity | 中 | Critical | 每样本 B0×2；预先定义 `max(1e-7,10×p95 replay L2)`；`L∞>1e-5` fail closed | replay 在 intervention 前完成，失败禁止分类 | 1 | Controlled / real run pending |
+| R65 | 尝试多个 checkpoint 后挑动作差异最大者 | 中 | Critical | 唯一固定 E6 A1@3e-4 step-200 path/file/state/config SHA；披露 post-training engineering | config/preflight/checkpoint manifest hard check | 1 | Controlled |
+| R66 | 把在线 action engineering smoke 写成 OOD/success 或 K 曲线 | 高 | Critical | schema/report claim boundary；runner 不读 OOD/success、不 rollout、不自动 Phase 2 | A/B/C 只描述 action sensitivity | 1 | Controlled |
+| R67 | Phase 1 代码/dry-run 被误记成真实 action 结果 | 中 | High | 总账显式 `REAL GPU NOT RUN`；只有 output decision/run status 才产生 outcome | 当前没有 `phase1_k1_online_counterfactual_v1` 正式结果 | 1 | Open |
 
 ## 3. 最高优先级风险详解
 
@@ -298,21 +305,21 @@ harm 并存。E.9a-v1 在 objective 前因 flow 硬编码工程失效；E.9a-v2 
 - train 排序 17–28 identity-only 保留，E.9a-v2 不读取。
 
 v1 不是负结果。v2 已完成四轨：normalization 将 raw/A0 的 confirmed harm
-从 2 降到 0，但 paired gain 只有 8.274%，未达 10%。同时 R60 使根 Gate
-engineering-invalid，因此该权衡只能作为 provisional post-run evidence。
-下一步只读审计，不运行 E.9b。
+从 2 降到 0，但 paired gain 只有 8.274%，未达 10%。Phase 0 已关闭 R60：
+冻结代码路径在父目录 0 write、0 GPU/forward/backward 下恢复 256 个唯一 RNG
+identity，27/27 checks 通过。因此该权衡可登记为 engineering-valid
+post-run evidence，但科学分类仍失败。下一步是 Phase 1，不运行 E.9b。
 
-### Gate F：技术 pilot
+### Phase 1：K=1 技术反事实
 
-- [ ] 六组都执行；
-- [ ] same-job paired；
+- [ ] B0/correct/formal-null/shuffle 四条件；
+- [ ] 同 target/action seed paired；
 - [ ] replay numerical floor；
 - [ ] correct/null/shuffle action sensitivity；
 - [ ] online no-cache；
 - [ ] P50/P95/peak memory；
-- [ ] 无严重工程性 ID 崩溃；
-- [ ] 未把 pilot 写成正式结论；
-- [ ] Phase G 协议在看正式结果前冻结。
+- [ ] A/B/C 分类与 frozen 后续动作；
+- [ ] 未把 action smoke 写成 success/OOD 结论。
 
 ## 5. 全局立即停止条件
 
@@ -325,7 +332,8 @@ engineering-invalid，因此该权衡只能作为 provisional post-run evidence�
 5. train/dev/final episode 泄漏；
 6. frozen parameter 有 grad 或 hash 改变；
 7. K/seed/cache sample 错配；
-8. A-shuffle donor 与 recipient 同 episode 或同 task；
+8. A-shuffle donor 与 recipient 同 episode，或不符合本阶段冻结的 same/cross-task
+   规则；
 9. A0/A-K 参数、init 或训练预算不一致；
 10. action steps 不再固定为 20；
 11. normalization/stats hash 改变；
@@ -365,13 +373,16 @@ engineering-invalid，因此该权衡只能作为 provisional post-run evidence�
 | R52 fixed-flow objective 拟合 | 已受控：E.4 证明 diversification 有改善但不足以形成 eligible LR |
 | R53 单 objective 梯度方差 | E.5 已完成真实 full-cohort mitigation；仍需 matched-objective 证据才能分离 aggregation 与 8× exposure，但该机制分离不应先于强 A1 信号复验 |
 | R54 post-selection 候选污染 | E.6 已按披露协议运行；保持 failed/null formal selection，不把复现的 A1 信号写成 future/OOD 效果 |
-| R55 A0 样本稳定性 | v2 provisional：raw 2 harms、normalized 0，但无 paired candidate；等待只读 audit 定级 |
+| R55 A0 样本稳定性 | audit 后定级为 normalized tail-stabilization signal；paired candidate 仍失败，不再阻塞 Phase 1 |
 | R56 flow pseudo-replication | 排序 17–28 未读取；v2 无 candidate，E.9b 不解锁 |
 | R57 point-sign 与 confirmed harm 混淆 | v2 已同时报告 6/8 与 FWER；不得只挑 tail `2→0` 忽略 paired 失败 |
 | R58 outcome-conditioned weighting | same-schedule、固定 weight SHA 和 calibration provenance 均通过；结果未达候选门槛 |
 | R59 evaluator/status 复用缺陷 | 已关闭：v2 完成 `75..106` 四轨与 6,400 objectives |
-| R60 probe identity telemetry | 当前最高阻塞：冻结 v2 工件并执行新输出的只读 artifact audit |
+| R60 probe identity telemetry | 已关闭：Phase 0 audit valid，父 77 文件未改；科学 Gate 仍 failed |
+| R61 surrogate Gate 循环 | 执行一次 Phase 1 并按 A/B/C 停止规则分支，不新增 E 编号 |
+| R62–R65 在线归因有效性 | 真实 Phase 1 的 replay/null parity/shuffle/checkpoint hard checks |
+| R67 dry-run 被误作结果 | 生成并审计真实 `run_status.json`、`decision.json` 后才登记 outcome |
 | 3-rank cache 完整性 | 正式分布式 cache 的 union/intersection/cardinality 证明 |
-| Gate E 多样本优化 | 稳定配方下重新跑 28/4 fixed train/development gate |
+| 28/4 多样本优化 | 仅 Phase 1=A 后运行 matched A0/A1 Phase 2 |
 
 在这些证据出现前，文档必须使用“预计”“待验证”，不能写成已完成结果。

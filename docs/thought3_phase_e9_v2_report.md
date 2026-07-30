@@ -1,6 +1,6 @@
 # Thought3 Gate E.9a-v2 结果与工程审计
 
-状态：**COMPUTE COMPLETE / ENGINEERING INVALID / NO E.9b CANDIDATE**
+状态：**PARENT STATUS PRESERVED INVALID / V2.1 AUDIT VALID / SCIENTIFIC FAILED**
 
 运行日期：2026-07-29
 预注册 commit：`694d1d0d98b11d24ca16a0c261dc2fa89e750d6a`
@@ -32,8 +32,9 @@ independent_replication_candidate=false
 - 不 resume、覆盖或重训 E.9a-v2；
 - 下一步只允许预注册的只读 artifact audit。
 
-在只读审计通过前，以下数值只能写成 **provisional post-run engineering
-metrics**，不能写成有效 confirmatory Gate 或 mitigation 成功。
+Phase 0 只读审计已经通过，因此以下数值可写成经 provenance 恢复的
+post-run engineering metrics；仍不能写成 confirmatory Gate 或 mitigation
+成功。
 
 ## 2. 计算完整性
 
@@ -236,18 +237,20 @@ fail-closed 行为，不能事后直接改写。
 - 8.274% 接近 10%，因此可放宽门槛；
 - E.9a 证明未来 latent 有或没有因果价值。
 
-## 8. 下一步
+## 8. Phase 0 审计结果与下一步
 
-预注册 `E.9a-v2.1 read-only artifact audit`：
+`E.9a-v2.1 read-only artifact audit` 已执行：
 
-1. 冻结本报告列出的 v2 根工件和四轨核心 SHA；
-2. 不修改 v2 输出；
-3. 不训练、不 backward、不 optimizer、不生成新 checkpoint；
-4. 不增加 flow，不读取 train 排序 17–28；
-5. 从运行 commit 的确定性
-   `_loss_for_real_sample → _flow_inputs → _flow_objective_identity`
-   路径、完整 grid、stored timestep/weight 和零权重位置做只读审计；
-6. 在全新输出目录记录审计结果，并显式标为 post-run engineering audit。
+1. 27/27 hard checks true；
+2. 父目录 77 文件前后完全不变；
+3. 0 CUDA/model/checkpoint tensor/forward/backward/optimizer；
+4. 2,048 stored probe objectives 的 grid/timestep/weight/zero positions 精确；
+5. 恢复 256 个唯一 RNG objective identity；
+6. 输出 `audit_valid_scientific_failed`。
 
-即使该审计通过，冻结性能门槛仍给出
+冻结性能门槛仍给出
 `sample_tail_mitigation_not_supported`，所以 E.9b 继续锁定。
+下一步不再增加 surrogate Gate，而是运行固定 E6 checkpoint 的 K=1 online
+correct/null/shuffle action counterfactual。详见
+[审计报告](thought3_phase_e9_v2_1_readonly_audit_report.md)与
+[Phase 1 协议](thought3_phase1_k1_online_counterfactual_protocol.md)。

@@ -9,7 +9,7 @@
 | 项目 | 状态 | 可用证据 |
 | --- | --- | --- |
 | 配置、planner、adapter、分片、resume、聚合 | 已实现 | `src/`、`configs/`、`tests/` |
-| 自动化测试 | 已通过 | `pytest -q`：360 passed、5 warnings；覆盖阶段一/二回归与 Thought3 配置、cache、Adapter、resume、泄漏、任意 positive-flow grid 和真实 Gate 编排 |
+| 自动化测试 | 已通过 | `pytest -q`：386 passed、5 warnings；覆盖阶段一/二回归与 Thought3 配置、cache、Adapter、resume、泄漏、任意 positive-flow grid、E9 audit 与 K=1 online CF 编排 |
 | Conda 环境与激活入口 | 已配置 | `scripts/create_env.sh`、`scripts/activate_env.sh` |
 | checkpoint/stats | 已下载并人工校验 | checkpoint SHA-256 `1000437c...a49579`；stats SHA-256 `30f81ad7...68638` |
 | FastWAM 公共运行时模型 | 已下载并逐文件校验 | `scripts/download_fastwam_runtime_models.sh`；T5、VAE、tokenizer 共约 11.9 GiB |
@@ -477,9 +477,34 @@
   `2→0`，但 normalized paired gain 只有 8.274%，未达 10%。
 - 二次工程卡点：probe writer 没有保存 checker 强制要求的三个 RNG identity
   字段，使四轨唯一共同 execution check false。根 Gate 正确 fail closed，
-  77 个工件和 SHA 已冻结；下一步只读 audit，不重训、不覆盖。
-- 结论边界：只能写 provisional tail/mean trade-off 和 provenance 缺陷定位；
+  77 个工件和 SHA 冻结后，由全新 CPU-only audit 恢复 256 个唯一 identity；
+  27/27 hard checks 通过、父目录 0 write。
+- 审计结论：E9a-v2 可登记为 engineering valid，但 normalized paired gain
+  仍为 8.274%<10%，所以科学 Gate failed、E9b locked。
+- 结论边界：只能写 tail/mean trade-off、只读 provenance 恢复与科学负 Gate；
   不能写 mitigation 成功、E.9b candidate、future 因果增益或 OOD 效果。
+
+### 3.32 把研究主线从 surrogate Gate 拉回在线动作变量
+
+- 唯一 checkpoint：冻结 E6 A1@3e-4 step-200 的 file/state/config SHA，禁止
+  试多个 checkpoint 后挑最大动作差。
+- 严格 current-only：HF Dataset 先 `select_columns`，只保留 identity、
+  timestamp 和当前 proprio；双相机只解码当前帧，不访问 action target、future
+  RGB、training cache、reserve/dev/OOD/success。
+- 可归因 null：实现 request-scoped parameter-free bypass；不构造零 tensor、
+  不运行 Video DiT、Adapter forward 为 0，并要求与官方 B0 `L∞<=1e-5`。
+- 内容反事实：correct 与 shuffle 使用同一 recipient future-noise seed；
+  shuffle 只把 other-episode online K=1 latent 注入 target 的 current
+  cache/Action DiT，target action noise 和 context 不变。
+- 先验 replay floor：每条 B0 重复两次，intervention 前冻结
+  `max(1e-7,10×p95 replay L2)`；B0 非确定性时 fail closed，不输出 A/B/C。
+- 工件闭环：action/future safetensors、semantic/file SHA、逐 sample JSONL、
+  synchronized latency/memory、protocol lock、atomic prefix resume 和自动
+  A/B/C 决策报告均由独立真实 runner 生成。
+- 研究停止规则：A 才进 28/4 A0/A1；B 最多一次单变量结构修复；C 停止
+  Adapter-only。首次结果前不再新增 flow/LR/checkpoint/sample-weight Gate。
+- 当前证据等级：实现、73 个相关 targeted tests 与 no-Torch dry-run 已通过；
+  真实 GPU 尚未运行，不能写成动作效果或 OOD 成功率。
 
 ## 4. 简历表达素材
 
@@ -489,7 +514,12 @@
 - 设计确定性 job manifest、哈希分片、逐 episode JSONL 落盘与断点续跑机制，保证大规模机器人 rollout 可复现、可审计、可恢复。
 - 设计并执行 raw/normalized × A0/A1 的 matched Adapter 诊断，完成 6,400
   training 与 2,048 held-out objectives；通过 fail-closed 审计定位 probe
-  writer/checker RNG provenance contract 缺陷，并冻结无覆盖的只读恢复边界。
+  writer/checker RNG provenance contract 缺陷，并以 CPU-only 只读审计恢复
+  256 个唯一 RNG identity、验证父 77 文件 0 改写，同时保留科学负结果。
+- 为 K=1 online future-to-action 技术反事实实现官方 B0 replay、无 tensor
+  formal null 与 other-episode shuffle，冻结 checkpoint/cohort/noise，
+  原子保存 action/future tensor 与分段 CUDA telemetry；当前为测试/dry-run
+  完成状态，不宣称真实 action/OOD 效果。
 - 将 Clean 多 seed 与 LIBERO-Plus 预生成 task-instance 协议显式分离，通过配置门禁阻止每变体重复采样造成的数量级计算浪费。
 - 建立相同 checkpoint/配对 seed 的鲁棒性评测与统计链路，覆盖成功率下降、bootstrap CI、失败分类和跨策略配方一致性约束。
 - 在 3 张 GPU 上完成 7,571 个真实 rollout 和 2,399,314 个 action step，

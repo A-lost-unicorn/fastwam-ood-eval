@@ -1,26 +1,32 @@
 # Thought3 当前限制与未决问题
 
-状态：Phase B 完成后的诚实边界
-更新时间：2026-07-27
+状态：Phase 0 完成、Phase 1 实现完成后的诚实边界
+更新时间：2026-07-30
 
-## 1. 尚无真实阶段三结果
+## 1. 已有工程证据与仍缺的下游结果
 
-当前没有：
+当前已有：
 
-- 真实 Fast-WAM future latent；
-- 真实 action loss backward；
-- 真实 Adapter checkpoint；
+- 真实 Fast-WAM K=1/2/4 latent 与 32×3 cache；
+- 真实 Adapter action-loss backward、Adapter-only checkpoint 和冻结 SHA；
+- E5/E6 两个 cohort 的 A1 离线 action-loss 信号；
+- E9a-v2.1 engineering-valid/scientific-failed 审计；
+- K=1 online B0/correct/null/shuffle runner、tests 与 dry-run。
+
+当前仍没有：
+
+- 真实 Phase 1 correct/null/shuffle action outcome；
 - ID/OOD success rate；
-- GPU latency/显存；
+- Phase 1 在线 GPU latency/显存；
 - A-shuffle 机器人 rollout。
 
-Phase B 的 mock loss、mock success 和 CPU latency 都是 `TEST`，不支持 future
-改善 OOD 的科学结论。
+Phase C–E 的真实离线工程结果也不支持 future 改善 OOD。Phase 1 的代码和
+dry-run 仍是 `TEST/PLAN`；只有真实 `decision.json` 才能登记动作敏感性。
 
-## 2. Native latent contract 仍需运行时确认
+## 2. Native latent contract 已在小规模真实运行确认
 
-`[B,48,2,14,28]` bf16 是由冻结配置和上游代码静态推导的 contract。Phase C
-必须在官方 checkpoint 和一条真实 train sample 上确认：
+`[B,48,2,14,28]` bf16 已由 Phase C/D 在官方 checkpoint 与标准 LIBERO
+training sample 上确认，包括：
 
 - VAE/current shape；
 - full diffusion state `[B,48,3,14,28]`；
@@ -28,6 +34,9 @@ Phase B 的 mock loss、mock success 和 CPU latency 都是 `TEST`，不支持 f
 - dtype/device；
 - 无 VAE decode/re-encode；
 - current slice 每 update 不漂移。
+
+该证据仍只覆盖小规模 offline cache；Phase 1 将首次计量同一 native latent
+进入 20-step Action DiT 后的真实动作响应。
 
 ## 3. Video-only sampler parity 未关闭
 

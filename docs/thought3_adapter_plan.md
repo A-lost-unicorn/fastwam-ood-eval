@@ -2,7 +2,9 @@
 
 状态：历史路线摘要；Phase B 的权威定义已迁移到
 `thought3_design.md`、`thought3_data_protocol.md` 和
-`thought3_phase_b_report.md`。若本文件与它们冲突，以新版文档为准；尚无真实训练或结果。
+`thought3_phase_b_report.md`。若本文件与它们冲突，以新版文档为准。真实
+Phase C/D 与 E1–E9 已运行；当前主线见
+`thought3_accelerated_roadmap.md`，Phase 1 真实 GPU action outcome 尚未产生。
 
 ## 1. 要回答的因果问题
 

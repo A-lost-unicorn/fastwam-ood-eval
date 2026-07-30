@@ -1,0 +1,125 @@
+schema_version: thought3.k1_online_counterfactual.config.v1
+
+experiment:
+  name: thought3_phase1_k1_online_action_counterfactual
+  output_dir: outputs/thought3/phase1_k1_online_counterfactual_v1
+  seed: 3407
+
+runtime:
+  backend: fastwam
+  device: cuda:0
+  action_horizon: 32
+  action_denoise_steps: 20
+  future_k: 1
+  future_shift: 5.0
+  future_num_train_timesteps: 1000
+  rand_device: cpu
+  max_gpu_memory_gb: 23.8
+  warmup_b0_calls: 1
+  warmup_future_action_calls: 1
+
+source:
+  thought3_config_path: configs/thought3/phase_e6_fresh_cohort_replication.yaml
+  thought3_config_sha256: 84992a4fa96fef643ff6273f1ed1ba27a69154b0bb52517317f517a3bda3849a
+  thought3_config_fingerprint: 8cb2ab718eed2cc226491038423c92f1c59128246d966a2a9c3700d505f292d9
+  e6_gate_path: outputs/thought3/phase_e6_fresh_cohort_replication_v1/gate_e6_result.json
+  e6_gate_sha256: 464d9d3e02c52c2b1f2838ce59fe71a9b35716884d4d1da4b3d0e2ad78b42af6
+  e6_checkpoint_dir: outputs/thought3/phase_e6_fresh_cohort_replication_v1/tracks/a1/checkpoints/step_00000200
+  e6_adapter_sha256: aa55622c03aafea05c1bfedcb8548df398b0912dcecba397741c190c6b01b78f
+  e6_checkpoint_manifest_sha256: 82cfa32891dc7bfc252835e45b34ad6d3da026329ef8870733a9c8f9f69448f3
+  e6_adapter_state_sha256: 19f62cf45ba36c72da8dbfd752165cc5ef5678d4212b5ab7bf07635fdc7825d9
+  e6_checkpoint_config_fingerprint: 5cd78d3d059c88cfa0677a18273cdeb3370e49f212c224f1311eb8e9fe5a141c
+  e6_adapter_fingerprint: 7c636482574a42165eb752b18a637b81668282d21c48f6533e47f0b1884ab2fd
+  backbone_checkpoint_sha256: 1000437cfcf55c000094f79a2600634c502bcb5b492476b94bf8509883a49579
+  dataset_stats_sha256: 30f81ad7d5076e97323e3328bce003e01a04cb21327b5bacd21bb72846768638
+  split_fingerprint: ea5402955023ccd48d790d821a73f98549b31d1ace8af035a90ceae2ad3951eb
+  fastwam_commit: 45d8e1458921d83f8ad6cf9ce993d371208dabd0
+  frozen_parameter_sha256: ac0dd59de78495dc8ed5c5601e24951b78f3fd6ad40843d76b83106eccceb4f8
+  checkpoint_selection_disclosure: E6 A1@3e-4 step-200 is provenance-valid and fixed before online action inspection; engineering smoke only
+
+seeds:
+  action_namespace: thought3-k1-online-action-noise-v1
+  future_namespace: thought3-k1-online-video-noise-v1
+  shuffle_namespace: thought3-k1-online-shuffle-order-v1
+
+cohort:
+  selection: E6 consumed train order positions 9-16 (1-based)
+  sample_count: 8
+  shared_identity:
+    camera_keys: [image, wrist_image]
+    checkpoint_sha256: 1000437cfcf55c000094f79a2600634c502bcb5b492476b94bf8509883a49579
+    dataset_revision: 117413dc0ca99c7cd64036c4eaa4a316c537d692
+    frame_index: 0
+    language: open the middle drawer of the cabinet
+    preprocessing_sha256: 65f17cfb7e66e67d0cdbafc8b5508f3a668dfff9397db3a1823bf3265773aa3f
+    sampler_config_sha256: ba13d6c15c7f723802f8e05107ab374982977dbfc2aa37e4520892a842182b66
+    split_manifest_sha256: ea5402955023ccd48d790d821a73f98549b31d1ace8af035a90ceae2ad3951eb
+    stats_sha256: 30f81ad7d5076e97323e3328bce003e01a04cb21327b5bacd21bb72846768638
+    suite: libero_goal
+    task_id: task_0
+    task_name: open the middle drawer of the cabinet
+    timestamp_ns: 0
+  samples:
+    - base_sample_id: 9610d2aed3a6ddf382c514715ead977c9f9a25b56265b2705a9146ac28f6c0cc
+      demonstration_id: episode_000014
+      episode_index: 14
+      split: train
+    - base_sample_id: 75359438f810e6921754de327beda8bd974343f5e89fb54d7ac8852f79c89c9b
+      demonstration_id: episode_000010
+      episode_index: 10
+      split: train
+    - base_sample_id: 5f82a5db9be7a61f969fd32f5bca19dbb19a65106fb49d5357705be2d03def44
+      demonstration_id: episode_000011
+      episode_index: 11
+      split: train
+    - base_sample_id: 8f34793be5e051e0d62c0397b83cc341f17b626bd73660968f48ff1f6339d1b9
+      demonstration_id: episode_000030
+      episode_index: 30
+      split: train
+    - base_sample_id: 8c00174e915504c49a3c69057f9c199af1654a6ecef414070c1657316b1e4418
+      demonstration_id: episode_000019
+      episode_index: 19
+      split: train
+    - base_sample_id: 461a673f2745ab243d99d617f4514a737644d44ba2fc5fdece8b45f347e51564
+      demonstration_id: episode_000038
+      episode_index: 38
+      split: train
+    - base_sample_id: 739baab482230ba4ee1ae9c0cccf5886268db9ee37c895435af6c6891d22c3b0
+      demonstration_id: episode_000000
+      episode_index: 0
+      split: train
+    - base_sample_id: 81363feff988d3f3faaeeb66191e7ff9c4fd40c85d7b3b7cd0bda84cd41e3b9b
+      demonstration_id: episode_000012
+      episode_index: 12
+      split: train
+
+shuffle:
+  seed: 3407
+  expected_mapping_sha256: 55782357b348ef62620efe73939a0e9f3638d56e080f8ceba8a73257aea7f874
+  require_other_episode: true
+  require_one_to_one: true
+  require_same_task: true
+  reuse_recipient_future_noise_seed: true
+
+replay_floor:
+  repeats: 2
+  hard_max_linf: 0.00001
+  l2_multiplier: 10.0
+  absolute_l2_floor: 0.0000001
+  stable_sample_min_count: 6
+  action_hash_change_min_count: 6
+
+"null":
+  kind: formal_parameter_free_injection_null_mask_v1
+  tensor_substitute: false
+  run_video_dit: false
+
+scope:
+  read_action_target: false
+  read_training_future_cache: false
+  read_future_rgb: false
+  read_development: false
+  read_ood: false
+  read_rollout_success: false
+  decode_future_video: false
+  start_rollout: false

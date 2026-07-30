@@ -1,6 +1,6 @@
 # Thought3 训练与恢复手册
 
-状态：Phase D 已通过；Gate E.1–E.8 已完成；E.9a-v1/v2 engineering-invalid；完整 Gate E 尚未通过
+状态：Phase 0 E9a-v2.1 审计完成；Phase 1 在线反事实待真实 GPU；full 28/4 仅在分支 A 后解锁
 更新时间：2026-07-30
 
 ## 1. 当前能做什么
@@ -529,7 +529,8 @@ E.9a-v2 只把 evaluator 改为接受协议显式冻结的任意正整数 flow �
 initial-probe 失败状态落盘；使用全新 config/schema/runner/output。v2 四轨
 真实训练已经完成，共 800 updates、6,400 train 和 2,048 held-out
 objectives；但 probe writer 未保存 checker 要求的三个 RNG identity 字段，
-导致四轨唯一共同 execution check false，根 Gate 为 engineering-invalid。
+导致原根 Gate engineering-invalid。后续 Phase 0 只读审计已恢复其工程
+provenance，但没有改变科学门槛。
 
 设计冻结为：
 
@@ -551,12 +552,33 @@ train 排序 17–28 的 12 条 demonstration 仅冻结身份、cohort SHA 和
 flows `107..138`；E.9a-v2 没有解码、训练或 probe 它们。provisional
 normalized A1-vs-A0 为 `8.274%`，低于 `10%`，因此
 `independent_replication_candidate=false`，E.9b 不解锁。完整 28/4 Gate E、
-A2/A4 和 OOD rollout 继续锁定。
+A2/A4 和 OOD rollout 不由该 Gate 解锁。
 
 v1 故障证据、完整权重表、RNG SHA、预算、分类、工件 SHA 与 v2 结果见
 [thought3_phase_e9_v1_failure_report.md](thought3_phase_e9_v1_failure_report.md)
 、[thought3_phase_e9_v2_protocol.md](thought3_phase_e9_v2_protocol.md)
 和 [thought3_phase_e9_v2_report.md](thought3_phase_e9_v2_report.md)。
 
-禁止对 v2 使用 `--resume` 或覆盖输出。下一步只能先预注册全新输出目录的
-read-only artifact audit；不重训、不增加 flow、不读取 reserve cohort。
+禁止对 v2 使用 `--resume` 或覆盖输出。Phase 0 audit 已在全新目录完成：
+27/27 checks 通过、0 forward/backward/optimizer/GPU/parent write，最终登记为
+`engineering valid + scientific failed`。E9b 与 reserve cohort 继续锁定；
+该结果不阻塞 Phase 1 使用 E6 checkpoint。
+
+### 11.11 加速后的训练授权
+
+当前不得继续新增 surrogate training Gate。先运行 K=1 在线动作反事实：
+
+- 分支 A：才允许冻结一次 28 train / 4 development 的 matched A0/A1 配方；
+- 分支 B：最多一次单变量注入结构修复，不进入 full training；
+- 分支 C：停止 Adapter-only full training；
+- 任一分支在 directional OOD pilot 正向前都不得训练 A2/A4。
+
+由于 E9a-v2.1 audit valid，若分支 A 解锁 Phase 2，草案使用 normalized
+sample-loss recipe；必须披露这是 post-E8 engineering development，不能称
+E9 Gate 通过。Phase 2 只允许一个 LR、一个 seed、同一 sample/flow schedule
+的 A0/A1，不做 LR/sample-weight sweep，也不读取 OOD。
+
+完整路径与停止规则见
+[thought3_accelerated_roadmap.md](thought3_accelerated_roadmap.md)；在线技术
+协议见
+[thought3_phase1_k1_online_counterfactual_protocol.md](thought3_phase1_k1_online_counterfactual_protocol.md)。

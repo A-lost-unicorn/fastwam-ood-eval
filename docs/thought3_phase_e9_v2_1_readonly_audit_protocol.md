@@ -1,6 +1,10 @@
 # E.9a-v2.1 只读 Artifact Audit 预注册
 
-状态：`FROZEN BEFORE AUDIT EXECUTION`
+状态：`FROZEN BEFORE EXECUTION / EXECUTED 2026-07-30`
+
+实际结果为 `audit_valid_scientific_failed`；本文件保留运行前协议，结果与工件
+SHA 见
+[thought3_phase_e9_v2_1_readonly_audit_report.md](thought3_phase_e9_v2_1_readonly_audit_report.md)。
 
 ## 1. 问题与允许结论
 

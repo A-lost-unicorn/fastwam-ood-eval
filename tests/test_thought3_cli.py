@@ -27,6 +27,7 @@ THOUGHT3_COMMANDS = (
     "thought3-replicate-a0-flow-variance",
     "thought3-diagnose-sample-tail-mitigation",
     "thought3-audit-e9-v2-artifacts",
+    "thought3-k1-online-counterfactual",
     "thought3-plan-cache",
     "thought3-build-cache",
     "thought3-validate-cache",
@@ -38,6 +39,9 @@ THOUGHT3_COMMANDS = (
 )
 E9_V21_AUDIT_CONFIG = Path(
     "configs/thought3/audits/phase_e9_v2_1_readonly_audit.yaml"
+)
+K1_ONLINE_CONFIG = Path(
+    "configs/thought3/online/phase1_k1_action_counterfactual.yaml"
 )
 
 
@@ -58,9 +62,13 @@ def test_dry_run_never_loads_checkpoint_or_writes(
     monkeypatch,
     capsys,
 ):
+    special_configs = {
+        "thought3-audit-e9-v2-artifacts": E9_V21_AUDIT_CONFIG,
+        "thought3-k1-online-counterfactual": K1_ONLINE_CONFIG,
+    }
     config = (
-        E9_V21_AUDIT_CONFIG
-        if command == "thought3-audit-e9-v2-artifacts"
+        special_configs[command]
+        if command in special_configs
         else write_thought3_config(tmp_path)
     )
 

@@ -1,6 +1,6 @@
 # 实验、卡点与结论台账
 
-更新日期：2026-07-29
+更新日期：2026-07-30
 
 本台账只记录可追溯事实。机器工件是权威来源，本文是便于论文、周报、简历和面试使用的索引。
 
@@ -50,6 +50,8 @@
 | `P3-PHASE-E9A-v1-INVALID` | 2026-07-29 | 3 / INVALID ENGINEERING RUN | v1 输出；raw/A0 initial probe；协议 flow `75..106` | evaluator 错误硬编码 `1..5`；0 training objective、0 optimizer update、0 checkpoint、`result=null`；frozen Fast-WAM SHA 前后相同 | 不是负科学结果；五个工件 SHA 冻结，v1 禁止 resume/覆盖 |
 | `P3-PHASE-E9A-PREREG-v2` | 2026-07-29 | 3 / PRE-REGISTERED SEQUENTIAL ENGINEERING | 同一 raw/normalized × A0/A1 科学设计；generic positive-integer flow evaluator；新 config/schema/runner/output | `75..106` 完整 8×32 grid/outcome 回归与 initial-probe failed-status 故障注入通过；**真实 GPU 尚未运行** | v1 失败前置校验；排序 17–28 仍 identity-only reserve；full E、A2/A4/OOD 继续锁定 |
 | `P3-PHASE-E9A-v2-INVALID` | 2026-07-29 | 3 / COMPUTE-COMPLETE INVALID ENGINEERING RUN | prereg commit `694d1d0`；raw/normalized × A0/A1；800 updates；train 6,400 + held-out 2,048 objectives；88.60 分钟 | raw A0/A1 reduction `4.175%/12.994%`，normalized `2.983%/11.010%`；A0 confirmed harm `2→0`，但 normalized paired `8.274%<10%`；四轨未保存 RNG identity 字段，唯一 execution check false | 根 result SHA `022e8086...e25e24`；provisional 分类 `sample_tail_mitigation_not_supported`，无 E.9b candidate。v2 禁止 resume/覆盖；下一步仅只读 artifact audit |
+| `P3-PHASE0-E9A-V21-AUDIT-v1` | 2026-07-30 | 3 / COMPLETED READ-ONLY AUDIT | prereg commit `b08f3f4`；CPU-only；父 E9a-v2 77 文件；新 audit output | 27/27 checks true；每轨 512 stored probe rows、0 timestep/weight mismatch；CPU/GPU weight max diff `4.768e-7`；0 CUDA/forward/backward/optimizer/checkpoint load/parent write | `audit_valid_scientific_failed`：恢复 engineering provenance，tail-stabilization signal 合法；paired `8.274%<10%` 不变，`sample_tail_mitigation_not_supported`、E9b locked |
+| `P3-PHASE1-K1-ONLINE-CF-PREREG-v1` | 2026-07-30 | 3 / IMPLEMENTED PRE-REGISTERED ENGINEERING SMOKE | E6 A1@3e-4 step-200；8 条 E6 train cohort；B0/correct/formal-null/shuffle；K=1、20 action steps | config/schema/CLI/runner/checksum-resume/metrics/latency/A-B-C rule 已实现；73 related tests + no-Torch dry-run 通过；**真实 GPU 尚未运行** | 只允许产生 action-sensitivity A/B/C；不读 success/OOD、不 rollout、不自动 Phase 2；禁止多 checkpoint 选择 |
 
 ### `P1-FORMAL-v1` 机器证据
 
@@ -401,6 +403,8 @@
 | 2026-07-29 / Gate E.9a-v1 真实启动 | raw/A0 initial probe 前命令以 track execution failed 返回，子轨状态残留 `running` | 共用 evaluator 仍硬编码 Gate E.3 的 `flow_steps=1..5`，拒绝协议 `75..106`；原状态异常处理从 training loop 才开始 | 冻结 v1 五个工件 SHA 和零训练边界；generic evaluator 接受协议显式正整数集；状态 wrapper 用 invocation ID 将 initial-probe/setup 异常原子落为 `failed`；v2 使用新输出 | 否；0 training objective、0 optimizer update、0 checkpoint、无 result，Fast-WAM SHA 未变 |
 | 2026-07-29 / Gate E.9a-v2 预注册 | 修复 evaluator 可能引入科学设计漂移或覆盖 v1 的风险 | cohort、权重、LR、step-200、train/held-out identity、门槛和 E.9b reserve 全部不变；只改变 evaluator 通用性、失败状态与 Run identity | 新 config fingerprint `afcd6a7...097a`、新 runner/output；完整 `75..106` 256-objective outcome 回归和 initial-probe 故障注入已编码 | 否；PRE-REGISTERED/NOT RUN，仍无 loss、tail、candidate 或 OOD 结果 |
 | 2026-07-29 / Gate E.9a-v2 结果 | 四轨都 complete，但根命令报 engineering checks failed | probe writer 未保存 `action_noise_seed`、`action_timestep_seed`、`flow_objective_sha256`，checker 却逐 row 强制比较，导致四轨共同 identity check 必然 false；实际 8×32 grid、initial/final timestep/weight 和零权重位置均精确 | 冻结 77 个输出文件与根 SHA；不重训、不覆盖；预注册只读 artifact audit。性能门槛独立显示 normalized A1-vs-A0 `8.274%<10%`，无 E.9b candidate | 否；计算完整但工程 invalid。tail harm `2→0` 只能作为 provisional trade-off，不可写成 mitigation 成功或 OOD/future 因果效果 |
+| 2026-07-30 / Phase 0 E9a-v2.1 audit | 父 probe 缺三个 RNG identity 字段，需判断能否在不改父工件下恢复 | 从冻结 commit 代码重建 256 个唯一 identity；四轨 2,048 stored objectives 的 timestep/weight/zero positions 精确，27/27 hard checks true，父树前后 SHA 不变 | 登记为 `engineering valid + scientific failed`；R60 telemetry 风险关闭，但 paired 8.274% 不变，E9b locked；audit 不阻塞 Phase 1 | 否；只读 provenance 与科学负 Gate，无模型 forward、动作或 OOD/success |
+| 2026-07-30 / Phase 1 K=1 online CF 预注册实现 | surrogate 结果尚未证明 future 的具体内容进入 action | 唯一固定 E6 A1 step-200；B0×2 replay 先定义 floor；formal null 无 tensor/Video DiT/Adapter call；shuffle 只换 other-episode online latent；target action seed/context 不变 | config/schema/CLI/single-GPU runner/atomic resume/tensor hashes/latency/A-B-C 决策和 dry-run 完成；下一步只运行一次真实 GPU smoke | 否；当前只有 TEST/PLAN，没有 action outcome；分支 A 才允许 Phase 2，B 最多一次结构修复，C 停止路线 |
 
 冷启动观测：2-step smoke 中 Wan 组件装载约 `336–433 s`；20-step OOD
 三进程观测到约 `604.37 s`，Clean 单进程为 `521.74 s`。这不是单次 future
@@ -477,6 +481,13 @@ Provenance 补充核对：Fast-WAM 和 LIBERO checkout clean；LIBERO-Plus
     `episode_000000` 的 +1.603% non-target harm 经 16-comparison FWER
     bootstrap 确认。因此预注册分类为 `mixed_or_inconclusive`，而非纯抽样
     方差或普遍 target tail risk。
+26. Phase 0 E9a-v2.1 在不初始化 CUDA、不加载 tensor checkpoint、不执行
+    forward/backward/optimizer、且不写父目录的前提下通过 27/27 audit checks。
+    因此 E9a-v2 可登记为 engineering valid；normalized paired
+    `8.274%<10%` 仍使科学 Gate 失败，E9b locked。
+27. Phase 1 已将原始 Fast-WAM B0 replay、online K=1 correct、无 tensor
+    formal null 与 other-episode shuffle 接入同一真实 runner，并冻结 checkpoint、
+    cohort、seed、指标和 A/B/C 决策；目前只属于 TEST/PLAN，尚无真实动作结果。
 
 ### 尚未支持
 
@@ -491,9 +502,10 @@ Provenance 补充核对：Fast-WAM 和 LIBERO checkout clean；LIBERO-Plus
    formal future 指标生成前没有冻结。
 6. 20-step shadow RGB 生成成本是否等于阶段三 cached latent 或在线 Adapter
    成本；阶段三必须单独计时。
-7. E.9a-v2 的 telemetry-invalid 工件能否通过预注册只读 audit 完成工程
-   provenance 认证。无论 audit 结果如何，normalized paired `8.274%<10%`，
-   当前无 E.9b candidate；中间 checkpoint、A2/A4 和阶段三成功率继续锁定。
+7. K=1 online correct 是否相对 formal null 和 other-episode shuffle 产生超过
+   B0 replay floor 的动作变化。E9a-v2.1 audit 已完成 provenance 认证，但
+   normalized paired `8.274%<10%`、无 E.9b candidate；Phase 1 结果前
+   full 28/4、A2/A4 和 OOD rollout 继续锁定。
 
 ## 4. 待填论文主表
 

@@ -405,6 +405,31 @@ def dispatch(args: Any) -> int:
         _emit(result)
         return 0
 
+    if args.command == "thought3-k1-online-counterfactual":
+        from fastwam_ood_eval.thought3.online_counterfactual import (
+            load_k1_online_counterfactual_config,
+        )
+        from fastwam_ood_eval.thought3.phase1_k1_online_counterfactual import (
+            online_counterfactual_dry_run_payload,
+            run_k1_online_counterfactual,
+        )
+
+        if args.set or args.device or args.rank != 0 or args.world_size != 1:
+            raise ValueError(
+                "K=1 online counterfactual forbids config overrides, "
+                "device overrides, and ranks"
+            )
+        online_cfg = load_k1_online_counterfactual_config(args.config)
+        if args.dry_run:
+            _emit(online_counterfactual_dry_run_payload(online_cfg))
+            return 0
+        result = run_k1_online_counterfactual(
+            online_cfg,
+            resume=args.resume,
+        )
+        _emit(result)
+        return 0
+
     cfg = _load(args)
     if args.dry_run:
         _emit(_dry_run_payload(cfg, args.command))

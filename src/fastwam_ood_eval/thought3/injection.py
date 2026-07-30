@@ -18,9 +18,10 @@ class FutureInjectionError(RuntimeError):
 
 @dataclass
 class _ActiveFuture:
-    latent: Tensor
+    latent: Tensor | None
     mask: Tensor | None
     expected_calls: int
+    null_mask: bool = False
     calls: int = 0
 
 
@@ -60,6 +61,19 @@ class ActionEncoderFutureInjector:
             raise FutureInjectionError(
                 "action_encoder was called more often than the scoped contract"
             )
+        if active.null_mask:
+            if active.latent is not None or active.mask is not None:
+                raise FutureInjectionError(
+                    "formal null-mask context unexpectedly contains a tensor"
+                )
+            # Parameter-free null conditioning is an explicit request-scoped
+            # identity at the injection boundary.  It does not construct a
+            # zero latent and therefore gives a direct B0 parity control.
+            return output
+        if active.latent is None:
+            raise FutureInjectionError(
+                "non-null future context is missing its latent"
+            )
         return self.adapter(output, active.latent, active.mask)
 
     @contextmanager
@@ -70,17 +84,39 @@ class ActionEncoderFutureInjector:
         *,
         expected_calls: int = 1,
     ) -> Iterator[None]:
-        if self._closed:
-            raise FutureInjectionError("injector is closed")
-        if expected_calls <= 0:
-            raise FutureInjectionError("expected_calls must be positive")
-        if self._active.get() is not None:
-            raise FutureInjectionError("nested future contexts are forbidden")
         active = _ActiveFuture(
             latent=future_latent,
             mask=future_mask,
             expected_calls=expected_calls,
         )
+        with self._activate(active):
+            yield
+
+    @contextmanager
+    def activate_null(
+        self,
+        *,
+        expected_calls: int = 1,
+    ) -> Iterator[None]:
+        """Activate a formal parameter-free null mask without a zero tensor."""
+
+        active = _ActiveFuture(
+            latent=None,
+            mask=None,
+            expected_calls=expected_calls,
+            null_mask=True,
+        )
+        with self._activate(active):
+            yield
+
+    @contextmanager
+    def _activate(self, active: _ActiveFuture) -> Iterator[None]:
+        if self._closed:
+            raise FutureInjectionError("injector is closed")
+        if active.expected_calls <= 0:
+            raise FutureInjectionError("expected_calls must be positive")
+        if self._active.get() is not None:
+            raise FutureInjectionError("nested future contexts are forbidden")
         token: Token[_ActiveFuture | None] = self._active.set(active)
         failed = False
         try:

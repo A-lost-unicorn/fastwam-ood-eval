@@ -40,7 +40,8 @@ fi
 
 export CUDA_VISIBLE_DEVICES="${physical_gpu_id}"
 export MUJOCO_GL=egl
-export MUJOCO_EGL_DEVICE_ID=0
+# robosuite uses the physical ID from CUDA_VISIBLE_DEVICES; torch sees cuda:0.
+export MUJOCO_EGL_DEVICE_ID="${physical_gpu_id}"
 export TOKENIZERS_PARALLELISM=false
 export CUBLAS_WORKSPACE_CONFIG=":4096:8"
 export HF_DATASETS_CACHE="${THOUGHT4_HF_DATASETS_CACHE:-/tmp/thought4_hf_cache}"

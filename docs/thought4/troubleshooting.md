@@ -1,5 +1,19 @@
 # Thought4 卡点与排错
 
+## robosuite 报 MUJOCO_EGL_DEVICE_ID 不在 CUDA_VISIBLE_DEVICES
+
+单卡 runner 中两个变量都使用物理 GPU ID。例如物理卡 1：
+
+```text
+CUDA_VISIBLE_DEVICES=1
+MUJOCO_EGL_DEVICE_ID=1
+```
+
+Fast-WAM 配置仍写 `cuda:0`，因为 PyTorch 会把唯一可见卡重映射为逻辑卡 0。
+不要把 EGL ID 写成逻辑 0。Python preflight 会在模型/模拟器 import 前拒绝错误
+映射。若旧 attempt 已经写出 `run_status.json`，保留旧目录，使用新 Run ID；不要
+在代码 commit 已变化时 `--resume`，否则 pre-validation identity 必然不同。
+
 ## Hook 注册成功但 call count 为 0
 
 原因通常是 hook 到 `blocks[i]`。MoT 不调用 block `forward()`。检查路径必须是

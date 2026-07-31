@@ -1,19 +1,21 @@
 # Thought4 实验记录与论文表格
 
-真实结果尚未运行。本文件是填写模板；数字必须从
+有效真实结果尚未运行。本文件是填写模板；数字必须从
 `outputs/thought4/.../artifact_manifest.json` 对应工件生成，不手抄猜测。
 
 ## 运行身份
 
 | 字段 | 值 |
 | --- | --- |
-| project commit | 待运行 |
+| project commit | v1 attempt `c629475bb601...`；v2 待提交/运行 |
 | Fast-WAM commit | `45d8e145...` |
 | checkpoint SHA | `1000437c...` |
-| smoke config fingerprint | `caef470ae35e0d1dafdc8f07ba4b8a088d6df26acebce787f900bdf7dda9caba` |
+| smoke v1 config fingerprint | `caef470ae35e0d1dafdc8f07ba4b8a088d6df26acebce787f900bdf7dda9caba` |
+| smoke v2 config fingerprint | `9c412c1ce2cde90c9559ae298522bcc3f7dfc21d34c1376cfc565a4a9536146f` |
+| smoke v2 planned cohort SHA | `8055511bdab15020224cd0dbfd6f1680fe45f4c8700cdf7ca29b416c29b5733f` |
 | formal config fingerprint | `62951df5bb364daf5687ac505bad207da19f9626e8038de1471ef4befcfaae44` |
 | formal planned cohort SHA | `340db6c1a15111a390b601beb0a29afdbfaec2deac22060f7ee709a83f054708` |
-| physical GPU | 待运行 |
+| physical GPU | v1 attempt：1；v2 待运行 |
 | start / finish | 待运行 |
 | backbone SHA before / after | 待运行 / 待运行 |
 | future RGB read | false |
@@ -23,13 +25,34 @@
 
 | 检查 | 结果 |
 | --- | --- |
-| Thought4 CPU/mock | 34 passed |
-| Thought1–4 全项目回归 | 431 passed，5 个 NVML 环境 warning |
+| Thought4 CPU/mock | 35 passed |
+| Thought1–4 全项目回归 | 432 passed，5 个 NVML 环境 warning |
 | 文档校验 | 84 个 Markdown，本地链接全部有效，`docs/` 根目录整洁 |
 | smoke dry-run | PASS；Torch/model/simulator/write 均为 false |
 | formal dry-run | PASS；Torch/model/simulator/write 均为 false |
-| 真实 GPU smoke | **NOT RUN** |
+| 真实 GPU smoke | v1 **ENGINEERING FAILED（pre-model）**；有效 v2 **NOT RUN** |
 | 正式 diagnosis | **NOT RUN** |
+
+## Smoke v1 失败记录（非科学结果）
+
+| 字段 | 值 |
+| --- | --- |
+| Run ID | `phase4_geometry_action_smoke_v1` |
+| 时间 | 2026-07-31 10:47:10–10:47:14 UTC |
+| project commit | `c629475bb601364a609a7fea69199772424d768f` |
+| physical GPU | 1 |
+| 停止位置 | `paired_render_started` 后、robosuite import 时 |
+| 错误 | `MUJOCO_EGL_DEVICE_ID=0` 不属于 `CUDA_VISIBLE_DEVICES=1` |
+| 模型加载 | false |
+| 环境 reset / render | false / false |
+| feature / action / probe | 0 / 0 / 0 |
+| 科学结论 | 无；不能登记为 smoke PASS |
+
+根因是 robosuite 校验物理可见 ID，而 PyTorch 才把唯一可见卡重映射为逻辑
+`cuda:0`。v2 runner 固定 `CUDA_VISIBLE_DEVICES=<physical>`、
+`MUJOCO_EGL_DEVICE_ID=<physical>`，模型仍使用 `cuda:0`。由于修复产生新 project
+commit，v1 的 pre-validation 不能 checksum-identical resume；因此保留 v1，使用
+全新 v2 namespace。
 
 ## Table A：Video geometry readability
 

@@ -10,10 +10,10 @@ probe 结果写成 OOD improvement。
 | --- | --- |
 | 10 项代码/数据审计 | COMPLETE |
 | hooks、labels、probe、intervention、decision | IMPLEMENTED |
-| Thought4 CPU/mock 单测 | COMPLETE（34 passed） |
-| 全项目回归 | COMPLETE（431 passed） |
+| Thought4 CPU/mock 单测 | COMPLETE（35 passed） |
+| 全项目回归 | COMPLETE（432 passed） |
 | smoke/formal dry-run | COMPLETE（严格零写入） |
-| 真实单卡 smoke | **NOT RUN** |
+| 真实单卡 smoke | v1 **ENGINEERING FAILED（pre-model）**；有效 v2 **NOT RUN** |
 | 正式 64-state diagnosis | **NOT RUN** |
 | Geo-REPA / SE(3)-Align | **NOT IMPLEMENTED（按协议锁定）** |
 

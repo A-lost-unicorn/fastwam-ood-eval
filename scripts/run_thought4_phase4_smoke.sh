@@ -14,7 +14,7 @@ if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
   exit 2
 fi
 
-status_path="${project_root}/outputs/thought4/phase4_geometry_action_smoke_v1/run_status.json"
+status_path="${project_root}/outputs/thought4/phase4_geometry_action_smoke_v2/run_status.json"
 if [[ -f "${status_path}" ]] && grep -Eq '"status"[[:space:]]*:[[:space:]]*"complete"' "${status_path}"; then
   echo "Refusing to mutate completed Thought4 smoke output" >&2
   exit 2
@@ -40,13 +40,15 @@ fi
 
 export CUDA_VISIBLE_DEVICES="${physical_gpu_id}"
 export MUJOCO_GL=egl
-export MUJOCO_EGL_DEVICE_ID=0
+# robosuite validates this against the original CUDA_VISIBLE_DEVICES string,
+# while PyTorch remaps the sole visible card to logical cuda:0.
+export MUJOCO_EGL_DEVICE_ID="${physical_gpu_id}"
 export TOKENIZERS_PARALLELISM=false
 export CUBLAS_WORKSPACE_CONFIG=":4096:8"
 export HF_DATASETS_CACHE="${THOUGHT4_HF_DATASETS_CACHE:-/tmp/thought4_hf_cache}"
 export PYTHONPATH="${project_root}/src:${project_root}/third_party/FastWAM:${project_root}/third_party/FastWAM/experiments/libero${PYTHONPATH:+:${PYTHONPATH}}"
 
-output_root="${project_root}/outputs/thought4/phase4_geometry_action_smoke_v1"
+output_root="${project_root}/outputs/thought4/phase4_geometry_action_smoke_v2"
 mkdir -p "${output_root}/logs"
 log_path="${output_root}/logs/run.log"
 
@@ -54,7 +56,7 @@ set +e
 "${project_root}/.conda/envs/fastwam-ood/bin/python" \
   -m fastwam_ood_eval.cli \
   thought4-phase4-smoke \
-  --config configs/thought4/phase4_geometry_action_smoke.yaml \
+  --config configs/thought4/phase4_geometry_action_smoke_v2.yaml \
   --device cuda:0 \
   "$@" 2>&1 | tee -a "${log_path}"
 status="${PIPESTATUS[0]}"

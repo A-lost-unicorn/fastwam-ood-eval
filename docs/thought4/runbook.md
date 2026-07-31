@@ -8,7 +8,7 @@
 ```bash
 .conda/envs/fastwam-ood/bin/python -m fastwam_ood_eval.cli \
   thought4-phase4-smoke \
-  --config configs/thought4/phase4_geometry_action_smoke.yaml \
+  --config configs/thought4/phase4_geometry_action_smoke_v2.yaml \
   --dry-run
 
 .conda/envs/fastwam-ood/bin/python -m fastwam_ood_eval.cli \
@@ -19,13 +19,20 @@
 
 判据：`would_load_torch/model/simulator/write=false`。当前冻结输出为：
 
-- smoke fingerprint `caef470ae35e...`，plan 候选 2/2/2，但技术执行只取
-  2 个 base state；每个 state 三条件、Video layer 15、Action block 15；
+- smoke v2 fingerprint `9c412c1ce2cd...`，planned cohort SHA
+  `8055511bdab1...`；plan 候选 2/2/2，但技术执行只取 2 个 base state；
+  每个 state 三条件、Video layer 15、Action block 15；
 - formal fingerprint `62951df5bb36...`，planned cohort SHA
   `340db6c1a151...`；40/12/12 共 64 个 base state、20/6/6 个 episode，
   每个 state 四条件。
 
-## 2. 真实 smoke（当前 NOT RUN）
+## 2. 真实 smoke（v1 工程失败；有效 v2 当前 NOT RUN）
+
+2026-07-31 的 v1 attempt 在 robosuite import 阶段停止：runner 暴露物理 GPU 1，
+却将 `MUJOCO_EGL_DEVICE_ID` 设为逻辑 0。模型未加载、环境未 reset、没有 feature、
+action、probe 或科学结果。失败目录
+`outputs/thought4/phase4_geometry_action_smoke_v1/` 原样保留，禁止 resume 或覆盖。
+v2 只修复设备映射和增加 preflight，不改变 cohort、层、probe 或干预协议。
 
 真实运行只接受已提交且 `git status --porcelain` 为空的项目快照；当前实现应先由
 用户审阅并提交。pre-validation 会把 project commit/clean status 与三套上游
@@ -46,6 +53,16 @@ THOUGHT4_GPU_ID=1 \
 bash scripts/run_thought4_phase4_smoke.sh
 ```
 
+runner 内部映射必须是：
+
+```text
+CUDA_VISIBLE_DEVICES=1
+MUJOCO_EGL_DEVICE_ID=1   # robosuite 使用物理 ID
+Fast-WAM device=cuda:0   # PyTorch 使用重映射后的逻辑 ID
+```
+
+Python preflight 会在创建新 run 之前核对三者；不能手工把 EGL 改回 `0`。
+
 smoke 从冻结 plan 只取 2 个 base state，渲染 Clean/Camera/Lighting 三个
 condition，验证一个 Video layer（含 hidden/K/V）和一个 Action layer 的真实
 hook call、shape、显式 denoise-step identity、feature shard/checksum、probe
@@ -57,9 +74,9 @@ action-consumed K/V 中选择干预层。
 查看：
 
 ```bash
-tail -f outputs/thought4/phase4_geometry_action_smoke_v1/logs/run.log
-cat outputs/thought4/phase4_geometry_action_smoke_v1/run_status.json
-cat outputs/thought4/phase4_geometry_action_smoke_v1/smoke_result.json
+tail -f outputs/thought4/phase4_geometry_action_smoke_v2/logs/run.log
+cat outputs/thought4/phase4_geometry_action_smoke_v2/run_status.json
+cat outputs/thought4/phase4_geometry_action_smoke_v2/smoke_result.json
 ```
 
 只有 `status=complete`、`formal_unlocked=true`、前后 backbone SHA 相等才进入

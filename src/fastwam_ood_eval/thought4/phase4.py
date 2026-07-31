@@ -123,7 +123,7 @@ def _verify_formal_smoke_gate(
     *,
     expected_project_commit: str | None = None,
     smoke_config_path: str | Path = (
-        "configs/thought4/phase4_geometry_action_smoke.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v2.yaml"
     ),
 ) -> dict[str, Any]:
     from fastwam_ood_eval.thought4.config import load_thought4_config
@@ -218,6 +218,12 @@ def _require_confirmation(stage: str) -> None:
     if visible != physical:
         raise Phase4ExecutionError(
             "CUDA_VISIBLE_DEVICES does not match THOUGHT4_GPU_ID"
+        )
+    egl_device = os.environ.get("MUJOCO_EGL_DEVICE_ID")
+    if egl_device != physical:
+        raise Phase4ExecutionError(
+            "MUJOCO_EGL_DEVICE_ID must equal the physical THOUGHT4_GPU_ID; "
+            "PyTorch still uses logical cuda:0 after CUDA remapping"
         )
 
 

@@ -19,6 +19,7 @@ from fastwam_ood_eval.thought4.io_utils import (
 )
 from fastwam_ood_eval.thought4.phase4 import (
     Phase4ExecutionError,
+    _require_confirmation,
     _verify_formal_smoke_gate,
     dry_run_payload,
 )
@@ -32,7 +33,7 @@ from fastwam_ood_eval.thought4.video_feature_extractor import (
 
 def test_frozen_configs_validate_and_formal_cohort_is_64() -> None:
     smoke = load_thought4_config(
-        "configs/thought4/phase4_geometry_action_smoke.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v2.yaml"
     )
     formal = load_thought4_config(
         "configs/thought4/phase4_geometry_action_diagnosis_v1.yaml"
@@ -68,7 +69,7 @@ def test_frozen_configs_validate_and_formal_cohort_is_64() -> None:
 
 def test_dry_run_is_read_only_and_does_not_import_torch(tmp_path: Path) -> None:
     cfg = load_thought4_config(
-        "configs/thought4/phase4_geometry_action_smoke.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v2.yaml"
     )
     before = set(Path("outputs/thought4").rglob("*")) if Path("outputs/thought4").exists() else set()
     had_torch = "torch" in sys.modules
@@ -100,6 +101,23 @@ def test_runner_scripts_require_explicit_confirmation() -> None:
     assert "CONFIRM_THOUGHT4_PHASE4_FORMAL" in formal
     assert "THOUGHT4_GPU_ID" in smoke and "THOUGHT4_GPU_ID" in formal
     assert "CUDA_VISIBLE_DEVICES" in smoke and "CUDA_VISIBLE_DEVICES" in formal
+    expected_egl = 'export MUJOCO_EGL_DEVICE_ID="${physical_gpu_id}"'
+    assert expected_egl in smoke and expected_egl in formal
+    assert "export MUJOCO_EGL_DEVICE_ID=0" not in smoke
+    assert "export MUJOCO_EGL_DEVICE_ID=0" not in formal
+
+
+def test_confirmation_requires_physical_egl_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CONFIRM_THOUGHT4_PHASE4_SMOKE", "YES")
+    monkeypatch.setenv("THOUGHT4_GPU_ID", "1")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "1")
+    monkeypatch.setenv("MUJOCO_EGL_DEVICE_ID", "0")
+    with pytest.raises(Phase4ExecutionError, match="MUJOCO_EGL_DEVICE_ID"):
+        _require_confirmation("smoke")
+    monkeypatch.setenv("MUJOCO_EGL_DEVICE_ID", "1")
+    _require_confirmation("smoke")
 
 
 def test_feature_shard_resume_is_checksum_validated_and_read_only(
@@ -151,7 +169,7 @@ def test_formal_requires_sha_valid_completed_real_smoke(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     smoke_path = Path(
-        "configs/thought4/phase4_geometry_action_smoke.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v2.yaml"
     ).resolve()
     formal_path = Path(
         "configs/thought4/phase4_geometry_action_diagnosis_v1.yaml"

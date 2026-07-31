@@ -220,3 +220,48 @@ def test_actual_video_kv_cache_capture_and_replacement_are_scoped() -> None:
         ),
         reference,
     )
+
+
+def test_actual_video_kv_cache_capture_supports_inference_tensors() -> None:
+    mot = ToyMoT()
+    spec = VideoKVCacheSpec(0, "k", expected_calls=2)
+    with torch.inference_mode():
+        action = torch.ones(1, 2, 3)
+        cache = [
+            {
+                "k": torch.full((1, 5, 8), 2.0),
+                "v": torch.full((1, 5, 8), 3.0),
+            }
+        ]
+        with ScopedVideoKVCacheCapture(mot, (spec,)) as capture:
+            first = mot.forward_action_with_video_cache(
+                action_tokens=action, video_kv_cache=cache
+            )
+            second = mot.forward_action_with_video_cache(
+                action_tokens=action, video_kv_cache=cache
+            )
+    assert torch.equal(first, second)
+    assert capture.calls == 2
+    assert torch.equal(capture.captured[spec.name][0], cache[0]["k"])
+
+
+def test_inference_cache_mutation_still_fails_closed() -> None:
+    class MutatingToyMoT(nn.Module):
+        def forward_action_with_video_cache(self, **kwargs: object) -> torch.Tensor:
+            cache = kwargs["video_kv_cache"]
+            assert isinstance(cache, list)
+            cache[0]["k"].add_(1)
+            action = kwargs["action_tokens"]
+            assert isinstance(action, torch.Tensor)
+            return action
+
+    mot = MutatingToyMoT()
+    spec = VideoKVCacheSpec(0, "k", expected_calls=1)
+    with torch.inference_mode():
+        action = torch.ones(1, 2, 3)
+        cache = [{"k": torch.zeros(1, 5, 8), "v": torch.zeros(1, 5, 8)}]
+        with pytest.raises(FeatureHookError, match="content changed"):
+            with ScopedVideoKVCacheCapture(mot, (spec,)):
+                mot.forward_action_with_video_cache(
+                    action_tokens=action, video_kv_cache=cache
+                )

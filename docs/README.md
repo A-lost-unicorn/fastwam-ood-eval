@@ -11,7 +11,7 @@
 | [thought1/](thought1/) | 标准 LIBERO→LIBERO-Plus 只评测基线 | 97.25%→47.70%，下降 49.55 pp |
 | [thought2/](thought2/) | 不改动作的离线 future shadow diagnostics | OOD 一致性代理变差且与失败相关，非因果 |
 | [thought3/](thought3/) | Future-to-Action Adapter、技术反事实与 matched 训练 | future 改变动作；K=1 未改善 held-out objective |
-| [thought4/](thought4/) | 冻结几何表征—动作接口诊断 | 实现与 dry-run 完成；v1 pre-model 工程失败已修复，有效 smoke/formal 尚未运行 |
+| [thought4/](thought4/) | 冻结几何表征—动作接口诊断 | 实现与 dry-run 完成；v1 EGL、v2 inference-hook 失败已修复，有效 v3/formal 尚未运行 |
 | [shared/](shared/) | 环境、架构、总控、实验台账和通用协议 | 跨阶段工程与结论边界 |
 
 ## 论文主线

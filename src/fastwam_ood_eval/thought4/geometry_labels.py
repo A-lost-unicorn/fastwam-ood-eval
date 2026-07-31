@@ -293,7 +293,9 @@ def build_future_trajectory_label(
         translation_world[offset - 1] = delta
         translation_camera[offset - 1] = world_to_camera @ delta
         rotation_labels[offset - 1] = rotation_to_6d(rotations[index])
-        gripper_labels[offset - 1, 0] = float(gripper[index])
+        gripper_labels[offset - 1, 0] = float(
+            np.asarray(gripper[index]).reshape(-1)[0]
+        )
         valid[offset - 1] = True
         indices.append(index)
     return FutureTrajectoryLabel(

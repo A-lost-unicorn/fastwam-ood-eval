@@ -33,7 +33,7 @@ from fastwam_ood_eval.thought4.video_feature_extractor import (
 
 def test_frozen_configs_validate_and_formal_cohort_is_64() -> None:
     smoke = load_thought4_config(
-        "configs/thought4/phase4_geometry_action_smoke_v2.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v3.yaml"
     )
     formal = load_thought4_config(
         "configs/thought4/phase4_geometry_action_diagnosis_v1.yaml"
@@ -69,7 +69,7 @@ def test_frozen_configs_validate_and_formal_cohort_is_64() -> None:
 
 def test_dry_run_is_read_only_and_does_not_import_torch(tmp_path: Path) -> None:
     cfg = load_thought4_config(
-        "configs/thought4/phase4_geometry_action_smoke_v2.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v3.yaml"
     )
     before = set(Path("outputs/thought4").rglob("*")) if Path("outputs/thought4").exists() else set()
     had_torch = "torch" in sys.modules
@@ -169,7 +169,7 @@ def test_formal_requires_sha_valid_completed_real_smoke(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     smoke_path = Path(
-        "configs/thought4/phase4_geometry_action_smoke_v2.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v3.yaml"
     ).resolve()
     formal_path = Path(
         "configs/thought4/phase4_geometry_action_diagnosis_v1.yaml"

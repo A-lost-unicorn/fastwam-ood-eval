@@ -186,6 +186,25 @@ def _cache_tensor(
     return tensor
 
 
+def _tensor_version_or_none(tensor: Any) -> int | None:
+    """Return an autograd version when available.
+
+    Tensors created under ``torch.inference_mode()`` deliberately have no
+    version counter.  Accessing ``tensor._version`` raises instead of returning
+    a sentinel, so their cache identity is validated with pointer/metadata plus
+    an end-of-scope content comparison.
+    """
+
+    try:
+        return int(tensor._version)
+    except RuntimeError as exc:
+        if "Inference tensors do not track version counter" not in str(exc):
+            raise FeatureHookError(
+                "failed to read video-cache tensor version"
+            ) from exc
+        return None
+
+
 class ScopedVideoKVCacheCapture(
     AbstractContextManager["ScopedVideoKVCacheCapture"]
 ):
@@ -207,7 +226,8 @@ class ScopedVideoKVCacheCapture(
         self.calls = 0
         self._original: Any | None = None
         self._had_instance_attribute = False
-        self._identities: dict[str, tuple[int, int, Any, Any]] = {}
+        self._identities: dict[str, tuple[Any, ...]] = {}
+        self._live_tensors: dict[str, Any] = {}
 
     def __enter__(self) -> "ScopedVideoKVCacheCapture":
         if self._original is not None or not hasattr(
@@ -229,9 +249,11 @@ class ScopedVideoKVCacheCapture(
                 )
                 identity = (
                     int(tensor.data_ptr()),
-                    int(getattr(tensor, "_version", 0)),
+                    _tensor_version_or_none(tensor),
                     tensor.shape,
                     tensor.dtype,
+                    tensor.device,
+                    tensor.stride(),
                 )
                 prior = self._identities.setdefault(spec.name, identity)
                 if prior != identity:
@@ -239,6 +261,7 @@ class ScopedVideoKVCacheCapture(
                         f"video cache changed across denoise calls: {spec.name}"
                     )
                 if not self.captured[spec.name]:
+                    self._live_tensors[spec.name] = tensor
                     value = tensor.detach().clone()
                     if self.to_cpu:
                         value = value.cpu()
@@ -257,6 +280,8 @@ class ScopedVideoKVCacheCapture(
                 delattr(self.mot, "forward_action_with_video_cache")
             self._original = None
         if exc_type is None:
+            import torch
+
             for spec in self.specs:
                 if len(self.captured[spec.name]) != 1:
                     raise FeatureHookError(f"cache capture missing: {spec.name}")
@@ -264,6 +289,13 @@ class ScopedVideoKVCacheCapture(
                     raise FeatureHookError(
                         f"cache call mismatch: expected {spec.expected_calls}, "
                         f"observed {self.calls}"
+                    )
+                observed = self._live_tensors[spec.name].detach()
+                if self.to_cpu:
+                    observed = observed.cpu()
+                if not torch.equal(observed, self.captured[spec.name][0]):
+                    raise FeatureHookError(
+                        f"video cache content changed during denoise: {spec.name}"
                     )
 
 

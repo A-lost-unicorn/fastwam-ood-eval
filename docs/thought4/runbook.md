@@ -8,7 +8,7 @@
 ```bash
 .conda/envs/fastwam-ood/bin/python -m fastwam_ood_eval.cli \
   thought4-phase4-smoke \
-  --config configs/thought4/phase4_geometry_action_smoke_v2.yaml \
+  --config configs/thought4/phase4_geometry_action_smoke_v3.yaml \
   --dry-run
 
 .conda/envs/fastwam-ood/bin/python -m fastwam_ood_eval.cli \
@@ -19,20 +19,32 @@
 
 判据：`would_load_torch/model/simulator/write=false`。当前冻结输出为：
 
-- smoke v2 fingerprint `9c412c1ce2cd...`，planned cohort SHA
-  `8055511bdab1...`；plan 候选 2/2/2，但技术执行只取 2 个 base state；
+- smoke v3 fingerprint `dbf3d11c3546...`，planned cohort SHA
+  `1a2c8a81349b...`；plan 候选 2/2/2，但技术执行只取 2 个 base state；
   每个 state 三条件、Video layer 15、Action block 15；
 - formal fingerprint `62951df5bb36...`，planned cohort SHA
   `340db6c1a151...`；40/12/12 共 64 个 base state、20/6/6 个 episode，
   每个 state 四条件。
 
-## 2. 真实 smoke（v1 工程失败；有效 v2 当前 NOT RUN）
+## 2. 真实 smoke（v1/v2 工程失败；有效 v3 当前 NOT RUN）
 
 2026-07-31 的 v1 attempt 在 robosuite import 阶段停止：runner 暴露物理 GPU 1，
 却将 `MUJOCO_EGL_DEVICE_ID` 设为逻辑 0。模型未加载、环境未 reset、没有 feature、
 action、probe 或科学结果。失败目录
 `outputs/thought4/phase4_geometry_action_smoke_v1/` 原样保留，禁止 resume 或覆盖。
-v2 只修复设备映射和增加 preflight，不改变 cohort、层、probe 或干预协议。
+
+2026-07-31 的 v2 attempt 已通过 EGL 映射，完成 2 个 base state × 3 conditions
+的 6 条 paired render 与 6 条 label，并开始加载模型；首次 source-A K/V feature
+capture 时，hook 读取 `torch.inference_mode()` tensor 的 `_version`，触发
+`Inference tensors do not track version counter`。因此没有 feature shard、action、
+probe、identity replacement 或 `smoke_result.json`，也没有科学结果。失败目录
+`outputs/thought4/phase4_geometry_action_smoke_v2/` 同样原样保留，禁止 resume 或
+覆盖。
+
+v3 只修复 inference-tensor cache identity：普通 tensor 继续校验 version counter；
+inference tensor 校验 data pointer、shape、dtype、device、stride，并在 scope 结束时
+逐值对比首次 clone，仍然 fail closed。同时修复 gripper scalar 的 NumPy 弃用警告。
+v1→v2→v3 均不改变 cohort、层、probe、干预阈值或 action denoise schedule。
 
 真实运行只接受已提交且 `git status --porcelain` 为空的项目快照；当前实现应先由
 用户审阅并提交。pre-validation 会把 project commit/clean status 与三套上游
@@ -74,9 +86,9 @@ action-consumed K/V 中选择干预层。
 查看：
 
 ```bash
-tail -f outputs/thought4/phase4_geometry_action_smoke_v2/logs/run.log
-cat outputs/thought4/phase4_geometry_action_smoke_v2/run_status.json
-cat outputs/thought4/phase4_geometry_action_smoke_v2/smoke_result.json
+tail -f outputs/thought4/phase4_geometry_action_smoke_v3/logs/run.log
+cat outputs/thought4/phase4_geometry_action_smoke_v3/run_status.json
+cat outputs/thought4/phase4_geometry_action_smoke_v3/smoke_result.json
 ```
 
 只有 `status=complete`、`formal_unlocked=true`、前后 backbone SHA 相等才进入
@@ -85,7 +97,9 @@ SHA、identity replacement 和前后主干 SHA；只设置 formal 确认变量�
 失败后先保留目录排查；`--resume` 只接受未完成且 checksum 可解释的工件，绝不
 覆盖 completed 输出。
 
-若日志明确表明是非科学性的进程中断，可在同一命令末尾加 `--resume`。已有
+v1/v2 都伴随代码 commit 变化，不能加 `--resume`；必须从 v3 新 namespace
+重跑。以后只有代码、配置、pre-validation identity 均未变化且日志明确表明是
+非科学性的进程中断，才可在同一命令末尾加 `--resume`。已有
 feature shard 和 `probe_inputs.pt` 必须同时通过 sidecar SHA、逐 tensor SHA、
 metadata 与本次冻结提取一致，才会只读复用；任何差异均 fail closed。
 

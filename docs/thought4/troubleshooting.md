@@ -14,6 +14,27 @@ Fast-WAM 配置仍写 `cuda:0`，因为 PyTorch 会把唯一可见卡重映射�
 映射。若旧 attempt 已经写出 `run_status.json`，保留旧目录，使用新 Run ID；不要
 在代码 commit 已变化时 `--resume`，否则 pre-validation identity 必然不同。
 
+## 首次 feature capture 报 inference tensor 没有 version counter
+
+报错：
+
+```text
+Inference tensors do not track version counter.
+```
+
+这是 PyTorch `torch.inference_mode()` 的正常语义，不表示 checkpoint 损坏或显存
+不足。旧 hook 直接读取 cache tensor 的 `_version` 来验证 20 次 action denoise
+共用同一只读 K/V；inference tensor 不提供该 counter，因此在首次 capture 即停止。
+
+当前 v3 hook 对普通 tensor 仍检查 data pointer + version；对 inference tensor 检查
+data pointer、shape、dtype、device、stride，并在 scope 退出时把 live tensor 与
+首次 detached clone 逐值比较。这样既兼容真实推理，也不会放弃原地修改检测。
+对应回归同时覆盖“可正常 capture”和“发生 mutation 必须 fail closed”。
+
+若旧 v2 已生成 `run_status.json`，不要 `--resume` 或删除旧目录。提交修复后直接运行
+同一个 smoke runner；它已经指向新的 `phase4_geometry_action_smoke_v3` namespace。
+v2 的 paired render/label 仅用于工程审计，不可拼入 v3 或正式结果。
+
 ## Hook 注册成功但 call count 为 0
 
 原因通常是 hook 到 `blocks[i]`。MoT 不调用 block `forward()`。检查路径必须是

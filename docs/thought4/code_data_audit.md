@@ -298,7 +298,8 @@ src/fastwam_ood_eval/thought4/
 ```text
 configs/thought4/phase4_geometry_action_diagnosis_v1.yaml
 configs/thought4/phase4_geometry_action_smoke.yaml       # v1 失败身份，保留
-configs/thought4/phase4_geometry_action_smoke_v2.yaml    # 当前 runner
+configs/thought4/phase4_geometry_action_smoke_v2.yaml    # v2 失败身份，保留
+configs/thought4/phase4_geometry_action_smoke_v3.yaml    # 当前 runner
 scripts/run_thought4_phase4_smoke.sh
 scripts/run_thought4_phase4_diagnosis.sh
 ```
@@ -316,12 +317,15 @@ held-out grouped bootstrap 只建立在 3 个 episode 上。主 CLI 只
 | 8–13：episode split、exact pair、Robot-init、camera、坐标、future mask | `test_thought4_schemas_geometry.py`、label/render manifest |
 | 14–20：shuffle、SVD、correct/shuffle、donor、seed、replay floor | `test_thought4_probe_intervention.py`、真实 identity replacement |
 | 21–24：参数 SHA、finite、不可覆盖、dry-run 零加载 | hooks/config tests、smoke/formal hard checks |
-| 25：Thought1/2/3 不回归 | 全项目 `432 passed` |
+| 25：Thought1/2/3 不回归 | 全项目 `434 passed` |
 
-当前专项结果为 `35 passed`；文档检查为 84 个 Markdown、本地链接全部有效且
+当前专项结果为 `37 passed`；文档检查为 84 个 Markdown、本地链接全部有效且
 `docs/` 根目录整洁。上述真实
 v1 smoke 在 robosuite import 时因 EGL 物理编号错误停止，模型未加载、环境未
-reset；有效 v2 smoke 仍为 **NOT RUN**，不能用 mock 或失败尝试代替。
+reset。v2 完成 6 条 paired render/label，随后在首次 K/V feature capture 因
+inference tensor 没有 `_version` 而停止；未生成 feature/probe/intervention 或
+科学结果。该 hook 已用保持 fail-closed 的 inference-safe identity/content check
+修复；有效 v3 smoke 仍为 **NOT RUN**，不能用 mock 或失败尝试代替。
 
 最短执行顺序：
 

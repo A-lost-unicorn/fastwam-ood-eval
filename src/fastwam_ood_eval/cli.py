@@ -521,6 +521,39 @@ def build_parser() -> argparse.ArgumentParser:
     )
     phase2_full.add_argument("--rank", type=int, default=0)
     phase2_full.add_argument("--world-size", type=int, default=1)
+    for name, help_text in (
+        (
+            "thought4-phase4-smoke",
+            "Run the confirmed 1-2-state real Geometry-Action chain smoke",
+        ),
+        (
+            "thought4-phase4-diagnosis",
+            "Run the confirmed frozen formal Geometry-Action diagnosis",
+        ),
+    ):
+        command = subparsers.add_parser(name, help=help_text)
+        command.add_argument("--config", required=True, type=Path)
+        command.add_argument(
+            "--set",
+            action="append",
+            default=[],
+            metavar="KEY=VALUE",
+            help="Present for consistency; Thought4 forbids overrides",
+        )
+        command.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Read-only validation; load no Torch, simulator or GPU model",
+        )
+        command.add_argument(
+            "--resume",
+            action="store_true",
+            help="Resume only checksum-valid, non-complete Thought4 artifacts",
+        )
+        command.add_argument(
+            "--device",
+            help="Must match the frozen logical device in the config",
+        )
     return parser
 
 
@@ -1050,6 +1083,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.command.startswith("thought4-"):
+            # Keep Torch, MuJoCo and Fast-WAM imports behind the real execution
+            # branch.  Thought4 dry-run remains CPU/read-only.
+            from fastwam_ood_eval.thought4.cli import dispatch
+
+            return dispatch(args)
         if args.command.startswith("thought3-"):
             # Keep all torch/safetensors/Fast-WAM integration behind this
             # branch so existing Thought1/Thought2 command imports and defaults

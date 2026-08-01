@@ -1,6 +1,6 @@
 # Thought4 Phase 4：Geometry–Action Gap 代码与数据审计
 
-状态：`AUDIT COMPLETE / IMPLEMENTATION + CPU TESTS COMPLETE / V1 GPU ATTEMPT FAILED PRE-MODEL / VALID V2 NOT RUN`
+状态：`AUDIT COMPLETE / IMPLEMENTED / SMOKE V3 PASSED / FORMAL V1 ENGINEERING FAILED / V4+V2 NOT RUN`
 
 审计日期：2026-07-31
 
@@ -247,8 +247,10 @@ Robot-init 明确不是 exact-state visual pair。它只要求：
 - 同 task；
 - 同冻结 seed namespace；
 - prefix 前所有 task object/fixture pose 与 Clean 在 `1e-7` 容差内一致；
-- reset robot joint/EEF/gripper state 与 Clean 确实不同；
-- 独立 simulator state 和独立 state hash；
+- reset robot joint/EEF/gripper state 只披露，不要求已经不同；
+- 相同 prefix 后、模型输入时刻 `t` 的 robot state 与完整 simulator state
+  必须区别于 Clean；
+- 独立 input-time simulator state 和 state hash；
 - `exact_state_pair=false`。
 
 任何把 Robot-init 与 Clean 标为相同 state 的 record 都必须被 schema/test 拒绝。
@@ -296,10 +298,12 @@ src/fastwam_ood_eval/thought4/
 新配置与 runner：
 
 ```text
-configs/thought4/phase4_geometry_action_diagnosis_v1.yaml
+configs/thought4/phase4_geometry_action_diagnosis_v1.yaml # formal v1 失败身份
+configs/thought4/phase4_geometry_action_diagnosis_v2.yaml # 当前 runner
 configs/thought4/phase4_geometry_action_smoke.yaml       # v1 失败身份，保留
 configs/thought4/phase4_geometry_action_smoke_v2.yaml    # v2 失败身份，保留
-configs/thought4/phase4_geometry_action_smoke_v3.yaml    # 当前 runner
+configs/thought4/phase4_geometry_action_smoke_v3.yaml    # 已通过，无 Robot-init
+configs/thought4/phase4_geometry_action_smoke_v4.yaml    # 当前 runner
 scripts/run_thought4_phase4_smoke.sh
 scripts/run_thought4_phase4_diagnosis.sh
 ```
@@ -319,13 +323,14 @@ held-out grouped bootstrap 只建立在 3 个 episode 上。主 CLI 只
 | 21–24：参数 SHA、finite、不可覆盖、dry-run 零加载 | hooks/config tests、smoke/formal hard checks |
 | 25：Thought1/2/3 不回归 | 全项目 `434 passed` |
 
-当前专项结果为 `37 passed`；文档检查为 84 个 Markdown、本地链接全部有效且
-`docs/` 根目录整洁。上述真实
+本次 v4/v2 修复后专项结果为 `39 passed`，全项目为 `436 passed`（5 条 NVML
+环境 warning）。上述真实
 v1 smoke 在 robosuite import 时因 EGL 物理编号错误停止，模型未加载、环境未
 reset。v2 完成 6 条 paired render/label，随后在首次 K/V feature capture 因
 inference tensor 没有 `_version` 而停止；未生成 feature/probe/intervention 或
-科学结果。该 hook 已用保持 fail-closed 的 inference-safe identity/content check
-修复；有效 v3 smoke 仍为 **NOT RUN**，不能用 mock 或失败尝试代替。
+科学结果。该 hook 修复后的 v3 smoke 已通过，但没有 Robot-init。formal v1 随后
+暴露 reset-time 判定错误并在模型加载前停止；v4/v2 将硬检查移到 input time，
+当前均为 **NOT RUN**。任何失败工件或旧 smoke 都不能代替新 formal gate。
 
 最短执行顺序：
 

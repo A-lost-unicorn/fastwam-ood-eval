@@ -61,9 +61,12 @@ action prefix 恢复到时间 `t`，再从该 Robot-init 状态离线重放未�
 
 在执行任何 prefix 前，collector 对所有 task object/fixture 的 position+quaternion
 做排序快照：Robot-init 必须在 `1e-7` 容差内与 Clean 保持同一 object layout，
-同时其 robot joint/EEF/gripper reset state 必须与 Clean 不同，否则 fail closed。
-每个 condition 的原始 layout/robot-state SHA 和 match 标志写入 label manifest；
-这不把 Robot-init 伪装成时间 `t` 的 exact-state pair。
+reset robot state 只作披露，不要求此时已经不同。原因是 LIBERO
+`set_init_state()` 会把共享 demonstration flat state 写回 simulator，暂时覆盖
+variant 的可观测 qpos。真正的硬检查位于相同 action prefix 执行后的模型输入时刻
+`t`：Clean/Camera/Lighting 的 robot state 必须相同，Robot-init 的
+joint/EEF/gripper state 与完整 simulator-state SHA 必须不同。reset 与 input 两套
+SHA/match 标志都写入 label manifest；这不把 Robot-init 伪装成 exact-state pair。
 
 动作 prefix 只用于诊断状态恢复，不执行 policy，不读取/记录/筛选 success。
 

@@ -17,12 +17,18 @@ from fastwam_ood_eval.thought4.geometry_labels import (
     world_to_camera_points,
 )
 from fastwam_ood_eval.thought4.paired_rendering import (
+    PairedRenderingError,
+    PairedStateRenderer,
+    array_sha256,
     validate_exact_state_group,
 )
 from fastwam_ood_eval.thought4.real_runtime import (
     DemonstrationEpisode,
     Thought4RuntimeError,
     _demonstration_state_alignment,
+    _robot_state_snapshot,
+    _robot_states_matching_clean,
+    _validate_input_robot_states,
 )
 from fastwam_ood_eval.thought4.schemas import (
     CameraMetadata,
@@ -196,3 +202,80 @@ def test_demonstration_prefix_alignment_is_checked_at_input_time() -> None:
             episode,
             1,
         )
+
+
+def _robot_observation(joint_offset: float = 0.0) -> dict[str, np.ndarray]:
+    return {
+        "robot0_joint_pos": np.asarray([joint_offset, 0.2]),
+        "robot0_eef_pos": np.asarray([0.1, 0.2, 0.3]),
+        "robot0_eef_quat": np.asarray([0.0, 0.0, 0.0, 1.0]),
+        "robot0_gripper_qpos": np.asarray([0.01, -0.01]),
+    }
+
+
+def test_robot_init_is_validated_at_model_input_not_reset() -> None:
+    reset = {
+        condition: _robot_state_snapshot(_robot_observation())
+        for condition in ("clean", "camera", "lighting", "robot_init")
+    }
+    # Shared demonstration reset state is allowed to mask Robot-init at reset.
+    assert _robot_states_matching_clean(reset)["robot_init"] is True
+
+    input_states = dict(reset)
+    input_states["robot_init"] = _robot_state_snapshot(
+        _robot_observation(joint_offset=0.05)
+    )
+    matches = _validate_input_robot_states(input_states)
+    assert matches["clean"] is True
+    assert matches["camera"] is True
+    assert matches["lighting"] is True
+    assert matches["robot_init"] is False
+
+    with pytest.raises(Thought4RuntimeError, match="model input time"):
+        _validate_input_robot_states(reset)
+
+    bad_camera = dict(input_states)
+    bad_camera["camera"] = _robot_state_snapshot(
+        _robot_observation(joint_offset=0.02)
+    )
+    with pytest.raises(Thought4RuntimeError, match="camera robot state"):
+        _validate_input_robot_states(bad_camera)
+
+
+class _FakeStateEnv:
+    def __init__(self, state: np.ndarray) -> None:
+        self.state = np.asarray(state, dtype=np.float64)
+
+    def get_sim_state(self) -> np.ndarray:
+        return self.state.copy()
+
+
+def test_robot_init_render_requires_input_simulator_state_difference() -> None:
+    renderer = PairedStateRenderer(
+        camera_name="agentview",
+        height=2,
+        width=2,
+        render_function=lambda _env, _camera, _height, _width: (
+            np.zeros((2, 2, 3), dtype=np.uint8),
+            np.ones((2, 2), dtype=np.float32),
+            camera(),
+            {"eef": [0.0, 0.0, 0.0]},
+        ),
+    )
+    clean_state = np.asarray([0.0, 1.0], dtype=np.float64)
+    kwargs = {
+        "identity": identity(),
+        "variant": "robot_init_v1",
+        "clean_reference_sample_id": identity().sample_id,
+        "clean_reference_state_sha256": array_sha256(clean_state),
+    }
+    with pytest.raises(PairedRenderingError, match="model input time"):
+        renderer.render_robot_init(
+            robot_init_env=_FakeStateEnv(clean_state),
+            **kwargs,
+        )
+    rendered = renderer.render_robot_init(
+        robot_init_env=_FakeStateEnv(np.asarray([0.1, 1.0])),
+        **kwargs,
+    )
+    assert rendered.record.exact_state_pair is False

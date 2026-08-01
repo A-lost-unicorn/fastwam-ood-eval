@@ -31,9 +31,33 @@ data pointer、shape、dtype、device、stride，并在 scope 退出时把 live 
 首次 detached clone 逐值比较。这样既兼容真实推理，也不会放弃原地修改检测。
 对应回归同时覆盖“可正常 capture”和“发生 mutation 必须 fail closed”。
 
-若旧 v2 已生成 `run_status.json`，不要 `--resume` 或删除旧目录。提交修复后直接运行
-同一个 smoke runner；它已经指向新的 `phase4_geometry_action_smoke_v3` namespace。
-v2 的 paired render/label 仅用于工程审计，不可拼入 v3 或正式结果。
+若旧 v2 已生成 `run_status.json`，不要 `--resume` 或删除旧目录。历史 v3 已完成
+并证明 inference-safe hook 链路；当前 runner 指向带 Robot-init 检查的
+`phase4_geometry_action_smoke_v4`。v2/v3 工件不可拼入 v4 或正式结果。
+
+## Formal 报 Robot-init initial state 没变化
+
+旧错误：
+
+```text
+Robot-init variant did not change the initial robot state
+```
+
+formal v1 在 reset observation 上过早判定。LIBERO adapter 先用 variant robot
+reset，随后把共同 demonstration flat state 写回 simulator，因此 reset 时
+joint/EEF/gripper 可以与 Clean 完全相同。相同 action prefix 执行后，不同 robot
+variant 的动力学状态会在真正的模型输入时刻 `t` 分化。
+
+不能删除 Robot-init、放宽阈值或把它改成 exact-state。当前修复：
+
+1. prefix 前只硬检查 object layout 与 Clean 相同；
+2. reset robot state 只保存 SHA/match 供披露；
+3. prefix 后要求 Clean/Camera/Lighting robot state 相同；
+4. prefix 后要求 Robot-init observation 与完整 simulator SHA 均区别于 Clean；
+5. smoke v4 必须逐样本通过，formal v2 gate 才解锁。
+
+formal v1 目录原样保留，不加 `--resume`；重新提交后依次运行 smoke v4 和
+formal v2，且两次运行之间不能改变 project commit。
 
 ## Hook 注册成功但 call count 为 0
 

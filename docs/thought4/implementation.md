@@ -116,4 +116,7 @@ collector 在 Robot-init 环境中执行相同 prefix 到 `t`，渲染当前状�
 未来 demonstration actions 生成该状态自己的 camera-frame EEF/rotation/gripper
 trajectory，随后恢复 `t` 状态。未来 observation 的 RGB 字段不被读取或输入模型。
 在 prefix 前还会核对所有 task object/fixture 的排序 pose snapshot 与 Clean 一致，
-并核对 robot reset state 确实不同；SHA 和 match 标志均落入 label manifest。
+robot reset state 只披露、不作为扰动是否生效的判据。执行相同 prefix 后，在实际
+模型输入时刻 `t` 核对 Robot-init robot state 和完整 simulator state 均区别于
+Clean；Clean/Camera/Lighting 仍必须相同。reset/input 两套 SHA 和 match 标志均
+落入 label manifest。

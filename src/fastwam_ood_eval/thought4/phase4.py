@@ -123,7 +123,7 @@ def _verify_formal_smoke_gate(
     *,
     expected_project_commit: str | None = None,
     smoke_config_path: str | Path = (
-        "configs/thought4/phase4_geometry_action_smoke_v3.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v4.yaml"
     ),
 ) -> dict[str, Any]:
     from fastwam_ood_eval.thought4.config import load_thought4_config
@@ -147,6 +147,27 @@ def _verify_formal_smoke_gate(
         raise Phase4ExecutionError(
             "formal smoke prerequisite artifacts must be JSON objects"
         )
+    robot_check = result.get("robot_init_input_state_check")
+    base_state_count = result.get("base_state_count")
+    valid_base_state_count = (
+        isinstance(base_state_count, int)
+        and not isinstance(base_state_count, bool)
+        and base_state_count > 0
+    )
+    robot_check_valid = (
+        isinstance(robot_check, Mapping)
+        and valid_base_state_count
+        and robot_check.get("passed") is True
+        and robot_check.get("sample_count") == base_state_count
+        and robot_check.get("input_matches_clean_count") == 0
+        and robot_check.get("input_differs_clean_count") == base_state_count
+        and robot_check.get("simulator_state_differs_clean_count")
+        == base_state_count
+        and robot_check.get("same_object_layout_count") == base_state_count
+        and robot_check.get("validation_time")
+        == "model_input_t_after_demonstration_prefix"
+        and robot_check.get("reset_state_is_disclosure_only") is True
+    )
     checks = {
         "status_complete": status.get("status") == "complete",
         "status_stage_smoke": status.get("stage") == "smoke",
@@ -176,6 +197,13 @@ def _verify_formal_smoke_gate(
             and result.get("identity_replacement", {}).get("hook_location")
             == "forward_action_with_video_cache argument"
         ),
+        "robot_init_smoke_condition_present": (
+            set(smoke_cfg.cohort.conditions)
+            == {"clean", "camera", "lighting", "robot_init"}
+            and valid_base_state_count
+            and result.get("condition_count") == 4 * base_state_count
+        ),
+        "robot_init_input_state_valid": robot_check_valid,
         "future_rgb_not_read": result.get("future_rgb_read") is False,
         "success_outcome_not_read": result.get("success_outcome_read") is False,
     }
@@ -193,7 +221,7 @@ def _verify_formal_smoke_gate(
             f"formal smoke prerequisite hard checks failed: {failed}"
         )
     return {
-        "schema_version": "thought4.phase4.formal_smoke_gate.v1",
+        "schema_version": "thought4.phase4.formal_smoke_gate.v2",
         "smoke_config_fingerprint": smoke_cfg.fingerprint,
         "smoke_result_sha256": supplied_sha,
         "checks": checks,
@@ -335,7 +363,7 @@ def _write_common_render_artifacts(
     for sample in samples:
         label_rows.append(
             {
-                "schema_version": "thought4.phase4.label_manifest.v1",
+                "schema_version": "thought4.phase4.label_manifest.v2",
                 "sample_id": sample.plan.identity.sample_id,
                 "condition": sample.condition,
                 "input_time": f"t={sample.plan.frame_index}",
@@ -355,11 +383,17 @@ def _write_common_render_artifacts(
                 "initial_object_layout_matches_clean": (
                     sample.initial_object_layout_matches_clean
                 ),
-                "initial_robot_state_sha256": (
-                    sample.initial_robot_state_sha256
+                "reset_robot_state_sha256": (
+                    sample.reset_robot_state_sha256
                 ),
-                "initial_robot_state_matches_clean": (
-                    sample.initial_robot_state_matches_clean
+                "reset_robot_state_matches_clean": (
+                    sample.reset_robot_state_matches_clean
+                ),
+                "input_robot_state_sha256": (
+                    sample.input_robot_state_sha256
+                ),
+                "input_robot_state_matches_clean": (
+                    sample.input_robot_state_matches_clean
                 ),
                 "demonstration_state_alignment": dict(
                     sample.demonstration_state_alignment
@@ -498,6 +532,56 @@ def _probe_backward_smoke(examples: Sequence[Any]) -> dict[str, Any]:
     }
 
 
+def _robot_init_input_state_check(
+    samples: Sequence[Any], *, base_state_count: int
+) -> dict[str, Any]:
+    """Summarize the independent Robot-init control used by the smoke gate."""
+
+    robot_samples = [
+        sample for sample in samples if sample.condition == "robot_init"
+    ]
+    reset_matches = sum(
+        bool(sample.reset_robot_state_matches_clean)
+        for sample in robot_samples
+    )
+    input_matches = sum(
+        bool(sample.input_robot_state_matches_clean)
+        for sample in robot_samples
+    )
+    simulator_differs = sum(
+        sample.rendered.record.simulator_state_sha256
+        != sample.rendered.record.clean_reference_state_sha256
+        for sample in robot_samples
+    )
+    sample_count = len(robot_samples)
+    passed = (
+        base_state_count > 0
+        and sample_count == base_state_count
+        and input_matches == 0
+        and simulator_differs == base_state_count
+        and all(
+            sample.initial_object_layout_matches_clean
+            for sample in robot_samples
+        )
+    )
+    return {
+        "schema_version": "thought4.phase4.robot_init_input_check.v1",
+        "sample_count": sample_count,
+        "reset_matches_clean_count": reset_matches,
+        "reset_differs_clean_count": sample_count - reset_matches,
+        "input_matches_clean_count": input_matches,
+        "input_differs_clean_count": sample_count - input_matches,
+        "simulator_state_differs_clean_count": simulator_differs,
+        "same_object_layout_count": sum(
+            bool(sample.initial_object_layout_matches_clean)
+            for sample in robot_samples
+        ),
+        "validation_time": "model_input_t_after_demonstration_prefix",
+        "reset_state_is_disclosure_only": True,
+        "passed": passed,
+    }
+
+
 def run_real_smoke(cfg: Thought4Config, *, resume: bool = False) -> dict[str, Any]:
     _require_confirmation("smoke")
     if cfg.experiment.mode != "smoke":
@@ -529,6 +613,13 @@ def run_real_smoke(cfg: Thought4Config, *, resume: bool = False) -> dict[str, An
         )
 
         samples, states = render_probe_samples(cfg, plans)
+        robot_init_check = _robot_init_input_state_check(
+            samples, base_state_count=len(plans)
+        )
+        if not robot_init_check["passed"]:
+            raise Phase4ExecutionError(
+                "real smoke Robot-init input-state check failed"
+            )
         gc.collect()
         _cohort, common_paths = _write_common_render_artifacts(
             output, cfg, plans, samples, states, resume=resume
@@ -580,7 +671,7 @@ def run_real_smoke(cfg: Thought4Config, *, resume: bool = False) -> dict[str, An
             output, cfg, examples, samples, resume=resume
         )
         smoke_payload = {
-            "schema_version": "thought4.phase4.real_smoke.v1",
+            "schema_version": "thought4.phase4.real_smoke.v2",
             "status": "passed",
             "scientific_result": False,
             "project_commit": project_commit,
@@ -594,6 +685,7 @@ def run_real_smoke(cfg: Thought4Config, *, resume: bool = False) -> dict[str, An
             "feature_record_count": len(feature_rows),
             "probe_backward": backward,
             "identity_replacement": identity_replacement,
+            "robot_init_input_state_check": robot_init_check,
             "inference_rows": inference_rows,
             "future_rgb_read": False,
             "success_outcome_read": False,

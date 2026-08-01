@@ -315,7 +315,7 @@ class PairedStateRenderer:
         clean_reference_sample_id: str,
         clean_reference_state_sha256: str,
     ) -> RenderedCondition:
-        return self._render(
+        rendered = self._render(
             robot_init_env,
             identity=identity,
             condition="robot_init",
@@ -325,6 +325,15 @@ class PairedStateRenderer:
             exact_state_pair=False,
             lighting_config={},
         )
+        if (
+            rendered.record.simulator_state_sha256
+            == clean_reference_state_sha256
+        ):
+            raise PairedRenderingError(
+                "robot_init simulator state did not differ from Clean "
+                "at model input time"
+            )
+        return rendered
 
 
 def validate_exact_state_group(records: Sequence[PairedRenderRecord]) -> None:

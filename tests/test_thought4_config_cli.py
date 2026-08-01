@@ -33,17 +33,44 @@ from fastwam_ood_eval.thought4.video_feature_extractor import (
 
 def test_frozen_configs_validate_and_formal_cohort_is_64() -> None:
     smoke = load_thought4_config(
-        "configs/thought4/phase4_geometry_action_smoke_v3.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v4.yaml"
     )
     formal = load_thought4_config(
-        "configs/thought4/phase4_geometry_action_diagnosis_v1.yaml"
+        "configs/thought4/phase4_geometry_action_diagnosis_v2.yaml"
     )
     assert smoke.experiment.mode == "smoke"
     assert smoke.backbone.video_layers == (15,)
     assert smoke.backbone.action_hooks == (
         "action_expert.blocks.15.norm1",
     )
-    assert smoke.cohort.conditions == ("clean", "camera", "lighting")
+    assert smoke.cohort.conditions == (
+        "clean",
+        "camera",
+        "lighting",
+        "robot_init",
+    )
+    historical_smoke = load_thought4_config(
+        "configs/thought4/phase4_geometry_action_smoke_v3.yaml"
+    )
+    assert historical_smoke.cohort.conditions == (
+        "clean",
+        "camera",
+        "lighting",
+    )
+    assert replace(
+        smoke,
+        experiment=historical_smoke.experiment,
+        cohort=replace(
+            smoke.cohort,
+            conditions=historical_smoke.cohort.conditions,
+        ),
+    ) == historical_smoke
+    historical_formal = load_thought4_config(
+        "configs/thought4/phase4_geometry_action_diagnosis_v1.yaml"
+    )
+    assert replace(
+        formal, experiment=historical_formal.experiment
+    ) == historical_formal
     assert formal.experiment.mode == "formal"
     assert formal.cohort.frames_per_episode == 2
     condition_ids = dict(formal.cohort.condition_task_ids)
@@ -69,7 +96,7 @@ def test_frozen_configs_validate_and_formal_cohort_is_64() -> None:
 
 def test_dry_run_is_read_only_and_does_not_import_torch(tmp_path: Path) -> None:
     cfg = load_thought4_config(
-        "configs/thought4/phase4_geometry_action_smoke_v3.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v4.yaml"
     )
     before = set(Path("outputs/thought4").rglob("*")) if Path("outputs/thought4").exists() else set()
     had_torch = "torch" in sys.modules
@@ -105,6 +132,8 @@ def test_runner_scripts_require_explicit_confirmation() -> None:
     assert expected_egl in smoke and expected_egl in formal
     assert "export MUJOCO_EGL_DEVICE_ID=0" not in smoke
     assert "export MUJOCO_EGL_DEVICE_ID=0" not in formal
+    assert "phase4_geometry_action_smoke_v4.yaml" in smoke
+    assert "phase4_geometry_action_diagnosis_v2.yaml" in formal
 
 
 def test_confirmation_requires_physical_egl_id(
@@ -169,10 +198,10 @@ def test_formal_requires_sha_valid_completed_real_smoke(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     smoke_path = Path(
-        "configs/thought4/phase4_geometry_action_smoke_v3.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v4.yaml"
     ).resolve()
     formal_path = Path(
-        "configs/thought4/phase4_geometry_action_diagnosis_v1.yaml"
+        "configs/thought4/phase4_geometry_action_diagnosis_v2.yaml"
     ).resolve()
     smoke = load_thought4_config(smoke_path)
     formal = load_thought4_config(formal_path)
@@ -192,6 +221,8 @@ def test_formal_requires_sha_valid_completed_real_smoke(
         "scientific_result": False,
         "formal_unlocked": True,
         "config_fingerprint": smoke.fingerprint,
+        "base_state_count": 2,
+        "condition_count": 8,
         "backbone_parameter_sha256_before": (
             formal.backbone.frozen_parameter_sha256
         ),
@@ -203,6 +234,18 @@ def test_formal_requires_sha_valid_completed_real_smoke(
             "module_path": "mot.video_kv_cache.15.v",
             "hook_location": "forward_action_with_video_cache argument",
         },
+        "robot_init_input_state_check": {
+            "passed": True,
+            "sample_count": 2,
+            "reset_matches_clean_count": 2,
+            "reset_differs_clean_count": 0,
+            "input_matches_clean_count": 0,
+            "input_differs_clean_count": 2,
+            "simulator_state_differs_clean_count": 2,
+            "same_object_layout_count": 2,
+            "validation_time": "model_input_t_after_demonstration_prefix",
+            "reset_state_is_disclosure_only": True,
+        },
         "future_rgb_read": False,
         "success_outcome_read": False,
     }
@@ -212,6 +255,25 @@ def test_formal_requires_sha_valid_completed_real_smoke(
         formal, smoke_config_path=smoke_path
     )
     assert gate["passed"] is True
+
+    without_robot_check = dict(result)
+    without_robot_check.pop("robot_init_input_state_check")
+    without_robot_check["result_sha256"] = sha256_canonical(
+        {
+            key: value
+            for key, value in without_robot_check.items()
+            if key != "result_sha256"
+        }
+    )
+    atomic_write_json(
+        root / "smoke_result.json",
+        without_robot_check,
+        overwrite=True,
+    )
+    with pytest.raises(
+        Phase4ExecutionError, match="robot_init_input_state_valid"
+    ):
+        _verify_formal_smoke_gate(formal, smoke_config_path=smoke_path)
 
     result["result_sha256"] = "0" * 64
     atomic_write_json(

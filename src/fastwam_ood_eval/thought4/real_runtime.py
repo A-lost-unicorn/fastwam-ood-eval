@@ -60,8 +60,10 @@ class RenderedProbeSample:
     trajectory_label_source: str
     initial_object_layout_sha256: str
     initial_object_layout_matches_clean: bool
-    initial_robot_state_sha256: str
-    initial_robot_state_matches_clean: bool
+    reset_robot_state_sha256: str
+    reset_robot_state_matches_clean: bool
+    input_robot_state_sha256: str
+    input_robot_state_matches_clean: bool
     demonstration_state_alignment: Mapping[str, Any]
 
 
@@ -443,10 +445,10 @@ def _initial_object_layout(adapter: Any) -> tuple[tuple[str, ...], Any, str]:
     return names, values, digest
 
 
-def _initial_robot_state(
+def _robot_state_snapshot(
     observation: Mapping[str, Any],
 ) -> tuple[tuple[str, ...], Any, str]:
-    """Hash robot-only state fields at reset, before the demonstration prefix."""
+    """Hash robot-only fields from an owned observation snapshot."""
 
     import numpy as np
 
@@ -460,15 +462,60 @@ def _initial_robot_state(
     )
     keys = tuple(key for key in preferred if key in observation)
     if not keys:
-        raise Thought4RuntimeError("LIBERO reset observation has no robot state")
+        raise Thought4RuntimeError("LIBERO observation has no robot state")
     arrays = [np.asarray(observation[key], dtype=np.float64).reshape(-1) for key in keys]
     if any(not np.isfinite(value).all() for value in arrays):
-        raise Thought4RuntimeError("initial robot state contains NaN/Inf")
+        raise Thought4RuntimeError("robot state contains NaN/Inf")
     values = np.concatenate(arrays)
     digest = sha256_canonical(
         {"keys": keys, "values_sha256": array_sha256(values)}
     )
     return keys, values, digest
+
+
+def _robot_states_matching_clean(
+    states: Mapping[str, tuple[tuple[str, ...], Any, str]],
+) -> dict[str, bool]:
+    """Compare robot observations without assigning perturbation semantics."""
+
+    import numpy as np
+
+    if "clean" not in states:
+        raise Thought4RuntimeError("robot-state comparison requires Clean")
+    clean_keys, clean_values, _clean_sha = states["clean"]
+    matches: dict[str, bool] = {}
+    for condition, (keys, values, _sha) in states.items():
+        if keys != clean_keys:
+            raise Thought4RuntimeError(
+                f"{condition} robot-state fields differ from Clean"
+            )
+        matches[condition] = bool(
+            np.allclose(values, clean_values, atol=1e-7, rtol=1e-7)
+        )
+    return matches
+
+
+def _validate_input_robot_states(
+    states: Mapping[str, tuple[tuple[str, ...], Any, str]],
+) -> dict[str, bool]:
+    """Validate perturbation semantics at the actual model input time t.
+
+    LIBERO's shared demonstration state can overwrite the variant qpos during
+    reset.  Robot-init therefore becomes observable only after replaying the
+    common action prefix.  Camera and Lighting remain exact-state controls.
+    """
+
+    matches = _robot_states_matching_clean(states)
+    for condition in ("clean", "camera", "lighting"):
+        if condition in matches and not matches[condition]:
+            raise Thought4RuntimeError(
+                f"{condition} robot state differs from Clean at model input time"
+            )
+    if "robot_init" in matches and matches["robot_init"]:
+        raise Thought4RuntimeError(
+            "Robot-init variant did not change the robot state at model input time"
+        )
+    return matches
 
 
 def _renderer_for_adapter(
@@ -770,8 +817,8 @@ def render_probe_samples(
                 condition: _initial_object_layout(adapter)
                 for condition, adapter in adapters.items()
             }
-            initial_robots = {
-                condition: _initial_robot_state(observations[condition])
+            reset_robots = {
+                condition: _robot_state_snapshot(observations[condition])
                 for condition in adapters
             }
             clean_layout_names, clean_layout_values, _clean_layout_sha = (
@@ -792,24 +839,11 @@ def render_probe_samples(
                     raise Thought4RuntimeError(
                         f"{condition} initial object layout differs from Clean"
                     )
-            clean_robot_keys, clean_robot_values, _clean_robot_sha = (
-                initial_robots["clean"]
+            # Disclosure only: the shared demonstration state may make the
+            # reset observations identical even for a Robot-init variant.
+            reset_robot_matches_clean = _robot_states_matching_clean(
+                reset_robots
             )
-            robot_matches_clean: dict[str, bool] = {}
-            for condition, (keys, values, _sha) in initial_robots.items():
-                matches = keys == clean_robot_keys and bool(
-                    np.allclose(
-                        values,
-                        clean_robot_values,
-                        atol=1e-7,
-                        rtol=1e-7,
-                    )
-                )
-                robot_matches_clean[condition] = matches
-            if "robot_init" in adapters and robot_matches_clean["robot_init"]:
-                raise Thought4RuntimeError(
-                    "Robot-init variant did not change the initial robot state"
-                )
             observations["clean"] = _replay_demo_prefix(
                 adapters["clean"], episode, plan.frame_index
             )
@@ -830,6 +864,13 @@ def render_probe_samples(
                 condition: deepcopy(dict(observation))
                 for condition, observation in observations.items()
             }
+            input_robots = {
+                condition: _robot_state_snapshot(observations[condition])
+                for condition in adapters
+            }
+            input_robot_matches_clean = _validate_input_robot_states(
+                input_robots
+            )
             observation_by_id = {
                 id(adapters[condition].env): observations[condition]
                 for condition in adapters
@@ -919,9 +960,13 @@ def render_probe_samples(
                         initial_object_layout_matches_clean=(
                             layout_matches_clean[condition]
                         ),
-                        initial_robot_state_sha256=initial_robots[condition][2],
-                        initial_robot_state_matches_clean=(
-                            robot_matches_clean[condition]
+                        reset_robot_state_sha256=reset_robots[condition][2],
+                        reset_robot_state_matches_clean=(
+                            reset_robot_matches_clean[condition]
+                        ),
+                        input_robot_state_sha256=input_robots[condition][2],
+                        input_robot_state_matches_clean=(
+                            input_robot_matches_clean[condition]
                         ),
                         demonstration_state_alignment=(
                             {

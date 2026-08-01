@@ -155,8 +155,8 @@ class Thought4Config:
 DEFAULTS: dict[str, Any] = {
     "schema_version": THOUGHT4_CONFIG_SCHEMA,
     "experiment": {
-        "name": "phase4_geometry_action_diagnosis_v1",
-        "output_dir": "outputs/thought4/phase4_geometry_action_diagnosis_v1",
+        "name": "phase4_geometry_action_diagnosis_v2",
+        "output_dir": "outputs/thought4/phase4_geometry_action_diagnosis_v2",
         "seed": 4407,
         "mode": "formal",
     },
@@ -463,14 +463,21 @@ def validate_config(cfg: Thought4Config) -> None:
         )
     if cfg.cohort.target_object_name != "wooden_cabinet_1":
         raise Thought4ConfigError("v1 target object must be wooden_cabinet_1")
-    expected_conditions = (
-        set(ALLOWED_CONDITIONS)
+    condition_set = set(cfg.cohort.conditions)
+    allowed_condition_sets = (
+        (set(ALLOWED_CONDITIONS),)
         if cfg.experiment.mode == "formal"
-        else {"clean", "camera", "lighting"}
+        else (
+            {"clean", "camera", "lighting"},
+            set(ALLOWED_CONDITIONS),
+        )
     )
-    if set(cfg.cohort.conditions) != expected_conditions:
+    if (
+        condition_set not in allowed_condition_sets
+        or len(condition_set) != len(cfg.cohort.conditions)
+    ):
         raise Thought4ConfigError(
-            f"{cfg.experiment.mode} conditions must be {sorted(expected_conditions)}"
+            f"{cfg.experiment.mode} conditions are not an allowed frozen panel"
         )
     counts = (
         cfg.cohort.train_base_states,

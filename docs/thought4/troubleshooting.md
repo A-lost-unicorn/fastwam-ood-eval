@@ -33,7 +33,7 @@ data pointer、shape、dtype、device、stride，并在 scope 退出时把 live 
 
 若旧 v2 已生成 `run_status.json`，不要 `--resume` 或删除旧目录。历史 v3 已完成
 并证明 inference-safe hook 链路；当前 runner 指向带 Robot-init 检查的
-`phase4_geometry_action_smoke_v5`。v2/v3/v4 工件不可拼入 v5 或正式结果。
+`phase4_geometry_action_smoke_v6`。v2/v3/v4/v5 工件不可拼入 v6 或正式结果。
 
 ## Formal 报 Robot-init initial state 没变化
 
@@ -54,10 +54,10 @@ variant 的动力学状态会在真正的模型输入时刻 `t` 分化。
 2. reset robot state 只保存 SHA/match 供披露；
 3. prefix 后要求 Clean/Camera/Lighting robot state 相同；
 4. prefix 后要求 Robot-init observation 与完整 simulator SHA 均区别于 Clean；
-5. smoke v5 必须逐样本通过，formal v3 gate 才解锁。
+5. smoke v6 必须逐样本通过，formal v4 gate 才解锁。
 
 formal v1 与 smoke v4 目录原样保留，不加 `--resume`；重新提交后依次运行
-smoke v5 和 formal v3，且两次运行之间不能改变 project commit。
+smoke v6 和 formal v4，且两次运行之间不能改变 project commit。
 
 ## Smoke 报 Camera robot state 与 Clean 不同
 
@@ -72,10 +72,29 @@ camera robot state differs from Clean at model input time
 `set_state → sim.forward → observable refresh` 生成 observation。两份数据虽然
 对应同一 state，却来自不同缓存/刷新时点，不能用来做 `1e-7` robot-state 比较。
 
-v5 在 prefix 完成并冻结 Clean state 后，对 Clean/Camera/Lighting 全部执行相同
+v5/v6 在 prefix 完成并冻结 Clean state 后，对 Clean/Camera/Lighting 全部执行相同
 observable refresh；Robot-init 从自己的 input state 执行同一刷新。真实
 render-only 回归已通过 2×4 条件，并确认 Robot-init 的 2 条 input state 都区别于
 Clean。不要放宽容差或删除 exact-state 检查，也不要 resume v4。
+
+## Resume 报 existing JSON artifact differs
+
+v5 的错误：
+
+```text
+existing JSON artifact differs during resume: .../pre_validation_result.json
+```
+
+不是 checkpoint、paired render 或配置内容变化。旧 `config_to_dict()` 保留 Python
+tuple；首次 JSON 写盘后 tuple 按标准变为 list，resume 回读时却把 list 与新生成的
+tuple 直接比较，因此相同协议也必然失败。v6 在工件生成边界统一做 canonical JSON
+round trip，并用 tuple 字段的写入—回读测试锁住该行为。
+
+v5 已有 8 条 paired render、8 条 label，并曾进入 `model_load_started`；第一次进程
+在没有结果的情况下中断，第二次才触发上述 resume bug。不得手工改
+`pre_validation_result.json`、删除 v5 或把 v5 前缀复制进 v6。提交修复后直接运行
+全新 v6。若 v6 以后被非科学性外部中断，只有在代码 commit、配置和已有工件均
+未变化时，才可对 v6 加 `--resume`。
 
 ## Hook 注册成功但 call count 为 0
 

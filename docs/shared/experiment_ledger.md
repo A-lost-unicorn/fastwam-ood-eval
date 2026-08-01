@@ -413,6 +413,7 @@
 | 2026-07-31 / Thought4 smoke v3 | v1 EGL 与 v2 inference-hook 修复后，真实冻结 Fast-WAM 技术链路需复验 | 2 base states×3 conditions、60 features、probe backward、K/V identity replacement 与 frozen SHA 全部通过；commit `fd713d5`、GPU 2、result SHA `b0e1cc80...17dbb` | 登记为 PASSED engineering smoke；不训练方法、不进入论文结果 | 否；无 Robot-init、success、OOD outcome 或方法分类，不能代替 formal |
 | 2026-07-31 / Thought4 formal v1 | 第一个 Robot-init reset 后报 initial robot state 未变化 | shared demonstration `set_init_state` 暂时覆盖 variant 可观测 qpos；reset 差 0，但 prefix 到 input `t` 后差 0.08357；判定时机错误 | 保留 v1 error 工件；v4 smoke 加 Robot-init，v2 formal 改为 input-time observation+sim-state 硬检查，科学字段不变 | 否；模型未加载，0 paired render/feature/probe/intervention，无科学结果 |
 | 2026-08-01 / Thought4 smoke v4 | 第一条 Camera input-state check 报 robot state 与 Clean 不同 | flat state 相同，但 Clean 使用 step-return cached observation，Camera/Lighting 使用 regenerated observation，采样路径不一致 | 保留 v4 error 工件；v5 统一 exact-state observable refresh，2×4 render-only 回归通过；formal 转入 v3 新身份 | 否；38 秒 pre-model 停止，0 paired manifest/feature/probe/intervention，无科学结果 |
+| 2026-08-01 / Thought4 smoke v5 与 resume 审计 | 首次运行完成 8 paired render/label 并进入 model load 后外部中断；同 commit resume 在 static prevalidation 报 existing JSON artifact differs | `dataclasses.asdict` 保留 tuple，JSON 回读变为 list，旧校验直接比较两种表示，导致相同配置也必然误拒绝 | 原样保留 v5；在工件边界 canonical JSON 规范化并增加 round-trip 回归；相同科学协议转入全新 smoke v6/formal v4 identity | 否；v5 无 feature/probe/intervention/smoke result，不能登记 PASS 或产生科学结论 |
 
 冷启动观测：2-step smoke 中 Wan 组件装载约 `336–433 s`；20-step OOD
 三进程观测到约 `604.37 s`，Clean 单进程为 `521.74 s`。这不是单次 future

@@ -9,6 +9,7 @@ import pytest
 
 from fastwam_ood_eval.thought4.config import (
     Thought4ConfigError,
+    config_to_dict,
     load_thought4_config,
     validate_config,
 )
@@ -16,6 +17,7 @@ from fastwam_ood_eval.thought4.io_utils import (
     Thought4ArtifactError,
     atomic_write_json,
     ensure_run_mutable,
+    write_or_verify_json,
 )
 from fastwam_ood_eval.thought4.phase4 import (
     Phase4ExecutionError,
@@ -33,10 +35,10 @@ from fastwam_ood_eval.thought4.video_feature_extractor import (
 
 def test_frozen_configs_validate_and_formal_cohort_is_64() -> None:
     smoke = load_thought4_config(
-        "configs/thought4/phase4_geometry_action_smoke_v5.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v6.yaml"
     )
     formal = load_thought4_config(
-        "configs/thought4/phase4_geometry_action_diagnosis_v3.yaml"
+        "configs/thought4/phase4_geometry_action_diagnosis_v4.yaml"
     )
     assert smoke.experiment.mode == "smoke"
     assert smoke.backbone.video_layers == (15,)
@@ -50,7 +52,7 @@ def test_frozen_configs_validate_and_formal_cohort_is_64() -> None:
         "robot_init",
     )
     failed_smoke = load_thought4_config(
-        "configs/thought4/phase4_geometry_action_smoke_v4.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v5.yaml"
     )
     assert replace(
         smoke, experiment=failed_smoke.experiment
@@ -72,7 +74,7 @@ def test_frozen_configs_validate_and_formal_cohort_is_64() -> None:
         ),
     ) == historical_smoke
     failed_formal = load_thought4_config(
-        "configs/thought4/phase4_geometry_action_diagnosis_v2.yaml"
+        "configs/thought4/phase4_geometry_action_diagnosis_v3.yaml"
     )
     assert replace(
         formal, experiment=failed_formal.experiment
@@ -108,7 +110,7 @@ def test_frozen_configs_validate_and_formal_cohort_is_64() -> None:
 
 def test_dry_run_is_read_only_and_does_not_import_torch(tmp_path: Path) -> None:
     cfg = load_thought4_config(
-        "configs/thought4/phase4_geometry_action_smoke_v5.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v6.yaml"
     )
     before = set(Path("outputs/thought4").rglob("*")) if Path("outputs/thought4").exists() else set()
     had_torch = "torch" in sys.modules
@@ -119,6 +121,27 @@ def test_dry_run_is_read_only_and_does_not_import_torch(tmp_path: Path) -> None:
     assert payload["would_write"] is False
     assert before == after
     assert ("torch" in sys.modules) == had_torch
+
+
+def test_config_artifact_is_json_roundtrip_stable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = load_thought4_config(
+        "configs/thought4/phase4_geometry_action_smoke_v6.yaml"
+    )
+    payload = config_to_dict(cfg)
+    assert json.loads(json.dumps(payload)) == payload
+    assert payload["cohort"]["conditions"] == [
+        "clean",
+        "camera",
+        "lighting",
+        "robot_init",
+    ]
+    assert payload["backbone"]["video_layers"] == [15]
+    monkeypatch.chdir(tmp_path)
+    path = Path("outputs/thought4/config_roundtrip/config.json")
+    atomic_write_json(path, payload)
+    assert write_or_verify_json(path, payload) == path
 
 
 def test_completed_outputs_are_immutable_and_no_overwrite(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -144,8 +167,8 @@ def test_runner_scripts_require_explicit_confirmation() -> None:
     assert expected_egl in smoke and expected_egl in formal
     assert "export MUJOCO_EGL_DEVICE_ID=0" not in smoke
     assert "export MUJOCO_EGL_DEVICE_ID=0" not in formal
-    assert "phase4_geometry_action_smoke_v5.yaml" in smoke
-    assert "phase4_geometry_action_diagnosis_v3.yaml" in formal
+    assert "phase4_geometry_action_smoke_v6.yaml" in smoke
+    assert "phase4_geometry_action_diagnosis_v4.yaml" in formal
 
 
 def test_confirmation_requires_physical_egl_id(
@@ -210,10 +233,10 @@ def test_formal_requires_sha_valid_completed_real_smoke(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     smoke_path = Path(
-        "configs/thought4/phase4_geometry_action_smoke_v5.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v6.yaml"
     ).resolve()
     formal_path = Path(
-        "configs/thought4/phase4_geometry_action_diagnosis_v3.yaml"
+        "configs/thought4/phase4_geometry_action_diagnosis_v4.yaml"
     ).resolve()
     smoke = load_thought4_config(smoke_path)
     formal = load_thought4_config(formal_path)

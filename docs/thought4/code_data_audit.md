@@ -1,6 +1,6 @@
 # Thought4 Phase 4：Geometry–Action Gap 代码与数据审计
 
-状态：`AUDIT COMPLETE / IMPLEMENTED / SMOKE V3 PASSED / FORMAL V1 + SMOKE V4 ENGINEERING FAILED / V5+V3 NOT RUN`
+状态：`AUDIT COMPLETE / IMPLEMENTED / SMOKE V3 PASSED / FORMAL V1 + SMOKE V4 ENGINEERING FAILED / SMOKE V5 INTERRUPTED+RESUME BUG / V6+FORMAL V4 NOT RUN`
 
 审计日期：2026-07-31
 
@@ -300,12 +300,14 @@ src/fastwam_ood_eval/thought4/
 ```text
 configs/thought4/phase4_geometry_action_diagnosis_v1.yaml # formal v1 失败身份
 configs/thought4/phase4_geometry_action_diagnosis_v2.yaml # 未运行，旧代码身份
-configs/thought4/phase4_geometry_action_diagnosis_v3.yaml # 当前 runner
+configs/thought4/phase4_geometry_action_diagnosis_v3.yaml # 未运行，resume 修复前身份
+configs/thought4/phase4_geometry_action_diagnosis_v4.yaml # 当前 runner
 configs/thought4/phase4_geometry_action_smoke.yaml       # v1 失败身份，保留
 configs/thought4/phase4_geometry_action_smoke_v2.yaml    # v2 失败身份，保留
 configs/thought4/phase4_geometry_action_smoke_v3.yaml    # 已通过，无 Robot-init
 configs/thought4/phase4_geometry_action_smoke_v4.yaml    # observation-path 失败
-configs/thought4/phase4_geometry_action_smoke_v5.yaml    # 当前 runner
+configs/thought4/phase4_geometry_action_smoke_v5.yaml    # 中断后暴露 resume 序列化缺陷
+configs/thought4/phase4_geometry_action_smoke_v6.yaml    # 当前 runner
 scripts/run_thought4_phase4_smoke.sh
 scripts/run_thought4_phase4_diagnosis.sh
 ```
@@ -325,16 +327,18 @@ held-out grouped bootstrap 只建立在 3 个 episode 上。主 CLI 只
 | 21–24：参数 SHA、finite、不可覆盖、dry-run 零加载 | hooks/config tests、smoke/formal hard checks |
 | 25：Thought1/2/3 不回归 | 全项目 `434 passed` |
 
-v5/v3 修复后的专项结果为 `40 passed`，全项目为 `437 passed`（5 条 NVML
-环境 warning）。上述真实
+v6/v4 resume 修复后的专项结果为 `41 passed`，全项目为 `438 passed`（5 条
+NVML 环境 warning）。上述真实
 v1 smoke 在 robosuite import 时因 EGL 物理编号错误停止，模型未加载、环境未
 reset。v2 完成 6 条 paired render/label，随后在首次 K/V feature capture 因
 inference tensor 没有 `_version` 而停止；未生成 feature/probe/intervention 或
 科学结果。该 hook 修复后的 v3 smoke 已通过，但没有 Robot-init。formal v1 随后
 暴露 reset-time 判定错误并在模型加载前停止；v4 将硬检查移到 input time 后又
 暴露 exact-state observation 采样路径不一致。v5 已统一输入快照路径并通过真实
-2×4 render-only 回归；smoke v5/formal v3 均为 **NOT RUN**。任何失败工件或旧
-smoke 都不能代替新 formal gate。
+2×4 render-only 回归；真实 v5 又完成 8 条 paired render/label 后在模型加载阶段
+外部中断，resume 因 tuple/list JSON 表示差异被误拒绝。v6 在工件边界 canonicalize
+配置并增加回归；smoke v6/formal v4 均为 **NOT RUN**。任何失败工件或旧 smoke
+都不能代替新 formal gate。
 
 最短执行顺序：
 

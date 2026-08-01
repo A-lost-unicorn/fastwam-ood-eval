@@ -8,7 +8,7 @@
 
 | 字段 | 值 |
 | --- | --- |
-| project commit | smoke v1 `c629475bb601...`；v2 `67ea98347ce1...`；v3 `fd713d580303...`；v4 `fb49f57...`；v5 待提交/运行 |
+| project commit | smoke v1 `c629475bb601...`；v2 `67ea98347ce1...`；v3 `fd713d580303...`；v4 `fb49f57...`；v5 `833071f9e3f2...`；v6 由真实 run pre-validation 冻结（待运行） |
 | Fast-WAM commit | `45d8e145...` |
 | checkpoint SHA | `1000437c...` |
 | smoke v1 config fingerprint | `caef470ae35e0d1dafdc8f07ba4b8a088d6df26acebce787f900bdf7dda9caba` |
@@ -20,11 +20,15 @@
 | smoke v4 planned cohort SHA | `5aea296c67dafe5118baec380d057d7a0e485a34f2930283de439d58ef7d2096` |
 | smoke v5 config fingerprint | `fb895d2e3edccc5c966437324fd5a97433b1e0ed2c39a2eb56cb21606ea0be08` |
 | smoke v5 planned cohort SHA | `08dfe330e2d91e0e7e436f0a5eb3325f5cdb8787742b0799eae19e7837dabb75` |
+| smoke v6 config fingerprint | `90d1290e9ec9a644b968e4965deab53052c784c23c717ce1b632cfd7435c2ce3` |
+| smoke v6 planned cohort SHA | `84ec20b2f03d59ed1d2c8d2b76f78be456ce408c87a8e2cbdc7f05f3435d9206` |
 | formal v1 config / cohort SHA | `62951df5...ae44` / `340db6c1...708`（工程失败身份） |
 | formal v2 config / cohort SHA | `cc608953...6f21` / `e3a6363f...5ca`（未运行，被新代码身份取代） |
 | formal v3 config fingerprint | `44639a0229c7899dbc754ed8c2b743fd649f35ce5d729ef525ab99321575a27b` |
 | formal v3 planned cohort SHA | `b9268f8ce0e63516e3742638acc68f6e528615743a54b4b8f7ed541981c6e210` |
-| physical GPU | smoke v1/v2：1；smoke v3/formal v1/smoke v4：2；v5/v3 待运行 |
+| formal v4 config fingerprint | `7783f2371fd2c1e781dc673817c4bcbbc2f85a5123e5dc67df29db768102efd1` |
+| formal v4 planned cohort SHA | `640af37c911e87f8ae950d648e98cceb20c5c178b50e547864924cd05771a683` |
+| physical GPU | smoke v1/v2：1；smoke v3/formal v1/smoke v4/v5：2；v6/formal v4 待运行 |
 | smoke v3 start / finish | 2026-07-31 11:16:46 / 11:27:19 UTC |
 | smoke v3 backbone SHA before / after | `ac0dd59...b4f8` / `ac0dd59...b4f8` |
 | future RGB read | false |
@@ -34,13 +38,13 @@
 
 | 检查 | 结果 |
 | --- | --- |
-| Thought4 CPU/mock | 40 passed |
-| Thought1–4 全项目回归 | 437 passed；5 条 NVML 环境 warning 不影响测试结论 |
+| Thought4 CPU/mock | 41 passed |
+| Thought1–4 全项目回归 | 438 passed；5 条 NVML 环境 warning 不影响测试结论 |
 | 文档校验 | 84 个 Markdown；本地链接全部有效；`docs/` 根目录整洁 |
 | smoke dry-run | PASS；Torch/model/simulator/write 均为 false |
 | formal dry-run | PASS；Torch/model/simulator/write 均为 false |
-| 真实 GPU smoke | v1/v2 **ENGINEERING FAILED**；v3 **PASSED / NON-SCIENTIFIC**；v4 **ENGINEERING FAILED（pre-model）**；v5 **NOT RUN** |
-| 正式 diagnosis | v1 **ENGINEERING FAILED（pre-model）**；v2 未运行且被取代；v3 **NOT RUN** |
+| 真实 GPU smoke | v1/v2 **ENGINEERING FAILED**；v3 **PASSED / NON-SCIENTIFIC**；v4 **ENGINEERING FAILED（pre-model）**；v5 **INTERRUPTED / RESUME BUG（无科学结果）**；v6 **NOT RUN** |
+| 正式 diagnosis | v1 **ENGINEERING FAILED（pre-model）**；v2/v3 未运行且被取代；v4 **NOT RUN** |
 
 ## Smoke v1 失败记录（非科学结果）
 
@@ -100,7 +104,7 @@ namespace。v3 不改变任何科学协议字段。
 | result SHA | `b0e1cc80e4620deed389435463459cbcce6a8a804aa58e7f44af7a5212e17dbb` |
 
 该结果证明真实 hook、feature、probe backward 和 identity replacement 链路可运行；
-它没有 Robot-init condition，不是 formal 数据，也不能解锁当前 formal v3。
+它没有 Robot-init condition，不是 formal 数据，也不能解锁当前 formal v4。
 
 ## Formal v1 失败记录与第一版 input-time 修复（非科学结果）
 
@@ -124,7 +128,7 @@ v4/v2 只把 Robot-init 生效检查移到模型输入时刻并双写 reset/inpu
 layout 仍在 prefix 前与 Clean 配对，Camera/Lighting 仍是 exact-state，正式科学
 协议字段不变。formal v2 未运行；smoke v4 的后续工程失败单独登记如下。
 
-## Smoke v4 失败记录与 v5 修复（非科学结果）
+## Smoke v4 失败、v5 中断与 v6 修复（非科学结果）
 
 | 字段 | 值 |
 | --- | --- |
@@ -143,8 +147,18 @@ layout 仍在 prefix 前与 Clean 配对，Camera/Lighting 仍是 exact-state，
 
 修复后的真实 render-only 复验完成 2 base states × 4 conditions 共 8 条样本：
 Robot-init reset-match 为 2/2，input-match 为 0/2，input simulator-state
-differs 为 2/2；没有加载 Fast-WAM。smoke v5 与 formal v3 保持相同科学参数，
-使用全新 namespace，当前均为 **NOT RUN**。
+differs 为 2/2；没有加载 Fast-WAM。
+
+v5 于 2026-08-01 06:56:51 UTC 启动，完成 2×4 paired render 和 8 条 label，
+06:57:51 进入 `model_load_started`，随后外部中断，没有 feature、probe、
+intervention 或 `smoke_result.json`。08:59:31 对 v5 resume 时，static
+pre-validation 因内存 tuple 与 JSON 回读 list 直接比较而错误拒绝相同工件，最终
+状态为 `error`。该 attempt 只提供前半链路工程记录，没有科学结果。
+
+v6 把配置工件规范化为 canonical JSON 数据类型并增加 write/read/resume 回归。
+v5→v6 除 experiment name/output namespace 外协议完全相同；formal v3→v4 同理。
+因为修复改变 project commit，v5 不得继续 resume 或手工修补。smoke v6 与 formal
+v4 当前均为 **NOT RUN**。
 
 ## Table A：Video geometry readability
 

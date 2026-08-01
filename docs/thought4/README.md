@@ -10,11 +10,11 @@ probe 结果写成 OOD improvement。
 | --- | --- |
 | 10 项代码/数据审计 | COMPLETE |
 | hooks、labels、probe、intervention、decision | IMPLEMENTED |
-| Thought4 CPU/mock 单测 | COMPLETE（40 passed） |
-| 全项目回归 | COMPLETE（437 passed；5 条 NVML 环境 warning） |
+| Thought4 CPU/mock 单测 | COMPLETE（41 passed） |
+| 全项目回归 | COMPLETE（438 passed；5 条 NVML 环境 warning） |
 | smoke/formal dry-run | COMPLETE（严格零写入） |
-| 真实单卡 smoke | v1/v2 工程失败；v3 **PASSED（未覆盖 Robot-init）**；v4 **ENGINEERING FAILED（observation path）**；v5 **NOT RUN** |
-| 正式 64-state diagnosis | v1 工程失败；v2 未运行且由新代码身份取代；v3 **NOT RUN** |
+| 真实单卡 smoke | v1/v2 工程失败；v3 **PASSED（未覆盖 Robot-init）**；v4 **ENGINEERING FAILED（observation path）**；v5 **INTERRUPTED / RESUME BUG（无科学结果）**；v6 **NOT RUN** |
+| 正式 64-state diagnosis | v1 工程失败；v2/v3 未运行且由新代码身份取代；v4 **NOT RUN** |
 | Geo-REPA / SE(3)-Align | **NOT IMPLEMENTED（按协议锁定）** |
 
 ## 文档入口

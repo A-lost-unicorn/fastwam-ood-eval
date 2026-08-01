@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -10,7 +11,7 @@ from typing import Any, Mapping, Sequence
 import yaml
 
 from fastwam_ood_eval.thought4 import ALLOWED_CONDITIONS, THOUGHT4_CONFIG_SCHEMA
-from fastwam_ood_eval.thought4.schemas import sha256_canonical
+from fastwam_ood_eval.thought4.schemas import canonical_json, sha256_canonical
 
 
 class Thought4ConfigError(ValueError):
@@ -155,8 +156,8 @@ class Thought4Config:
 DEFAULTS: dict[str, Any] = {
     "schema_version": THOUGHT4_CONFIG_SCHEMA,
     "experiment": {
-        "name": "phase4_geometry_action_diagnosis_v3",
-        "output_dir": "outputs/thought4/phase4_geometry_action_diagnosis_v3",
+        "name": "phase4_geometry_action_diagnosis_v4",
+        "output_dir": "outputs/thought4/phase4_geometry_action_diagnosis_v4",
         "seed": 4407,
         "mode": "formal",
     },
@@ -578,4 +579,6 @@ def config_to_dict(cfg: Thought4Config) -> dict[str, Any]:
         key: list(values) for key, values in cfg.cohort.condition_task_ids
     }
     payload["config_fingerprint"] = cfg.fingerprint
-    return payload
+    # Keep artifact comparisons stable after a JSON write/read round trip:
+    # dataclasses.asdict() preserves tuples, while JSON decodes them as lists.
+    return dict(json.loads(canonical_json(payload)))

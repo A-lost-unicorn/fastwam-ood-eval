@@ -26,6 +26,7 @@ from fastwam_ood_eval.thought4.real_runtime import (
     DemonstrationEpisode,
     Thought4RuntimeError,
     _demonstration_state_alignment,
+    _regenerate_input_observations,
     _robot_state_snapshot,
     _robot_states_matching_clean,
     _validate_input_robot_states,
@@ -248,6 +249,50 @@ class _FakeStateEnv:
 
     def get_sim_state(self) -> np.ndarray:
         return self.state.copy()
+
+
+class _FakeStateAdapter:
+    def __init__(self, name: str, state: np.ndarray) -> None:
+        self.name = name
+        self.env = _FakeStateEnv(state)
+
+
+def test_all_input_observations_use_the_same_refresh_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clean_state = np.asarray([1.0, 2.0], dtype=np.float64)
+    adapters = {
+        condition: _FakeStateAdapter(
+            condition,
+            (
+                np.asarray([9.0, 8.0], dtype=np.float64)
+                if condition == "robot_init"
+                else np.asarray([-1.0, -1.0], dtype=np.float64)
+            ),
+        )
+        for condition in ("clean", "camera", "lighting", "robot_init")
+    }
+    calls: list[tuple[str, np.ndarray]] = []
+
+    def fake_observation_for_state(
+        adapter: _FakeStateAdapter, state: np.ndarray
+    ) -> dict[str, np.ndarray]:
+        value = np.asarray(state).copy()
+        calls.append((adapter.name, value))
+        return {"state": value}
+
+    monkeypatch.setattr(
+        "fastwam_ood_eval.thought4.real_runtime._observation_for_state",
+        fake_observation_for_state,
+    )
+    observations = _regenerate_input_observations(adapters, clean_state)
+    assert set(observations) == set(adapters)
+    by_condition = {condition: state for condition, state in calls}
+    for condition in ("clean", "camera", "lighting"):
+        assert np.array_equal(by_condition[condition], clean_state)
+    assert np.array_equal(
+        by_condition["robot_init"], np.asarray([9.0, 8.0])
+    )
 
 
 def test_robot_init_render_requires_input_simulator_state_difference() -> None:

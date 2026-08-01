@@ -33,10 +33,10 @@ from fastwam_ood_eval.thought4.video_feature_extractor import (
 
 def test_frozen_configs_validate_and_formal_cohort_is_64() -> None:
     smoke = load_thought4_config(
-        "configs/thought4/phase4_geometry_action_smoke_v4.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v5.yaml"
     )
     formal = load_thought4_config(
-        "configs/thought4/phase4_geometry_action_diagnosis_v2.yaml"
+        "configs/thought4/phase4_geometry_action_diagnosis_v3.yaml"
     )
     assert smoke.experiment.mode == "smoke"
     assert smoke.backbone.video_layers == (15,)
@@ -49,6 +49,12 @@ def test_frozen_configs_validate_and_formal_cohort_is_64() -> None:
         "lighting",
         "robot_init",
     )
+    failed_smoke = load_thought4_config(
+        "configs/thought4/phase4_geometry_action_smoke_v4.yaml"
+    )
+    assert replace(
+        smoke, experiment=failed_smoke.experiment
+    ) == failed_smoke
     historical_smoke = load_thought4_config(
         "configs/thought4/phase4_geometry_action_smoke_v3.yaml"
     )
@@ -65,6 +71,12 @@ def test_frozen_configs_validate_and_formal_cohort_is_64() -> None:
             conditions=historical_smoke.cohort.conditions,
         ),
     ) == historical_smoke
+    failed_formal = load_thought4_config(
+        "configs/thought4/phase4_geometry_action_diagnosis_v2.yaml"
+    )
+    assert replace(
+        formal, experiment=failed_formal.experiment
+    ) == failed_formal
     historical_formal = load_thought4_config(
         "configs/thought4/phase4_geometry_action_diagnosis_v1.yaml"
     )
@@ -96,7 +108,7 @@ def test_frozen_configs_validate_and_formal_cohort_is_64() -> None:
 
 def test_dry_run_is_read_only_and_does_not_import_torch(tmp_path: Path) -> None:
     cfg = load_thought4_config(
-        "configs/thought4/phase4_geometry_action_smoke_v4.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v5.yaml"
     )
     before = set(Path("outputs/thought4").rglob("*")) if Path("outputs/thought4").exists() else set()
     had_torch = "torch" in sys.modules
@@ -132,8 +144,8 @@ def test_runner_scripts_require_explicit_confirmation() -> None:
     assert expected_egl in smoke and expected_egl in formal
     assert "export MUJOCO_EGL_DEVICE_ID=0" not in smoke
     assert "export MUJOCO_EGL_DEVICE_ID=0" not in formal
-    assert "phase4_geometry_action_smoke_v4.yaml" in smoke
-    assert "phase4_geometry_action_diagnosis_v2.yaml" in formal
+    assert "phase4_geometry_action_smoke_v5.yaml" in smoke
+    assert "phase4_geometry_action_diagnosis_v3.yaml" in formal
 
 
 def test_confirmation_requires_physical_egl_id(
@@ -198,10 +210,10 @@ def test_formal_requires_sha_valid_completed_real_smoke(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     smoke_path = Path(
-        "configs/thought4/phase4_geometry_action_smoke_v4.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v5.yaml"
     ).resolve()
     formal_path = Path(
-        "configs/thought4/phase4_geometry_action_diagnosis_v2.yaml"
+        "configs/thought4/phase4_geometry_action_diagnosis_v3.yaml"
     ).resolve()
     smoke = load_thought4_config(smoke_path)
     formal = load_thought4_config(formal_path)

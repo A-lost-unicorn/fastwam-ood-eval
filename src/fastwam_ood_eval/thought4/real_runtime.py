@@ -287,6 +287,24 @@ def _observation_for_state(adapter: Any, state: Any) -> Mapping[str, Any]:
     return observation
 
 
+def _regenerate_input_observations(
+    adapters: Mapping[str, Any], clean_state: Any
+) -> dict[str, Mapping[str, Any]]:
+    """Create all model-input snapshots through one observable refresh path."""
+
+    refreshed = {
+        condition: _observation_for_state(adapters[condition], clean_state)
+        for condition in ("clean", "camera", "lighting")
+        if condition in adapters
+    }
+    if "robot_init" in adapters:
+        robot_input_state = adapters["robot_init"].env.get_sim_state()
+        refreshed["robot_init"] = _observation_for_state(
+            adapters["robot_init"], robot_input_state
+        )
+    return refreshed
+
+
 def _demonstration_state_alignment(
     observation: Mapping[str, Any],
     episode: DemonstrationEpisode,
@@ -505,11 +523,19 @@ def _validate_input_robot_states(
     common action prefix.  Camera and Lighting remain exact-state controls.
     """
 
+    import numpy as np
+
     matches = _robot_states_matching_clean(states)
+    _clean_keys, clean_values, _clean_sha = states["clean"]
     for condition in ("clean", "camera", "lighting"):
         if condition in matches and not matches[condition]:
+            _keys, values, _sha = states[condition]
+            max_abs_difference = float(
+                np.max(np.abs(values - clean_values))
+            )
             raise Thought4RuntimeError(
-                f"{condition} robot state differs from Clean at model input time"
+                f"{condition} robot state differs from Clean at model input "
+                f"time (max_abs_difference={max_abs_difference:.9g})"
             )
     if "robot_init" in matches and matches["robot_init"]:
         raise Thought4RuntimeError(
@@ -847,19 +873,22 @@ def render_probe_samples(
             observations["clean"] = _replay_demo_prefix(
                 adapters["clean"], episode, plan.frame_index
             )
-            clean_alignment = _demonstration_state_alignment(
-                observations["clean"], episode, plan.frame_index
-            )
             if "robot_init" in adapters:
                 observations["robot_init"] = _replay_demo_prefix(
                     adapters["robot_init"], episode, plan.frame_index
                 )
             clean_state = adapters["clean"].env.get_sim_state()
             states[plan.identity.sample_id] = clean_state.copy()
-            for condition in ("camera", "lighting"):
-                observations[condition] = _observation_for_state(
-                    adapters[condition], clean_state
-                )
+            # Regenerate every exact-state observation through the same path.
+            # env.step() can return a cached snapshot, whereas state restoration
+            # explicitly refreshes observables; comparing those two paths
+            # creates a false Camera/Lighting mismatch despite equal sim state.
+            observations.update(
+                _regenerate_input_observations(adapters, clean_state)
+            )
+            clean_alignment = _demonstration_state_alignment(
+                observations["clean"], episode, plan.frame_index
+            )
             observations = {
                 condition: deepcopy(dict(observation))
                 for condition, observation in observations.items()

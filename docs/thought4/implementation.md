@@ -119,4 +119,6 @@ trajectory，随后恢复 `t` 状态。未来 observation 的 RGB 字段不被�
 robot reset state 只披露、不作为扰动是否生效的判据。执行相同 prefix 后，在实际
 模型输入时刻 `t` 核对 Robot-init robot state 和完整 simulator state 均区别于
 Clean；Clean/Camera/Lighting 仍必须相同。reset/input 两套 SHA 和 match 标志均
-落入 label manifest。
+落入 label manifest。Clean/Camera/Lighting 的 input observation 必须全部从冻结
+Clean flat state 经相同 `set_state → forward → observable refresh` 路径生成；
+不能把 `env.step()` 的缓存 observation 与刷新后的 observation 直接比较。

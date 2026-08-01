@@ -8,28 +8,28 @@
 ```bash
 .conda/envs/fastwam-ood/bin/python -m fastwam_ood_eval.cli \
   thought4-phase4-smoke \
-  --config configs/thought4/phase4_geometry_action_smoke_v4.yaml \
+  --config configs/thought4/phase4_geometry_action_smoke_v5.yaml \
   --dry-run
 
 .conda/envs/fastwam-ood/bin/python -m fastwam_ood_eval.cli \
   thought4-phase4-diagnosis \
-  --config configs/thought4/phase4_geometry_action_diagnosis_v2.yaml \
+  --config configs/thought4/phase4_geometry_action_diagnosis_v3.yaml \
   --dry-run
 ```
 
 判据：`would_load_torch/model/simulator/write=false`。当前冻结输出为：
 
-- smoke v4 fingerprint `204ced0d56e038bbbe30fe14119ab48daa920cf52ea81af39f9dbc86c799a7bc`，
+- smoke v5 fingerprint `fb895d2e3edccc5c966437324fd5a97433b1e0ed2c39a2eb56cb21606ea0be08`，
   planned cohort SHA
-  `5aea296c67dafe5118baec380d057d7a0e485a34f2930283de439d58ef7d2096`；
+  `08dfe330e2d91e0e7e436f0a5eb3325f5cdb8787742b0799eae19e7837dabb75`；
   plan 候选 2/2/2，但技术执行只取 2 个 base state；每个 state 四条件；
-- formal v2 fingerprint
-  `cc60895325cbe5f3c7d7870c926fe82893f0c0cb5fa555d4e9f72c61fef46f21`，
+- formal v3 fingerprint
+  `44639a0229c7899dbc754ed8c2b743fd649f35ce5d729ef525ab99321575a27b`，
   planned cohort SHA
-  `e3a6363f100910b63035821101cf8e153a753e47c1196198042ce47097b275ca`；
+  `b9268f8ce0e63516e3742638acc68f6e528615743a54b4b8f7ed541981c6e210`；
   40/12/12 共 64 个 base state、20/6/6 个 episode，每个 state 四条件。
 
-## 2. 真实 smoke（v3 已通过；带 Robot-init 的 v4 当前 NOT RUN）
+## 2. 真实 smoke（v3 已通过；v4 工程失败；v5 当前 NOT RUN）
 
 2026-07-31 的 v1 attempt 在 robosuite import 阶段停止：runner 暴露物理 GPU 1，
 却将 `MUJOCO_EGL_DEVICE_ID` 设为逻辑 0。模型未加载、环境未 reset、没有 feature、
@@ -65,11 +65,24 @@ v4 把硬检查移到模型输入时刻 `t`，并把 Robot-init 加入 smoke。f
 namespace 和更正后的验证语义。旧 smoke v3 因缺少 Robot-init 证据，不能解锁
 formal v2。
 
+2026-08-01 的 v4 attempt 在 commit `fb49f57`、物理 GPU 2 上运行
+38 秒后，于第一条 input-state 检查停止：
+`camera robot state differs from Clean at model input time`。flat simulator
+state 已正确配对；问题是 Clean 使用 `env.step()` 返回的缓存 observation，而
+Camera/Lighting 使用 state restoration 后强制刷新的 observation，比较了两个
+不同采样路径。模型没有加载，也没有 paired manifest、feature、probe 或科学结果。
+
+v5 对 Clean/Camera/Lighting 全部从同一 Clean flat state 走相同 observable refresh
+路径；Robot-init 也从自己的 input state 刷新后再记录。真实 render-only 复验已
+覆盖 2 base states × 4 conditions：8/8 渲染完成；Robot-init 2/2 reset 与 Clean
+匹配、2/2 input 与 Clean 不同、2/2 simulator SHA 不同。该复验不加载 Fast-WAM，
+只证明修复后的 paired rendering 前半链路。
+
 真实运行只接受已提交且 `git status --porcelain` 为空的项目快照；当前实现应先由
 用户审阅并提交。pre-validation 会把 project commit/clean status 与三套上游
 commit 一起写入工件。runner 在创建日志前也会拒绝 dirty worktree 和已经
 `complete` 的输出，避免日志破坏 completed run 的不可变性。
-smoke v4 与 formal v2 必须来自同一个 project commit：先提交修复，再跑 smoke；
+smoke v5 与 formal v3 必须来自同一个 project commit：先提交修复，再跑 smoke；
 smoke 通过后不要改代码或文档，直接启动 formal。
 
 先确认卡空闲：
@@ -86,7 +99,7 @@ THOUGHT4_GPU_ID=2 \
 bash scripts/run_thought4_phase4_smoke.sh
 ```
 
-v3 实测为 10m33s，其中模型加载 401.7s；v4 只多 2 条 Robot-init inference，
+v3 实测为 10m33s，其中模型加载 401.7s；v5 只多 2 条 Robot-init inference，
 预计约 11–15 分钟。该估计不是论文 latency 结果。
 
 runner 内部映射必须是：
@@ -111,9 +124,9 @@ action-consumed K/V 中选择干预层。
 查看：
 
 ```bash
-tail -f outputs/thought4/phase4_geometry_action_smoke_v4/logs/run.log
-cat outputs/thought4/phase4_geometry_action_smoke_v4/run_status.json
-cat outputs/thought4/phase4_geometry_action_smoke_v4/smoke_result.json
+tail -f outputs/thought4/phase4_geometry_action_smoke_v5/logs/run.log
+cat outputs/thought4/phase4_geometry_action_smoke_v5/run_status.json
+cat outputs/thought4/phase4_geometry_action_smoke_v5/smoke_result.json
 ```
 
 只有 `status=complete`、`formal_unlocked=true`、Robot-init 的
@@ -124,13 +137,13 @@ Robot-init 输入状态、identity replacement 和前后主干 SHA；只设置 f
 失败后先保留目录排查；`--resume` 只接受未完成且 checksum 可解释的工件，绝不
 覆盖 completed 输出。
 
-v1/v2/v3/v4 都使用独立 namespace；本次不能给旧输出加 `--resume`。以后只有
+v1/v2/v3/v4/v5 都使用独立 namespace；本次不能给旧输出加 `--resume`。以后只有
 代码、配置、pre-validation identity 均未变化且日志明确表明是
 非科学性的进程中断，才可在同一命令末尾加 `--resume`。已有
 feature shard 和 `probe_inputs.pt` 必须同时通过 sidecar SHA、逐 tensor SHA、
 metadata 与本次冻结提取一致，才会只读复用；任何差异均 fail closed。
 
-## 3. 正式 diagnosis（v1 工程失败；v2 当前 NOT RUN）
+## 3. 正式 diagnosis（v1 工程失败；v2 未运行；v3 当前 NOT RUN）
 
 smoke 通过并人工检查 manifest 后：
 
@@ -150,7 +163,7 @@ bash scripts/run_thought4_phase4_diagnosis.sh
 主要结果：
 
 ```text
-outputs/thought4/phase4_geometry_action_diagnosis_v2/
+outputs/thought4/phase4_geometry_action_diagnosis_v3/
   cohort_manifest.json
   paired_render_manifest.jsonl
   label_manifest.jsonl

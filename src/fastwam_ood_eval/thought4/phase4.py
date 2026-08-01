@@ -123,7 +123,7 @@ def _verify_formal_smoke_gate(
     *,
     expected_project_commit: str | None = None,
     smoke_config_path: str | Path = (
-        "configs/thought4/phase4_geometry_action_smoke_v4.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v5.yaml"
     ),
 ) -> dict[str, Any]:
     from fastwam_ood_eval.thought4.config import load_thought4_config

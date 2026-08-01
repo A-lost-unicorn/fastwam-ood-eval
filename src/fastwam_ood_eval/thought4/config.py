@@ -155,8 +155,8 @@ class Thought4Config:
 DEFAULTS: dict[str, Any] = {
     "schema_version": THOUGHT4_CONFIG_SCHEMA,
     "experiment": {
-        "name": "phase4_geometry_action_diagnosis_v2",
-        "output_dir": "outputs/thought4/phase4_geometry_action_diagnosis_v2",
+        "name": "phase4_geometry_action_diagnosis_v3",
+        "output_dir": "outputs/thought4/phase4_geometry_action_diagnosis_v3",
         "seed": 4407,
         "mode": "formal",
     },

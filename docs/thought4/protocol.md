@@ -67,6 +67,8 @@ variant 的可观测 qpos。真正的硬检查位于相同 action prefix 执行�
 `t`：Clean/Camera/Lighting 的 robot state 必须相同，Robot-init 的
 joint/EEF/gripper state 与完整 simulator-state SHA 必须不同。reset 与 input 两套
 SHA/match 标志都写入 label manifest；这不把 Robot-init 伪装成 exact-state pair。
+三种 exact-state condition 的 input observation 必须从同一 Clean flat state 走
+相同 observable-refresh 路径，禁止混用 step-return cache 与 regenerated snapshot。
 
 动作 prefix 只用于诊断状态恢复，不执行 policy，不读取/记录/筛选 success。
 

@@ -8,7 +8,7 @@
 
 | 字段 | 值 |
 | --- | --- |
-| project commit | smoke v1 `c629475bb601...`；v2 `67ea98347ce1...`；v3 `fd713d580303...`；v4 待提交/运行 |
+| project commit | smoke v1 `c629475bb601...`；v2 `67ea98347ce1...`；v3 `fd713d580303...`；v4 `fb49f57...`；v5 待提交/运行 |
 | Fast-WAM commit | `45d8e145...` |
 | checkpoint SHA | `1000437c...` |
 | smoke v1 config fingerprint | `caef470ae35e0d1dafdc8f07ba4b8a088d6df26acebce787f900bdf7dda9caba` |
@@ -18,10 +18,13 @@
 | smoke v3 planned cohort SHA | `1a2c8a81349bcc4a8ffb15aaa6a5f8c0ebc1656762c7d4a352f475ef9ef492bc` |
 | smoke v4 config fingerprint | `204ced0d56e038bbbe30fe14119ab48daa920cf52ea81af39f9dbc86c799a7bc` |
 | smoke v4 planned cohort SHA | `5aea296c67dafe5118baec380d057d7a0e485a34f2930283de439d58ef7d2096` |
+| smoke v5 config fingerprint | `fb895d2e3edccc5c966437324fd5a97433b1e0ed2c39a2eb56cb21606ea0be08` |
+| smoke v5 planned cohort SHA | `08dfe330e2d91e0e7e436f0a5eb3325f5cdb8787742b0799eae19e7837dabb75` |
 | formal v1 config / cohort SHA | `62951df5...ae44` / `340db6c1...708`（工程失败身份） |
-| formal v2 config fingerprint | `cc60895325cbe5f3c7d7870c926fe82893f0c0cb5fa555d4e9f72c61fef46f21` |
-| formal v2 planned cohort SHA | `e3a6363f100910b63035821101cf8e153a753e47c1196198042ce47097b275ca` |
-| physical GPU | smoke v1/v2：1；smoke v3/formal v1：2；v4/v2 待运行 |
+| formal v2 config / cohort SHA | `cc608953...6f21` / `e3a6363f...5ca`（未运行，被新代码身份取代） |
+| formal v3 config fingerprint | `44639a0229c7899dbc754ed8c2b743fd649f35ce5d729ef525ab99321575a27b` |
+| formal v3 planned cohort SHA | `b9268f8ce0e63516e3742638acc68f6e528615743a54b4b8f7ed541981c6e210` |
+| physical GPU | smoke v1/v2：1；smoke v3/formal v1/smoke v4：2；v5/v3 待运行 |
 | smoke v3 start / finish | 2026-07-31 11:16:46 / 11:27:19 UTC |
 | smoke v3 backbone SHA before / after | `ac0dd59...b4f8` / `ac0dd59...b4f8` |
 | future RGB read | false |
@@ -31,13 +34,13 @@
 
 | 检查 | 结果 |
 | --- | --- |
-| Thought4 CPU/mock | 39 passed |
-| Thought1–4 全项目回归 | 436 passed；5 条 NVML 环境 warning 不影响测试结论 |
+| Thought4 CPU/mock | 40 passed |
+| Thought1–4 全项目回归 | 437 passed；5 条 NVML 环境 warning 不影响测试结论 |
 | 文档校验 | 84 个 Markdown；本地链接全部有效；`docs/` 根目录整洁 |
 | smoke dry-run | PASS；Torch/model/simulator/write 均为 false |
 | formal dry-run | PASS；Torch/model/simulator/write 均为 false |
-| 真实 GPU smoke | v1/v2 **ENGINEERING FAILED**；v3 **PASSED / NON-SCIENTIFIC**；v4 **NOT RUN** |
-| 正式 diagnosis | v1 **ENGINEERING FAILED（pre-model）**；v2 **NOT RUN** |
+| 真实 GPU smoke | v1/v2 **ENGINEERING FAILED**；v3 **PASSED / NON-SCIENTIFIC**；v4 **ENGINEERING FAILED（pre-model）**；v5 **NOT RUN** |
+| 正式 diagnosis | v1 **ENGINEERING FAILED（pre-model）**；v2 未运行且被取代；v3 **NOT RUN** |
 
 ## Smoke v1 失败记录（非科学结果）
 
@@ -97,9 +100,9 @@ namespace。v3 不改变任何科学协议字段。
 | result SHA | `b0e1cc80e4620deed389435463459cbcce6a8a804aa58e7f44af7a5212e17dbb` |
 
 该结果证明真实 hook、feature、probe backward 和 identity replacement 链路可运行；
-它没有 Robot-init condition，不是 formal 数据，也不能解锁修复后的 formal v2。
+它没有 Robot-init condition，不是 formal 数据，也不能解锁当前 formal v3。
 
-## Formal v1 失败记录与 v2 修复（非科学结果）
+## Formal v1 失败记录与第一版 input-time 修复（非科学结果）
 
 | 字段 | 值 |
 | --- | --- |
@@ -119,7 +122,29 @@ namespace。v3 不改变任何科学协议字段。
 
 v4/v2 只把 Robot-init 生效检查移到模型输入时刻并双写 reset/input SHA；object
 layout 仍在 prefix 前与 Clean 配对，Camera/Lighting 仍是 exact-state，正式科学
-协议字段不变。smoke v4 和 formal v2 均为 **NOT RUN**。
+协议字段不变。formal v2 未运行；smoke v4 的后续工程失败单独登记如下。
+
+## Smoke v4 失败记录与 v5 修复（非科学结果）
+
+| 字段 | 值 |
+| --- | --- |
+| Run ID | `phase4_geometry_action_smoke_v4` |
+| project commit / GPU | `fb49f57` / 2 |
+| 时间 | 2026-08-01 06:32:16–06:32:54 UTC |
+| 停止位置 | 第一条 Camera input-state check；模型加载前 |
+| 错误 | `camera robot state differs from Clean at model input time` |
+| paired manifest / feature / probe / intervention | 0 / 0 / 0 / 0 |
+| 科学结论 | 无 |
+
+根因是 observation 采样路径不匹配，而非 exact flat-state 配对失败：Clean 保留
+`env.step()` 返回的缓存 observation；Camera/Lighting 则在注入同一 Clean state
+后强制更新 observables。v5 让三种 exact-state condition 都从同一 Clean state
+走相同刷新路径，Robot-init 也从自身 input state 刷新。
+
+修复后的真实 render-only 复验完成 2 base states × 4 conditions 共 8 条样本：
+Robot-init reset-match 为 2/2，input-match 为 0/2，input simulator-state
+differs 为 2/2；没有加载 Fast-WAM。smoke v5 与 formal v3 保持相同科学参数，
+使用全新 namespace，当前均为 **NOT RUN**。
 
 ## Table A：Video geometry readability
 

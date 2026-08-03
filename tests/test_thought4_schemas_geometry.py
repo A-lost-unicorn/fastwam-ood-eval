@@ -29,6 +29,8 @@ from fastwam_ood_eval.thought4.real_runtime import (
     _regenerate_input_observations,
     _robot_state_snapshot,
     _robot_states_matching_clean,
+    _simulator_action_trajectory_world,
+    _trajectory_labels_for_camera,
     _validate_input_robot_states,
 )
 from fastwam_ood_eval.thought4.schemas import (
@@ -203,6 +205,102 @@ def test_demonstration_prefix_alignment_is_checked_at_input_time() -> None:
             episode,
             1,
         )
+    disclosed = _demonstration_state_alignment(
+        {**observation, "robot0_eef_pos": np.asarray([0.1, 0.0, 0.0])},
+        episode,
+        1,
+        strict=False,
+    )
+    assert disclosed["passed"] is False
+    assert disclosed["enforcement"] == "disclosure_only_3cm_15deg"
+    assert disclosed["translation_error_m"] == pytest.approx(0.1)
+
+
+class _ReplayEnv:
+    def __init__(self, position: np.ndarray) -> None:
+        self.position = np.asarray(position, dtype=np.float64).copy()
+        self.step_count = 0
+
+    def get_sim_state(self) -> np.ndarray:
+        return self.position.copy()
+
+    def step(self, action: np.ndarray):
+        self.step_count += 1
+        self.position += np.asarray(action[:3], dtype=np.float64)
+        observation = {
+            "robot0_eef_pos": self.position.copy(),
+            "robot0_eef_quat": np.asarray([0.0, 0.0, 0.0, 1.0]),
+        }
+        return observation, 0.0, False, {}
+
+
+class _ReplayAdapter:
+    def __init__(self, position: np.ndarray) -> None:
+        self.env = _ReplayEnv(position)
+
+
+def test_simulator_action_labels_share_world_replay_and_restore_input_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    initial = np.asarray([1.0, 2.0, 3.0])
+    adapter = _ReplayAdapter(initial)
+    actions = np.zeros((4, 7), dtype=np.float32)
+    actions[1, :3] = [0.1, 0.0, 0.0]
+    actions[1, -1] = 0.2
+    actions[2, :3] = [0.0, 0.2, 0.0]
+    actions[2, -1] = 0.8
+    episode = DemonstrationEpisode(
+        actions=actions,
+        eef_states=np.zeros((4, 6), dtype=np.float64),
+        gripper_values=actions[:, -1:].copy(),
+        episode_ids=("0", "0", "0", "0"),
+    )
+
+    def restore_state(replay_adapter, state):
+        replay_adapter.env.position = np.asarray(state, dtype=np.float64).copy()
+        return {
+            "robot0_eef_pos": replay_adapter.env.position.copy(),
+            "robot0_eef_quat": np.asarray([0.0, 0.0, 0.0, 1.0]),
+        }
+
+    monkeypatch.setattr(
+        "fastwam_ood_eval.thought4.real_runtime._observation_for_state",
+        restore_state,
+    )
+    world = _simulator_action_trajectory_world(
+        adapter,
+        episode,
+        frame_index=1,
+        horizon=2,
+        current_observation={
+            "robot0_eef_pos": initial.copy(),
+            "robot0_eef_quat": np.asarray([0.0, 0.0, 0.0, 1.0]),
+        },
+    )
+    result = _trajectory_labels_for_camera(world, np.eye(4))
+    same_camera = _trajectory_labels_for_camera(world, np.eye(4))
+    rotated_camera_to_world = np.eye(4)
+    rotated_camera_to_world[:3, :3] = np.asarray(
+        [[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]
+    )
+    rotated = _trajectory_labels_for_camera(
+        world, rotated_camera_to_world
+    )
+    assert np.allclose(
+        result["translation_camera"],
+        [[0.1, 0.0, 0.0], [0.1, 0.2, 0.0]],
+    )
+    assert np.array_equal(
+        result["translation_camera"], same_camera["translation_camera"]
+    )
+    assert np.allclose(
+        rotated["translation_camera"],
+        [[0.0, -0.1, 0.0], [0.2, -0.1, 0.0]],
+    )
+    assert np.allclose(result["gripper"].reshape(-1), [0.2, 0.8])
+    assert result["valid_mask"].tolist() == [True, True]
+    assert adapter.env.step_count == 2
+    assert np.allclose(adapter.env.position, initial)
 
 
 def _robot_observation(joint_offset: float = 0.0) -> dict[str, np.ndarray]:

@@ -47,6 +47,11 @@ SMOKE_CONDITION_TASK_IDS = {
     "lighting": (2313,),
     "robot_init": (282,),
 }
+SIMULATOR_TRAJECTORY_LABEL_SOURCE = "simulator_action_replay_from_input_t"
+EXACT_STATE_TRAJECTORY_PAIRING = (
+    "shared_clean_world_replay_transformed_to_condition_camera"
+)
+ROBOT_INIT_TRAJECTORY_PAIRING = "condition_specific_world_replay"
 
 
 @dataclass(frozen=True)
@@ -116,6 +121,9 @@ class ProbeConfig:
     bootstrap_replicates: int
     bootstrap_seed: int
     horizon: int
+    # None preserves the historical v1 demonstration-label protocol and its
+    # recorded config fingerprints.  New runs must opt in explicitly.
+    trajectory_label_source: str | None
 
 
 @dataclass(frozen=True)
@@ -146,6 +154,8 @@ class Thought4Config:
     @property
     def fingerprint(self) -> str:
         payload = asdict(self)
+        if payload["probe"].get("trajectory_label_source") is None:
+            payload["probe"].pop("trajectory_label_source", None)
         for section in ("experiment", "backbone", "cohort"):
             for key, value in list(payload[section].items()):
                 if isinstance(value, Path):
@@ -156,8 +166,8 @@ class Thought4Config:
 DEFAULTS: dict[str, Any] = {
     "schema_version": THOUGHT4_CONFIG_SCHEMA,
     "experiment": {
-        "name": "phase4_geometry_action_diagnosis_v4",
-        "output_dir": "outputs/thought4/phase4_geometry_action_diagnosis_v4",
+        "name": "phase4_geometry_action_diagnosis_v5",
+        "output_dir": "outputs/thought4/phase4_geometry_action_diagnosis_v5",
         "seed": 4407,
         "mode": "formal",
     },
@@ -223,6 +233,7 @@ DEFAULTS: dict[str, Any] = {
         "bootstrap_replicates": 2000,
         "bootstrap_seed": 4417,
         "horizon": 32,
+        "trajectory_label_source": None,
     },
     "intervention": {
         "enabled": True,
@@ -353,6 +364,11 @@ def _as_config(data: Mapping[str, Any]) -> Thought4Config:
             bootstrap_replicates=int(merged["probe"]["bootstrap_replicates"]),
             bootstrap_seed=int(merged["probe"]["bootstrap_seed"]),
             horizon=int(merged["probe"]["horizon"]),
+            trajectory_label_source=(
+                None
+                if merged["probe"]["trajectory_label_source"] is None
+                else str(merged["probe"]["trajectory_label_source"])
+            ),
         ),
         intervention=InterventionConfig(
             enabled=bool(merged["intervention"]["enabled"]),
@@ -530,6 +546,14 @@ def validate_config(cfg: Thought4Config) -> None:
         raise Thought4ConfigError("probe integer hyperparameters must be positive")
     if cfg.probe.horizon != 32:
         raise Thought4ConfigError("probe/action horizon is frozen to 32")
+    if cfg.probe.trajectory_label_source not in {
+        None,
+        SIMULATOR_TRAJECTORY_LABEL_SOURCE,
+    }:
+        raise Thought4ConfigError(
+            "probe.trajectory_label_source must be the frozen simulator-replay "
+            "source or omitted for a historical config"
+        )
     if cfg.probe.learning_rate <= 0 or cfg.probe.weight_decay < 0:
         raise Thought4ConfigError("invalid probe optimizer hyperparameters")
     if not cfg.intervention.enabled or cfg.intervention.source_preference != "A":
@@ -569,6 +593,8 @@ def validate_config(cfg: Thought4Config) -> None:
 
 def config_to_dict(cfg: Thought4Config) -> dict[str, Any]:
     payload = asdict(cfg)
+    if payload["probe"].get("trajectory_label_source") is None:
+        payload["probe"].pop("trajectory_label_source", None)
     payload["experiment"]["output_dir"] = str(cfg.experiment.output_dir)
     payload["backbone"]["checkpoint_path"] = str(cfg.backbone.checkpoint_path)
     payload["backbone"]["dataset_stats_path"] = str(

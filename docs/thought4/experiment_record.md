@@ -1,6 +1,6 @@
 # Thought4 实验记录与论文表格
 
-正式科学结果尚未运行；真实 smoke v3 已通过，但只属于工程证据。本文件的论文
+正式科学结果尚未运行；真实 smoke v3/v6 已通过，但只属于工程证据。本文件的论文
 数字必须从
 `outputs/thought4/.../artifact_manifest.json` 对应工件生成，不手抄猜测。
 
@@ -8,7 +8,7 @@
 
 | 字段 | 值 |
 | --- | --- |
-| project commit | smoke v1 `c629475bb601...`；v2 `67ea98347ce1...`；v3 `fd713d580303...`；v4 `fb49f57...`；v5 `833071f9e3f2...`；v6 由真实 run pre-validation 冻结（待运行） |
+| project commit | smoke v1 `c629475bb601...`；v2 `67ea98347ce1...`；v3 `fd713d580303...`；v4 `fb49f57...`；v5 `833071f9e3f2...`；v6/formal v4 `aeb02106c483...`；v7/formal v5 实现已提交，精确 SHA 由真实 run pre-validation 冻结 |
 | Fast-WAM commit | `45d8e145...` |
 | checkpoint SHA | `1000437c...` |
 | smoke v1 config fingerprint | `caef470ae35e0d1dafdc8f07ba4b8a088d6df26acebce787f900bdf7dda9caba` |
@@ -22,15 +22,22 @@
 | smoke v5 planned cohort SHA | `08dfe330e2d91e0e7e436f0a5eb3325f5cdb8787742b0799eae19e7837dabb75` |
 | smoke v6 config fingerprint | `90d1290e9ec9a644b968e4965deab53052c784c23c717ce1b632cfd7435c2ce3` |
 | smoke v6 planned cohort SHA | `84ec20b2f03d59ed1d2c8d2b76f78be456ce408c87a8e2cbdc7f05f3435d9206` |
+| smoke v7 config fingerprint | `72eeaed07fb5f2b8457106dd3d5cd89333a47dca19bd4533bb9c6a90b13ebb90` |
+| smoke v7 planned cohort SHA | `36bd5f967fbb145b73522cdd90d28b44dfd7ea47ad4f9f84fac93cd9760c8cbd` |
 | formal v1 config / cohort SHA | `62951df5...ae44` / `340db6c1...708`（工程失败身份） |
 | formal v2 config / cohort SHA | `cc608953...6f21` / `e3a6363f...5ca`（未运行，被新代码身份取代） |
 | formal v3 config fingerprint | `44639a0229c7899dbc754ed8c2b743fd649f35ce5d729ef525ab99321575a27b` |
 | formal v3 planned cohort SHA | `b9268f8ce0e63516e3742638acc68f6e528615743a54b4b8f7ed541981c6e210` |
 | formal v4 config fingerprint | `7783f2371fd2c1e781dc673817c4bcbbc2f85a5123e5dc67df29db768102efd1` |
 | formal v4 planned cohort SHA | `640af37c911e87f8ae950d648e98cceb20c5c178b50e547864924cd05771a683` |
-| physical GPU | smoke v1/v2：1；smoke v3/formal v1/smoke v4/v5：2；v6/formal v4 待运行 |
+| formal v5 config fingerprint | `7b2a8e7ba6a51fe5246599324b09983d8df19824bfc906d7e8fd3932276fbb3a` |
+| formal v5 planned cohort SHA | `26394c6a856a8292eb5f2a0f125fa307ecec23ec9a907294ad05e9b2bbf5ccda` |
+| physical GPU | smoke v1/v2：1；smoke v3/formal v1/smoke v4/v5/v6/formal v4：2；v7/formal v5 待运行 |
 | smoke v3 start / finish | 2026-07-31 11:16:46 / 11:27:19 UTC |
 | smoke v3 backbone SHA before / after | `ac0dd59...b4f8` / `ac0dd59...b4f8` |
+| smoke v6 start / finish | 2026-08-01 10:07:40 / 10:18:42 UTC |
+| smoke v6 result SHA | `b260977ae826e8c860074bd3402a3914dbc52e3f887cc090dad5ff3be2bc4c37` |
+| v7/v5 trajectory source | `simulator_action_replay_from_input_t` |
 | future RGB read | false |
 | success outcome read | false |
 
@@ -38,13 +45,14 @@
 
 | 检查 | 结果 |
 | --- | --- |
-| Thought4 CPU/mock | 41 passed |
-| Thought1–4 全项目回归 | 438 passed；5 条 NVML 环境 warning 不影响测试结论 |
+| Thought4 CPU/mock | 43 passed |
+| Thought1–4 全项目回归 | 440 passed；5 条 NVML 环境 warning 不影响测试结论 |
 | 文档校验 | 84 个 Markdown；本地链接全部有效；`docs/` 根目录整洁 |
 | smoke dry-run | PASS；Torch/model/simulator/write 均为 false |
 | formal dry-run | PASS；Torch/model/simulator/write 均为 false |
-| 真实 GPU smoke | v1/v2 **ENGINEERING FAILED**；v3 **PASSED / NON-SCIENTIFIC**；v4 **ENGINEERING FAILED（pre-model）**；v5 **INTERRUPTED / RESUME BUG（无科学结果）**；v6 **NOT RUN** |
-| 正式 diagnosis | v1 **ENGINEERING FAILED（pre-model）**；v2/v3 未运行且被取代；v4 **NOT RUN** |
+| simulator-replay render-only | PASS；2 states×4 conditions；Clean/Lighting label SHA 逐 state 相同；replay 后 state 精确恢复；audit SHA `30ea849e...94664`；未加载 Fast-WAM |
+| 真实 GPU smoke | v1/v2/v4 **ENGINEERING FAILED**；v3 **PASSED / NON-SCIENTIFIC**；v5 **INTERRUPTED / RESUME BUG**；v6 **PASSED / NON-SCIENTIFIC**；v7 **NOT RUN** |
+| 正式 diagnosis | v1 **ENGINEERING FAILED（pre-model）**；v2/v3 未运行；v4 **ENGINEERING FAILED（pre-model alignment）**；v5 **PRE-REGISTERED / NOT RUN** |
 
 ## Smoke v1 失败记录（非科学结果）
 
@@ -157,8 +165,70 @@ pre-validation 因内存 tuple 与 JSON 回读 list 直接比较而错误拒绝�
 
 v6 把配置工件规范化为 canonical JSON 数据类型并增加 write/read/resume 回归。
 v5→v6 除 experiment name/output namespace 外协议完全相同；formal v3→v4 同理。
-因为修复改变 project commit，v5 不得继续 resume 或手工修补。smoke v6 与 formal
-v4 当前均为 **NOT RUN**。
+因为修复改变 project commit，v5 不得继续 resume 或手工修补。
+
+## Smoke v6 通过记录（非科学结果）
+
+| 字段 | 值 |
+| --- | --- |
+| Run ID | `phase4_geometry_action_smoke_v6` |
+| project commit / GPU | `aeb02106c48389d49bd7cac693e68113fa7d245a` / 2 |
+| 时间 / 总时长 | 2026-08-01 10:07:40–10:18:42 UTC / 11m02s |
+| 覆盖 | 2 base states × 4 conditions；80 feature records |
+| model load | 409.889 s |
+| 主干 SHA before / after | `ac0dd59...b4f8` / `ac0dd59...b4f8` |
+| identity replacement | PASS；action L2=0 |
+| Robot-init | input differs 2/2；simulator state differs 2/2；object layout matched 2/2 |
+| future RGB / success read | false / false |
+| result SHA | `b260977ae826e8c860074bd3402a3914dbc52e3f887cc090dad5ff3be2bc4c37` |
+
+v6 完成了当时协议定义的全部技术 Gate，`formal_unlocked=true`，但仍不是科学结果。
+
+## Formal v4 alignment 失败与 64-state 只读审计（非科学结果）
+
+| 字段 | 值 |
+| --- | --- |
+| Run ID | `phase4_geometry_action_diagnosis_v4` |
+| project commit / GPU | `aeb02106c48389d49bd7cac693e68113fa7d245a` / 2 |
+| 时间 | 2026-08-01 10:21:25–10:22:28 UTC |
+| 停止状态 | 第 2 个排序 base state；模型加载前 |
+| 失败 state | `episode_000031@t34`；development split |
+| 错误 | translation 0.031214 m、rotation 2.153°；超出 3 cm / 15° 中的平移阈值 |
+| paired manifest / feature / probe / intervention | 0 / 0 / 0 / 0 |
+| 科学结论 | 无 |
+
+随后对同一原始 64-state cohort 做只读 simulator alignment audit；未读取模型、
+future RGB、success、OOD 或 policy outcome，也未写入/修改 v4 工件：
+
+| QC 指标 | translation (m) | rotation (degree) |
+| --- | ---: | ---: |
+| mean | 0.0237362120 | 3.079129 |
+| median | 0.0185068857 | 2.072967 |
+| p90 | 0.0311675769 | 4.056327 |
+| p95 | 0.0600255217 | 8.792372 |
+| max | 0.1083243997 | 28.917588 |
+
+总计 56/64 通过、8/64 失败；失败按 split 为 train 5、development 3、test 0。
+失败状态为 `episode_000031@t34/t31`、`episode_000033@t101`、
+`episode_000018@t116/t106`、`episode_000036@t92`、`episode_000014@t111`、
+`episode_000008@t127`。t±2 诊断不支持统一 off-by-one 解释；6/8 位于较长
+prefix，另 2 条来自同一低对齐 episode 31。该审计只描述 replay fidelity，不是
+policy 或方法效果。
+
+## simulator-replay v5 预注册（尚未运行）
+
+在上述失败与审计之后，冻结以下单变量修复：
+
+- 保留原 64 个 episode/frame/split/sample identity，不过滤 8 条失败，不补样；
+- 3 cm / 15° 阈值不变，从 hard gate 改为完整 QC disclosure；
+- 从模型实际输入状态 `t` 重放 actions `a_t...a_{t+H-1}` 生成 `t+1...t+H`
+  运动标签；
+- Clean/Camera/Lighting 共享一次 Clean world replay，只做 camera transform；
+- Robot-init 从自身 `t` 状态独立 replay；
+- 不读取 future RGB、success、OOD、policy outcome，不改变 probe/layer/seed/threshold；
+- 新身份为 smoke v7 / formal v5，必须先通过新的 smoke；旧 v6 PASS 不复用。
+
+当前分类仍为 `PRE-REGISTERED / NOT RUN`，不能据此填写下方科学表格。
 
 ## Table A：Video geometry readability
 

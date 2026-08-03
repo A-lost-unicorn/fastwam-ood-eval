@@ -6,7 +6,7 @@
 LeRobot episode metadata/actions/EEF
              │
              ├─ outcome-blind episode split + frame plan
-             ├─ prefix-to-t EEF translation/rotation alignment check
+             ├─ prefix-to-t EEF alignment QC（披露，不筛样本）
              │
              ▼
 LIBERO-Plus Clean state recovery + frozen variant-panel selection
@@ -14,6 +14,8 @@ LIBERO-Plus Clean state recovery + frozen variant-panel selection
              ├─────────────┬──────────────┐
              ▼             ▼              ▼
           Clean         Camera         Lighting       Robot-init
+             │             │              │              │
+             ├─ one shared Clean world replay ───────────┤ independent replay
              │             │              │              │
              └──── RGB/depth/camera/EEF/object labels ───┘
                                   │
@@ -54,6 +56,11 @@ LIBERO-Plus Clean state recovery + frozen variant-panel selection
 | `intervention_runtime.py` | frozen policy 的 matched intervention |
 | `decision.py` | 四选一方法规则 |
 | `phase4.py` | dry-run、smoke、formal 工件编排 |
+
+`phase4.py` 还生成 `alignment_audit.json`，保存原冻结 cohort 的逐状态误差、
+3 cm / 15° pass/fail、split 计数与分位数。formal gate 会读取该实体文件，重算
+canonical SHA，并与 `smoke_result.json` 的计数和 SHA 交叉验证；只有汇总字段而
+缺少/篡改审计文件不能解锁正式运行。
 
 ## Hook 为什么不是 block.forward
 
@@ -108,13 +115,24 @@ tensor SHA 及 frozen metadata；`probe_inputs.pt` 使用同样的 checksum 合�
 真实 smoke/formal 在创建 run 工件前要求项目 worktree clean，并把 project commit
 写入 static audit；runner 在碰到 completed `run_status.json` 时不会再追加日志。
 
-## Robot-init 标签边界
+## simulator-replay 标签边界
 
-Clean/Camera/Lighting 的未来 EEF 来自同一 LeRobot demonstration，并按各自
-camera extrinsic 转换。Robot-init 改变物理状态，不能复用 Clean EEF：
-collector 在 Robot-init 环境中执行相同 prefix 到 `t`，渲染当前状态，再离线重放
-未来 demonstration actions 生成该状态自己的 camera-frame EEF/rotation/gripper
-trajectory，随后恢复 `t` 状态。未来 observation 的 RGB 字段不被读取或输入模型。
+formal v5 不再直接使用 parquet future EEF 作为动作—运动标签。collector 在
+Clean 输入状态 `t` 只执行一次 `a_t...a_{t+H-1}`，保存 simulator 产生的 world
+translation/rotation/gripper/valid mask，并在 `finally` 中恢复 `state_t`。随后：
+
+- Clean、Camera、Lighting 使用同一 world replay，仅按各自 camera extrinsic
+  转换；这是 `shared_clean_world_replay_transformed_to_condition_camera`；
+- Robot-init 在自己的 input state 独立 replay；这是
+  `condition_specific_world_replay`，不能复用 Clean trajectory；
+- future observation 的 RGB 字段不读取、不保存、不输入模型；reward/done 也不
+  用于样本选择或 success 判定。
+
+Clean prefix 与 parquet EEF 的 3 cm / 15° 对齐仍逐条计算，但 v5 只将其作为
+数据质量审计。任何 failed row 仍进入 probe panel，原 64 个 state identity 不变。
+这把“parquet 状态是否精确复现”与“从模型实际看到的 state_t 出发会产生什么
+运动”分离开来。
+
 在 prefix 前还会核对所有 task object/fixture 的排序 pose snapshot 与 Clean 一致，
 robot reset state 只披露、不作为扰动是否生效的判据。执行相同 prefix 后，在实际
 模型输入时刻 `t` 核对 Robot-init robot state 和完整 simulator state 均区别于

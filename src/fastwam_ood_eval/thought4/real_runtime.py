@@ -17,7 +17,12 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from fastwam_ood_eval.thought4.cohort import PlannedBaseState
-from fastwam_ood_eval.thought4.config import Thought4Config
+from fastwam_ood_eval.thought4.config import (
+    EXACT_STATE_TRAJECTORY_PAIRING,
+    ROBOT_INIT_TRAJECTORY_PAIRING,
+    SIMULATOR_TRAJECTORY_LABEL_SOURCE,
+    Thought4Config,
+)
 from fastwam_ood_eval.thought4.geometry_labels import (
     axis_angle_to_matrix,
     build_future_trajectory_label,
@@ -58,6 +63,7 @@ class RenderedProbeSample:
     masks: Mapping[str, Any]
     task_description: str
     trajectory_label_source: str
+    trajectory_label_pairing: str
     initial_object_layout_sha256: str
     initial_object_layout_matches_clean: bool
     reset_robot_state_sha256: str
@@ -309,8 +315,10 @@ def _demonstration_state_alignment(
     observation: Mapping[str, Any],
     episode: DemonstrationEpisode,
     frame_index: int,
+    *,
+    strict: bool = True,
 ) -> dict[str, Any]:
-    """Verify that action-prefix recovery lands on demonstration time t."""
+    """Measure whether action-prefix recovery lands on demonstration time t."""
 
     import numpy as np
 
@@ -341,7 +349,7 @@ def _demonstration_state_alignment(
         translation_error <= translation_limit
         and rotation_error <= rotation_limit
     )
-    if not passed:
+    if not passed and strict:
         raise Thought4RuntimeError(
             "demonstration prefix/input-time alignment failed: "
             f"translation={translation_error:.6f}m, rotation={rotation_error:.3f}deg"
@@ -353,7 +361,10 @@ def _demonstration_state_alignment(
         "rotation_geodesic_error_degrees": rotation_error,
         "translation_limit_m": translation_limit,
         "rotation_limit_degrees": rotation_limit,
-        "passed": True,
+        "passed": passed,
+        "enforcement": (
+            "hard_gate_3cm_15deg" if strict else "disclosure_only_3cm_15deg"
+        ),
     }
 
 
@@ -653,7 +664,7 @@ def _labels_for_condition(
         }
         if set(action_label_override) != required:
             raise Thought4RuntimeError(
-                "robot-init action-label override has invalid fields"
+                "simulator action-label override has invalid fields"
             )
         translation_camera = np.asarray(
             action_label_override["translation_camera"], dtype=np.float32
@@ -674,12 +685,12 @@ def _labels_for_condition(
             or valid_mask.shape != (horizon,)
         ):
             raise Thought4RuntimeError(
-                "robot-init action-label override has invalid shapes"
+                "simulator action-label override has invalid shapes"
             )
         for value in (translation_camera, rotation_camera, gripper):
             if not np.isfinite(value).all():
                 raise Thought4RuntimeError(
-                    "robot-init action-label override contains NaN/Inf"
+                    "simulator action-label override contains NaN/Inf"
                 )
     se3 = np.concatenate(
         (
@@ -720,16 +731,15 @@ def _labels_for_condition(
     return labels, masks
 
 
-def _robot_init_action_labels(
+def _simulator_action_trajectory_world(
     adapter: Any,
     episode: DemonstrationEpisode,
     *,
     frame_index: int,
     horizon: int,
-    camera_to_world: Any,
     current_observation: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Replay future demonstration actions from robot-init state, reading no RGB."""
+    """Replay future actions from the actual input state into world coordinates."""
 
     import numpy as np
 
@@ -738,14 +748,21 @@ def _robot_init_action_labels(
     )
 
     state_at_t = np.asarray(adapter.env.get_sim_state()).copy()
+    live_observation = _observation_for_state(adapter, state_at_t)
     current_position = np.asarray(
         current_observation["robot0_eef_pos"], dtype=np.float64
     ).copy()
-    world_to_camera = np.linalg.inv(
-        np.asarray(camera_to_world, dtype=np.float64)
-    )[:3, :3]
-    translation_camera = np.zeros((horizon, 3), dtype=np.float32)
-    rotation_camera = np.zeros((horizon, 6), dtype=np.float32)
+    live_position = np.asarray(
+        live_observation["robot0_eef_pos"], dtype=np.float64
+    )
+    if not np.allclose(
+        live_position, current_position, atol=1e-7, rtol=1e-7
+    ):
+        raise Thought4RuntimeError(
+            "simulator replay state does not match the frozen model input"
+        )
+    translation_world = np.zeros((horizon, 3), dtype=np.float32)
+    rotation_world = np.zeros((horizon, 3, 3), dtype=np.float64)
     gripper = np.zeros((horizon, 1), dtype=np.float32)
     valid = np.zeros(horizon, dtype=bool)
     try:
@@ -763,28 +780,91 @@ def _robot_init_action_labels(
             future_rotation = quaternion_xyzw_to_matrix(
                 observation["robot0_eef_quat"]
             )
-            translation_camera[offset] = (
-                world_to_camera @ (future_position - current_position)
-            )
-            rotation_camera[offset] = rotation_to_6d(
-                world_to_camera @ future_rotation
-            )
+            translation_world[offset] = future_position - current_position
+            rotation_world[offset] = future_rotation
             gripper[offset, 0] = float(
                 episode.gripper_values[action_index, 0]
             )
             valid[offset] = True
     finally:
         _observation_for_state(adapter, state_at_t)
+        restored_state = np.asarray(adapter.env.get_sim_state())
+        if not np.array_equal(restored_state, state_at_t):
+            raise Thought4RuntimeError(
+                "simulator future action replay did not restore input state"
+            )
     if not valid.any():
         raise Thought4RuntimeError(
-            "robot-init future action replay produced no valid labels"
+            "simulator future action replay produced no valid labels"
+        )
+    return {
+        "translation_world": translation_world,
+        "rotation_world": rotation_world,
+        "gripper": gripper,
+        "valid_mask": valid,
+    }
+
+
+def _trajectory_labels_for_camera(
+    world_trajectory: Mapping[str, Any],
+    camera_to_world: Any,
+) -> dict[str, Any]:
+    """Transform one frozen world trajectory into a condition camera frame."""
+
+    import numpy as np
+
+    translation_world = np.asarray(
+        world_trajectory["translation_world"], dtype=np.float64
+    )
+    rotation_world = np.asarray(
+        world_trajectory["rotation_world"], dtype=np.float64
+    )
+    gripper = np.asarray(world_trajectory["gripper"], dtype=np.float32)
+    valid = np.asarray(world_trajectory["valid_mask"], dtype=bool)
+    horizon = len(valid)
+    if (
+        translation_world.shape != (horizon, 3)
+        or rotation_world.shape != (horizon, 3, 3)
+        or gripper.shape != (horizon, 1)
+    ):
+        raise Thought4RuntimeError("world trajectory has invalid shapes")
+    world_to_camera = np.linalg.inv(
+        np.asarray(camera_to_world, dtype=np.float64)
+    )[:3, :3]
+    translation_camera = np.zeros((horizon, 3), dtype=np.float32)
+    rotation_camera = np.zeros((horizon, 6), dtype=np.float32)
+    for index in np.flatnonzero(valid):
+        translation_camera[index] = world_to_camera @ translation_world[index]
+        rotation_camera[index] = rotation_to_6d(
+            world_to_camera @ rotation_world[index]
         )
     return {
         "translation_camera": translation_camera,
         "rotation_camera_6d": rotation_camera,
-        "gripper": gripper,
-        "valid_mask": valid,
+        "gripper": gripper.copy(),
+        "valid_mask": valid.copy(),
     }
+
+
+def _simulator_action_labels(
+    adapter: Any,
+    episode: DemonstrationEpisode,
+    *,
+    frame_index: int,
+    horizon: int,
+    camera_to_world: Any,
+    current_observation: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Compatibility wrapper for one condition-specific simulator replay."""
+
+    world = _simulator_action_trajectory_world(
+        adapter,
+        episode,
+        frame_index=frame_index,
+        horizon=horizon,
+        current_observation=current_observation,
+    )
+    return _trajectory_labels_for_camera(world, camera_to_world)
 
 
 def render_probe_samples(
@@ -887,7 +967,10 @@ def render_probe_samples(
                 _regenerate_input_observations(adapters, clean_state)
             )
             clean_alignment = _demonstration_state_alignment(
-                observations["clean"], episode, plan.frame_index
+                observations["clean"],
+                episode,
+                plan.frame_index,
+                strict=(cfg.probe.trajectory_label_source is None),
             )
             observations = {
                 condition: deepcopy(dict(observation))
@@ -944,9 +1027,47 @@ def render_probe_samples(
             clean_camera = exact[
                 "clean"
             ].record.camera.extrinsic_camera_to_world
-            robot_action_override = None
-            if "robot_init" in rendered_by_condition:
-                robot_action_override = _robot_init_action_labels(
+            action_label_overrides: dict[str, Mapping[str, Any]] = {}
+            if (
+                cfg.probe.trajectory_label_source
+                == SIMULATOR_TRAJECTORY_LABEL_SOURCE
+            ):
+                clean_world_trajectory = _simulator_action_trajectory_world(
+                    adapters["clean"],
+                    episode,
+                    frame_index=plan.frame_index,
+                    horizon=cfg.probe.horizon,
+                    current_observation=observations["clean"],
+                )
+                for condition in ("clean", "camera", "lighting"):
+                    action_label_overrides[condition] = (
+                        _trajectory_labels_for_camera(
+                            clean_world_trajectory,
+                            rendered_by_condition[
+                                condition
+                            ].record.camera.extrinsic_camera_to_world,
+                        )
+                    )
+                if "robot_init" in rendered_by_condition:
+                    robot_world_trajectory = _simulator_action_trajectory_world(
+                        adapters["robot_init"],
+                        episode,
+                        frame_index=plan.frame_index,
+                        horizon=cfg.probe.horizon,
+                        current_observation=observations["robot_init"],
+                    )
+                    action_label_overrides["robot_init"] = (
+                        _trajectory_labels_for_camera(
+                            robot_world_trajectory,
+                            rendered_by_condition[
+                                "robot_init"
+                            ].record.camera.extrinsic_camera_to_world,
+                        )
+                    )
+            elif "robot_init" in rendered_by_condition:
+                # Historical v1 protocol: only Robot-init required simulator
+                # labels because its input state intentionally differed.
+                action_label_overrides["robot_init"] = _simulator_action_labels(
                     adapters["robot_init"],
                     episode,
                     frame_index=plan.frame_index,
@@ -963,11 +1084,7 @@ def render_probe_samples(
                     frame_index=plan.frame_index,
                     horizon=cfg.probe.horizon,
                     clean_camera_to_world=clean_camera,
-                    action_label_override=(
-                        robot_action_override
-                        if condition == "robot_init"
-                        else None
-                    ),
+                    action_label_override=action_label_overrides.get(condition),
                 )
                 samples.append(
                     RenderedProbeSample(
@@ -981,9 +1098,29 @@ def render_probe_samples(
                         masks=masks,
                         task_description=adapters[condition].task_description,
                         trajectory_label_source=(
-                            "simulator_action_replay_from_robot_init_t"
-                            if condition == "robot_init"
-                            else "lerobot_demonstration_t_plus_1_to_t_plus_h"
+                            SIMULATOR_TRAJECTORY_LABEL_SOURCE
+                            if cfg.probe.trajectory_label_source
+                            == SIMULATOR_TRAJECTORY_LABEL_SOURCE
+                            else (
+                                "simulator_action_replay_from_robot_init_t"
+                                if condition == "robot_init"
+                                else (
+                                    "lerobot_demonstration_t_plus_1_to_t_plus_h"
+                                )
+                            )
+                        ),
+                        trajectory_label_pairing=(
+                            (
+                                EXACT_STATE_TRAJECTORY_PAIRING
+                            )
+                            if cfg.probe.trajectory_label_source
+                            == SIMULATOR_TRAJECTORY_LABEL_SOURCE
+                            and condition in {"clean", "camera", "lighting"}
+                            else (
+                                ROBOT_INIT_TRAJECTORY_PAIRING
+                                if condition == "robot_init"
+                                else "historical_demonstration_camera_transform"
+                            )
                         ),
                         initial_object_layout_sha256=initial_layouts[condition][2],
                         initial_object_layout_matches_clean=(

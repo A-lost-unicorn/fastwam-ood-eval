@@ -1,110 +1,95 @@
 # Thought4 运行手册
 
-所有命令从项目根目录执行。真实执行只支持一张空闲 24 GiB 卡；`GPU_ID` 是物理
-编号，进程内映射为 `cuda:0`。
+所有命令从项目根目录执行。真实执行只支持一张空闲 24 GiB 卡；
+`THOUGHT4_GPU_ID` 是物理编号，进程内 Fast-WAM 使用重映射后的 `cuda:0`。
 
-## 1. CPU/read-only dry-run（已运行）
+## 1. 当前冻结身份
+
+当前协议是 simulator-replay v5。它是在 formal v4 的 demonstration alignment
+工程失败和完整只读审计之后登记的修复，不是根据 probe、policy、success 或 OOD
+结果选择的。
+
+| 项目 | 值 |
+| --- | --- |
+| smoke config | `configs/thought4/phase4_geometry_action_smoke_v7.yaml` |
+| smoke output | `outputs/thought4/phase4_geometry_action_smoke_v7/` |
+| smoke config fingerprint | `72eeaed07fb5f2b8457106dd3d5cd89333a47dca19bd4533bb9c6a90b13ebb90` |
+| smoke planned cohort SHA | `36bd5f967fbb145b73522cdd90d28b44dfd7ea47ad4f9f84fac93cd9760c8cbd` |
+| formal config | `configs/thought4/phase4_geometry_action_diagnosis_v5.yaml` |
+| formal output | `outputs/thought4/phase4_geometry_action_diagnosis_v5/` |
+| formal config fingerprint | `7b2a8e7ba6a51fe5246599324b09983d8df19824bfc906d7e8fd3932276fbb3a` |
+| formal planned cohort SHA | `26394c6a856a8292eb5f2a0f125fa307ecec23ec9a907294ad05e9b2bbf5ccda` |
+| label source | `simulator_action_replay_from_input_t` |
+| alignment policy | disclosure-only，仍使用 3 cm / 15° |
+| formal cohort | 40/12/12 states，20/6/6 episodes；原 v4 state identity 全保留 |
+
+planned cohort SHA 包含 config fingerprint，因此 v4→v5 会变化；底层 64 个
+episode/frame/split/sample identity 不变。禁止用新 SHA 误称为重新抽样。
+
+## 2. CPU/read-only dry-run
 
 ```bash
 .conda/envs/fastwam-ood/bin/python -m fastwam_ood_eval.cli \
   thought4-phase4-smoke \
-  --config configs/thought4/phase4_geometry_action_smoke_v6.yaml \
+  --config configs/thought4/phase4_geometry_action_smoke_v7.yaml \
   --dry-run
 
 .conda/envs/fastwam-ood/bin/python -m fastwam_ood_eval.cli \
   thought4-phase4-diagnosis \
-  --config configs/thought4/phase4_geometry_action_diagnosis_v4.yaml \
+  --config configs/thought4/phase4_geometry_action_diagnosis_v5.yaml \
   --dry-run
 ```
 
-判据：`would_load_torch/model/simulator/write=false`。当前冻结输出为：
+必须看到：
 
-- smoke v6 fingerprint `90d1290e9ec9a644b968e4965deab53052c784c23c717ce1b632cfd7435c2ce3`，
-  planned cohort SHA
-  `84ec20b2f03d59ed1d2c8d2b76f78be456ce408c87a8e2cbdc7f05f3435d9206`；
-  plan 候选 2/2/2，但技术执行只取 2 个 base state；每个 state 四条件；
-- formal v4 fingerprint
-  `7783f2371fd2c1e781dc673817c4bcbbc2f85a5123e5dc67df29db768102efd1`，
-  planned cohort SHA
-  `640af37c911e87f8ae950d648e98cceb20c5c178b50e547864924cd05771a683`；
-  40/12/12 共 64 个 base state、20/6/6 个 episode，每个 state 四条件。
+```text
+would_load_torch=false
+would_load_gpu_model=false
+would_construct_simulator=false
+would_write=false
+trajectory_label_source=simulator_action_replay_from_input_t
+demonstration_alignment_policy=disclosure_only_3cm_15deg
+```
 
-## 2. 真实 smoke（v3 已通过；v4 工程失败；v5 中断；v6 当前 NOT RUN）
+dry-run 不会替代真实 smoke。
 
-2026-07-31 的 v1 attempt 在 robosuite import 阶段停止：runner 暴露物理 GPU 1，
-却将 `MUJOCO_EGL_DEVICE_ID` 设为逻辑 0。模型未加载、环境未 reset、没有 feature、
-action、probe 或科学结果。失败目录
-`outputs/thought4/phase4_geometry_action_smoke_v1/` 原样保留，禁止 resume 或覆盖。
+## 3. 为什么不能直接 resume formal v4
 
-2026-07-31 的 v2 attempt 已通过 EGL 映射，完成 2 个 base state × 3 conditions
-的 6 条 paired render 与 6 条 label，并开始加载模型；首次 source-A K/V feature
-capture 时，hook 读取 `torch.inference_mode()` tensor 的 `_version`，触发
-`Inference tensors do not track version counter`。因此没有 feature shard、action、
-probe、identity replacement 或 `smoke_result.json`，也没有科学结果。失败目录
-`outputs/thought4/phase4_geometry_action_smoke_v2/` 同样原样保留，禁止 resume 或
-覆盖。
+smoke v6 已于 2026-08-01 10:07:40–10:18:42 UTC 在 project commit
+`aeb02106c48389d49bd7cac693e68113fa7d245a`、物理 GPU 2 上通过：2 个 base
+states × 4 conditions、80 feature records，模型加载 409.889 s，主干 SHA
+前后均为 `ac0dd59...b4f8`，identity replacement action L2=0，result SHA
+`b260977ae826e8c860074bd3402a3914dbc52e3f887cc090dad5ff3be2bc4c37`。
+它是有效的非科学工程 Gate。
 
-v3 只修复 inference-tensor cache identity：普通 tensor 继续校验 version counter；
-inference tensor 校验 data pointer、shape、dtype、device、stride，并在 scope 结束时
-逐值对比首次 clone，仍然 fail closed。同时修复 gripper scalar 的 NumPy 弃用警告。
-v3 已在 project commit `fd713d580303...`、物理 GPU 2 上于
-2026-07-31 11:16:46–11:27:19 UTC 完成：2 base states × 3 conditions、
-60 features、主干 SHA 前后均为 `ac0dd59...b4f8`，identity replacement
-action L2=0，result SHA `b0e1cc80...17dbb`。它是有效工程 smoke，但不是科学
-结果，也没有覆盖 Robot-init。
+formal v4 随后于 10:21:25 UTC 启动，但在第 2 个排序状态
+`episode_000031@t34`（development）停止：Clean prefix 与 parquet EEF 的误差为
+0.031214 m / 2.153°，超过 3 cm / 15° 中的平移阈值。模型尚未加载，没有
+paired manifest、feature、probe、intervention 或科学结果。
 
-随后 formal v1 在第一个 Robot-init reset 后错误地要求 robot observation 立即
-区别于 Clean，于模型加载前停止。LIBERO 的 `set_init_state()` 会写入共同的
-demonstration flat state，因此 reset 时最大可观测 robot-state 差为 0；执行共同
-action prefix 到输入时刻后，同一诊断样本的差为 0.08357，扰动实际已生效。
-formal v1 只生成 pre-validation、planned manifest 和 error status，无 paired
-render、feature、probe、intervention 或科学结果。
+对全部原 64 states 的只读 simulator 审计显示：
 
-v4 把硬检查移到模型输入时刻 `t`，并把 Robot-init 加入 smoke。formal v2 与 v1
-的 cohort、层、probe、seed、阈值和 20-step action schedule 完全相同，只使用新
-namespace 和更正后的验证语义。旧 smoke v3 因缺少 Robot-init 证据，不能解锁
-formal v2。
+| 项目 | 结果 |
+| --- | ---: |
+| 通过 / 失败 | 56 / 8 |
+| train / development / test 失败 | 5 / 3 / 0 |
+| translation mean / median / p90 / p95 / max | 0.023736 / 0.018507 / 0.031168 / 0.060026 / 0.108324 m |
+| rotation mean / median / p90 / p95 / max | 3.079 / 2.073 / 4.056 / 8.792 / 28.918° |
 
-2026-08-01 的 v4 attempt 在 commit `fb49f57`、物理 GPU 2 上运行
-38 秒后，于第一条 input-state 检查停止：
-`camera robot state differs from Clean at model input time`。flat simulator
-state 已正确配对；问题是 Clean 使用 `env.step()` 返回的缓存 observation，而
-Camera/Lighting 使用 state restoration 后强制刷新的 observation，比较了两个
-不同采样路径。模型没有加载，也没有 paired manifest、feature、probe 或科学结果。
+因此不能把 v4 当作“只超了 1.2 mm”的单例，也不能放宽阈值、删 8 条、换样本或
+选择 step offset。simulator-replay v5 改变了标签生成代码与 config identity，旧
+smoke v6 不能解锁它；必须跑全新 smoke v7，formal v4 目录保持原样。
 
-v5 对 Clean/Camera/Lighting 全部从同一 Clean flat state 走相同 observable refresh
-路径；Robot-init 也从自己的 input state 刷新后再记录。真实 render-only 复验已
-覆盖 2 base states × 4 conditions：8/8 渲染完成；Robot-init 2/2 reset 与 Clean
-匹配、2/2 input 与 Clean 不同、2/2 simulator SHA 不同。该复验不加载 Fast-WAM，
-只证明修复后的 paired rendering 前半链路。
+## 4. 运行 smoke v7
 
-2026-08-01 的 v5 正式 smoke 首次执行也完成 8 条 paired render 和 8 条 label，
-于 06:57:51 UTC 进入 `model_load_started`，随后进程在没有完成状态或模型结果的
-情况下被外部中断。08:59:31 UTC 使用同一代码尝试 resume 时，static
-pre-validation 报 `existing JSON artifact differs during resume`。根因是内存配置
-中的 tuple 首次写入 JSON 后成为 list，回读校验却直接比较 list 与 tuple，因此
-内容相同也会被误判。v5 没有 feature、probe、intervention、`smoke_result.json`
-或科学结果，原目录完整保留。
-
-v6 只修复工件表示：`config_to_dict()` 在写入和比较前统一规范化为 JSON 数据
-类型，并增加 write/read/resume 回归测试；相对 v5 除 experiment name/output
-namespace 外，cohort、层、seed、阈值和执行协议完全相同。由于代码修复改变
-project commit，不能安全 resume v5，必须从全新 v6 namespace 开始。
-
-真实运行只接受已提交且 `git status --porcelain` 为空的项目快照；启动前必须确认
-本次修复已经提交。pre-validation 会把 project commit/clean status 与三套上游
-commit 一起写入工件。runner 在创建日志前也会拒绝 dirty worktree 和已经
-`complete` 的输出，避免日志破坏 completed run 的不可变性。
-smoke v6 与 formal v4 必须来自同一个 project commit：先提交修复，再跑 smoke；
-smoke 通过后不要改代码或文档，直接启动 formal。
-
-先确认卡空闲：
+先确认代码已提交、worktree clean、卡空闲：
 
 ```bash
+git status --short
 nvidia-smi
 ```
 
-执行：
+`git status --short` 必须没有输出。然后执行：
 
 ```bash
 CONFIRM_THOUGHT4_PHASE4_SMOKE=YES \
@@ -112,53 +97,44 @@ THOUGHT4_GPU_ID=2 \
 bash scripts/run_thought4_phase4_smoke.sh
 ```
 
-v3 实测为 10m33s，其中模型加载 401.7s；v6 只多 2 条 Robot-init inference，
-预计约 11–15 分钟。该估计不是论文 latency 结果。
-
-runner 内部映射必须是：
+runner 内部应为：
 
 ```text
 CUDA_VISIBLE_DEVICES=2
-MUJOCO_EGL_DEVICE_ID=2   # robosuite 使用物理 ID
-Fast-WAM device=cuda:0   # PyTorch 使用重映射后的逻辑 ID
+MUJOCO_EGL_DEVICE_ID=2
+Fast-WAM device=cuda:0
 ```
 
-Python preflight 会在创建新 run 之前核对三者；不能手工把 EGL 改回 `0`。
-
-smoke 从冻结 plan 只取 2 个 base state，渲染
-Clean/Camera/Lighting/Robot-init 四个
-condition，验证一个 Video layer（含 hidden/K/V）和一个 Action layer 的真实
-hook call、shape、显式 denoise-step identity、feature shard/checksum、probe
-backward、source-A identity replacement/replay parity 与主干 SHA。它不训练正式
-probe，不输出方法结论，不是科学结果。identity replacement 的固定边界是
-`mot.video_kv_cache.15.v` 的 Action-consumer argument；formal 也只从最终
-action-consumed K/V 中选择干预层。
+v6 实测 11m02s。v7 增加 simulator replay 与 alignment audit，但模型工作量相同，
+预计约 11–16 分钟；这是运行预算，不是论文 latency。
 
 查看：
 
 ```bash
-tail -f outputs/thought4/phase4_geometry_action_smoke_v6/logs/run.log
-cat outputs/thought4/phase4_geometry_action_smoke_v6/run_status.json
-cat outputs/thought4/phase4_geometry_action_smoke_v6/smoke_result.json
+tail -f outputs/thought4/phase4_geometry_action_smoke_v7/logs/run.log
+cat outputs/thought4/phase4_geometry_action_smoke_v7/run_status.json
+cat outputs/thought4/phase4_geometry_action_smoke_v7/alignment_audit.json
+cat outputs/thought4/phase4_geometry_action_smoke_v7/smoke_result.json
 ```
 
-只有 `status=complete`、`formal_unlocked=true`、Robot-init 的
-`input_differs_clean_count=2`、前后 backbone SHA 相等才进入 formal。formal
-runner 会再次验证 smoke status/stage/config fingerprint/result SHA、四条件覆盖、
-Robot-init 输入状态、identity replacement 和前后主干 SHA；只设置 formal 确认
-变量不能绕过。
-失败后先保留目录排查；`--resume` 只接受未完成且 checksum 可解释的工件，绝不
-覆盖 completed 输出。
+smoke v7 只取 2 个 base state，覆盖四条件，验证：
 
-v1/v2/v3/v4/v5/v6 都使用独立 namespace；本次不能给旧输出加 `--resume`。以后只有
-代码、配置、pre-validation identity 均未变化且日志明确表明是
-非科学性的进程中断，才可在同一命令末尾加 `--resume`。已有
-feature shard 和 `probe_inputs.pt` 必须同时通过 sidecar SHA、逐 tensor SHA、
-metadata 与本次冻结提取一致，才会只读复用；任何差异均 fail closed。
+- 从真实 input state `t` 的 simulator action replay；
+- exact-state 三条件共享同一 Clean world trajectory；
+- Robot-init 使用 condition-specific trajectory；
+- alignment pass/fail 完整披露且不筛样本；
+- Video layer 15 hidden/K/V 与 Action block 15 真实 hook；
+- feature shard/checksum、probe backward、identity replacement/replay parity；
+- Fast-WAM backbone SHA 前后不变；future RGB/success 均未读取。
 
-## 3. 正式 diagnosis（v1 工程失败；v2/v3 未运行；v4 当前 NOT RUN）
+进入 formal 的必要条件包括：`status=complete`、`formal_unlocked=true`、四条件
+完整、Robot-init input state 2/2 区别于 Clean、主干 SHA 前后相等，并且
+`alignment_audit.json` 的实体内容、canonical SHA、计数、来源与 trajectory pairing
+均通过 gate。只编辑 `smoke_result.json` 或只设置 formal 确认变量不能绕过。
 
-smoke 通过并人工检查 manifest 后：
+## 5. 运行 formal v5
+
+smoke v7 通过后，不改代码、配置或文档；同一 project commit 直接执行：
 
 ```bash
 CONFIRM_THOUGHT4_PHASE4_FORMAL=YES \
@@ -166,17 +142,14 @@ THOUGHT4_GPU_ID=2 \
 bash scripts/run_thought4_phase4_diagnosis.sh
 ```
 
-这是唯一 formal 命令。它不启动 success rollout，也不实现新训练方法。
+预计单卡 4090 为 2–6 小时，正式 ETA 应在 smoke v7 后根据真实计时更新。不能为了
+缩短时间改变 64 states、五层、probe seeds、threshold 或 20-step action schedule。
 
-粗略资源预算（尚未实测，不能作为结果）：单卡 4090，模型加载约 6–7 分钟；
-64×4 次特征推理、CPU probe panel 和 held-out intervention 合计预计 2–6 小时。
-以真实 smoke 的单次推理/渲染计时更新 ETA，不为了缩短时间修改冻结样本、层或
-20-step action schedule。
-
-主要结果：
+主要输出：
 
 ```text
-outputs/thought4/phase4_geometry_action_diagnosis_v4/
+outputs/thought4/phase4_geometry_action_diagnosis_v5/
+  alignment_audit.json
   cohort_manifest.json
   paired_render_manifest.jsonl
   label_manifest.jsonl
@@ -192,7 +165,19 @@ outputs/thought4/phase4_geometry_action_diagnosis_v4/
   report.md
 ```
 
-## 4. 测试
+formal 不启动 policy rollout，不读取 success/OOD，也不实现新训练方法。
+
+## 6. Resume 与历史 namespace
+
+v1–v7 smoke、v1–v5 formal 均使用独立 namespace。历史失败/中断/通过工件不得
+删除、覆盖、拼接到当前结果或改写为 PASS。
+
+只有代码 commit、配置、pre-validation identity 均未变化，且日志明确是非科学性
+进程中断时，才可在当前 runner 的内部 CLI 后加 `--resume`。已有 feature shard 和
+`probe_inputs.pt` 必须同时通过 sidecar SHA、逐 tensor SHA 与 metadata 校验；任何
+差异 fail closed。`status=complete` 的目录不可 resume。
+
+## 7. 测试
 
 ```bash
 .conda/envs/fastwam-ood/bin/python -m pytest -q tests/test_thought4_*.py
@@ -200,11 +185,13 @@ outputs/thought4/phase4_geometry_action_diagnosis_v4/
 python scripts/check_docs.py
 ```
 
-## 5. 禁止操作
+## 8. 禁止操作
 
-- 不在 YAML 之外用 `--set` 调层、样本、seed 或 threshold；
-- 不用两张卡并行不同 protocol；
-- 不读取 success 来决定 sample/layer；
+- 不在 YAML 外调层、样本、seed、threshold 或 label source；
+- 不放宽 3 cm / 15°，不过滤/替换 alignment failed states；
 - 不把 Robot-init 写成 exact-state；
-- 不把 smoke 写进论文主表；
+- 不让三种 exact-state condition 分别 replay future trajectory；
+- 不读取 future RGB、reward/success/OOD 来决定样本、层或方法；
+- 不用旧 smoke v6 解锁 formal v5；
+- 不把 smoke 或 alignment QC 写成论文科学结论；
 - 不在 Phase 4 直接实现 Geo-REPA/SE(3)-Align。

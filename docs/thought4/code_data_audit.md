@@ -1,8 +1,11 @@
 # Thought4 Phase 4：Geometry–Action Gap 代码与数据审计
 
-状态：`AUDIT COMPLETE / IMPLEMENTED / SMOKE V3 PASSED / FORMAL V1 + SMOKE V4 ENGINEERING FAILED / SMOKE V5 INTERRUPTED+RESUME BUG / V6+FORMAL V4 NOT RUN`
+状态：`AUDIT COMPLETE / IMPLEMENTED / SMOKE V3+V6 PASSED / FORMAL V4 ALIGNMENT ENGINEERING FAILURE / SIMULATOR-REPLAY SMOKE V7+FORMAL V5 PRE-REGISTERED`
 
 审计日期：2026-07-31
+
+simulator-replay v5 补充审计：2026-08-03（发生在 formal v4 alignment 失败后，
+不覆盖原审计时间线）。
 
 本审计发生在 Thought4 实现之前。范围仅包括代码、配置、已有工件和本地数据
 schema 的只读检查；没有加载 Fast-WAM checkpoint，没有运行 GPU，没有生成
@@ -21,11 +24,14 @@ Phase 4-A/B/C 可以在不修改 `third_party/FastWAM` 的前提下实现，但�
    捕获，并以 replay parity fail closed。
 2. 当前本地 LeRobot demonstration 只有 RGB、EEF/joint/gripper、action 和时间
    identity，没有 depth、完整 MuJoCo state、object pose、相机参数。因此它适合
-   提供冻结 action/EEF trajectory 标签，却不能单独支持 exact-state
+   提供冻结 action 与对齐参照，却不能单独支持 exact-state
    Clean/Camera/Lighting 重渲染。正式 paired panel 必须由 LIBERO-Plus simulator
    从同一 flat simulator state 重渲染，并在每一 pair 上验证 state hash。
 
-这意味着实现可继续，但 formal 科学结果仍依赖真实 simulator/model smoke 通过。
+formal v4 后对 64 个冻结状态的只读审计进一步显示 prefix-to-parquet EEF 对齐存在
+8/64 尾部失败。因此 simulator-replay v5 从模型实际输入状态 `t` 生成 action-motion
+标签，并把 parquet 对齐降为完整 QC 披露；这不改变 formal 科学 cohort，也不读取
+future RGB/success/OOD。formal 科学结果仍依赖新的 simulator/model smoke v7 通过。
 
 ## 1. Video DiT block 数量和命名
 
@@ -254,12 +260,18 @@ Robot-init 明确不是 exact-state visual pair。它只要求：
 - `exact_state_pair=false`。
 
 任何把 Robot-init 与 Clean 标为相同 state 的 record 都必须被 schema/test 拒绝。
-同样不能直接给 Robot-init 复制 Clean 的未来 EEF 标签：正式 collector 在该
-Robot-init 状态下重放相同 prefix 到 `t`，再执行冻结 demonstration future
-actions 构造独立 trajectory label，并在 label manifest 披露来源。
+同样不能给 Robot-init 复制 Clean trajectory：正式 collector 在该 Robot-init
+input state `t` 执行冻结 demonstration future actions，构造独立 trajectory label。
 
-另外，Clean action-prefix 恢复后的 EEF 与 parquet 第 `t` 帧必须通过 3 cm / 15°
-输入时间对齐检查；Robot-init 则明确标为不适用。Probe feature/target normalizer
+simulator-replay v5 也不再从 parquet future EEF 构造 Clean/Camera/Lighting 的
+motion target。Clean 从实际 state `t` 只 replay 一次 world trajectory，三种
+exact-state condition 共享该 world trajectory 并分别做 camera transform；
+Robot-init 单独 replay。两类 pairing 和统一 label source 都进入 label manifest。
+
+Clean action-prefix 恢复后的 EEF 与 parquet 第 `t` 帧仍计算 3 cm / 15° 输入时间
+对齐，但它是 disclosure-only QC：64 个 state identity 全部保留，pass/fail 与误差
+分布进入带 canonical SHA 的 `alignment_audit.json`。Robot-init alignment 标为
+不适用。Probe feature/target normalizer
 只在 train/valid label 上拟合，预测反标准化后再计算指标；跨 seed 层选择使用
 mean development loss，不能选择单一幸运 seed。Phase 4-C 只从 Action 直接消费的
 K/V 中选择，并区分 probe weight energy 与真实 hidden projection energy。
@@ -301,13 +313,15 @@ src/fastwam_ood_eval/thought4/
 configs/thought4/phase4_geometry_action_diagnosis_v1.yaml # formal v1 失败身份
 configs/thought4/phase4_geometry_action_diagnosis_v2.yaml # 未运行，旧代码身份
 configs/thought4/phase4_geometry_action_diagnosis_v3.yaml # 未运行，resume 修复前身份
-configs/thought4/phase4_geometry_action_diagnosis_v4.yaml # 当前 runner
+configs/thought4/phase4_geometry_action_diagnosis_v4.yaml # alignment 失败身份
+configs/thought4/phase4_geometry_action_diagnosis_v5.yaml # 当前 simulator-replay runner
 configs/thought4/phase4_geometry_action_smoke.yaml       # v1 失败身份，保留
 configs/thought4/phase4_geometry_action_smoke_v2.yaml    # v2 失败身份，保留
 configs/thought4/phase4_geometry_action_smoke_v3.yaml    # 已通过，无 Robot-init
 configs/thought4/phase4_geometry_action_smoke_v4.yaml    # observation-path 失败
 configs/thought4/phase4_geometry_action_smoke_v5.yaml    # 中断后暴露 resume 序列化缺陷
-configs/thought4/phase4_geometry_action_smoke_v6.yaml    # 当前 runner
+configs/thought4/phase4_geometry_action_smoke_v6.yaml    # 已通过，旧标签协议
+configs/thought4/phase4_geometry_action_smoke_v7.yaml    # 当前 simulator-replay runner
 scripts/run_thought4_phase4_smoke.sh
 scripts/run_thought4_phase4_diagnosis.sh
 ```
@@ -328,7 +342,11 @@ held-out grouped bootstrap 只建立在 3 个 episode 上。主 CLI 只
 | 25：Thought1/2/3 不回归 | 全项目 `434 passed` |
 
 v6/v4 resume 修复后的专项结果为 `41 passed`，全项目为 `438 passed`（5 条
-NVML 环境 warning）。上述真实
+NVML 环境 warning）；simulator-replay v5 增加回归后为 Thought4 `43 passed`、
+全项目 `440 passed`（同样 5 条 NVML 环境 warning）。真实 simulator-replay
+render-only 回归另在 GPU 2 完成 2 states×4 conditions：统一
+label source、shared/condition-specific pairing、replay 后 state 恢复、finite/mask、
+Clean/Lighting label SHA 和 alignment audit SHA 均通过；未加载 Fast-WAM。上述真实
 v1 smoke 在 robosuite import 时因 EGL 物理编号错误停止，模型未加载、环境未
 reset。v2 完成 6 条 paired render/label，随后在首次 K/V feature capture 因
 inference tensor 没有 `_version` 而停止；未生成 feature/probe/intervention 或
@@ -337,8 +355,10 @@ inference tensor 没有 `_version` 而停止；未生成 feature/probe/intervent
 暴露 exact-state observation 采样路径不一致。v5 已统一输入快照路径并通过真实
 2×4 render-only 回归；真实 v5 又完成 8 条 paired render/label 后在模型加载阶段
 外部中断，resume 因 tuple/list JSON 表示差异被误拒绝。v6 在工件边界 canonicalize
-配置并增加回归；smoke v6/formal v4 均为 **NOT RUN**。任何失败工件或旧 smoke
-都不能代替新 formal gate。
+配置并增加回归；smoke v6 随后通过。formal v4 在第二个 state 的 parquet
+alignment hard gate 前停止；完整审计为 56/64 pass、8/64 fail。新 v5 协议保留
+全部 state 并从实际 input `t` simulator replay 生成 motion target；smoke v7/formal
+v5 均为 **NOT RUN**。任何历史工件或旧 smoke 都不能代替新 formal gate。
 
 最短执行顺序：
 

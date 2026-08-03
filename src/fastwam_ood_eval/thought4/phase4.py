@@ -22,7 +22,13 @@ from fastwam_ood_eval.thought4.cohort import (
     plan_base_states,
     planned_cohort_manifest,
 )
-from fastwam_ood_eval.thought4.config import Thought4Config, config_to_dict
+from fastwam_ood_eval.thought4.config import (
+    EXACT_STATE_TRAJECTORY_PAIRING,
+    ROBOT_INIT_TRAJECTORY_PAIRING,
+    SIMULATOR_TRAJECTORY_LABEL_SOURCE,
+    Thought4Config,
+    config_to_dict,
+)
 from fastwam_ood_eval.thought4.io_utils import (
     Thought4ArtifactError,
     atomic_write_json,
@@ -97,6 +103,16 @@ def dry_run_payload(cfg: Thought4Config, *, stage: str) -> dict[str, Any]:
         "condition_count_per_base_state": len(cfg.cohort.conditions),
         "video_layers": list(cfg.backbone.video_layers),
         "action_hooks": list(cfg.backbone.action_hooks),
+        "trajectory_label_source": (
+            cfg.probe.trajectory_label_source
+            or "historical_lerobot_demonstration_labels"
+        ),
+        "demonstration_alignment_policy": (
+            "disclosure_only_3cm_15deg"
+            if cfg.probe.trajectory_label_source
+            == SIMULATOR_TRAJECTORY_LABEL_SOURCE
+            else "hard_gate_3cm_15deg"
+        ),
         "planned_split_counts": {
             split: sum(value.split == split for value in plans)
             for split in ("train", "development", "test")
@@ -123,7 +139,7 @@ def _verify_formal_smoke_gate(
     *,
     expected_project_commit: str | None = None,
     smoke_config_path: str | Path = (
-        "configs/thought4/phase4_geometry_action_smoke_v6.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v7.yaml"
     ),
 ) -> dict[str, Any]:
     from fastwam_ood_eval.thought4.config import load_thought4_config
@@ -132,9 +148,13 @@ def _verify_formal_smoke_gate(
     smoke_root = smoke_cfg.experiment.output_dir
     status_path = smoke_root / "run_status.json"
     result_path = smoke_root / "smoke_result.json"
+    alignment_path = smoke_root / "alignment_audit.json"
     try:
         status = json.loads(status_path.read_text(encoding="utf-8"))
         result = json.loads(result_path.read_text(encoding="utf-8"))
+        alignment_audit = json.loads(
+            alignment_path.read_text(encoding="utf-8")
+        )
     except FileNotFoundError as exc:
         raise Phase4ExecutionError(
             "formal is locked until the frozen real Thought4 smoke completes"
@@ -143,7 +163,11 @@ def _verify_formal_smoke_gate(
         raise Phase4ExecutionError(
             "formal smoke prerequisite artifacts are invalid"
         ) from exc
-    if not isinstance(status, dict) or not isinstance(result, dict):
+    if (
+        not isinstance(status, dict)
+        or not isinstance(result, dict)
+        or not isinstance(alignment_audit, dict)
+    ):
         raise Phase4ExecutionError(
             "formal smoke prerequisite artifacts must be JSON objects"
         )
@@ -167,6 +191,54 @@ def _verify_formal_smoke_gate(
         and robot_check.get("validation_time")
         == "model_input_t_after_demonstration_prefix"
         and robot_check.get("reset_state_is_disclosure_only") is True
+    )
+    supplied_alignment_sha = alignment_audit.get("audit_sha256")
+    unhashed_alignment = dict(alignment_audit)
+    unhashed_alignment.pop("audit_sha256", None)
+    alignment_pass_count = alignment_audit.get("pass_count")
+    alignment_failure_count = alignment_audit.get("failure_count")
+    alignment_rows = alignment_audit.get("rows")
+    alignment_rows_valid = (
+        isinstance(alignment_rows, list)
+        and valid_base_state_count
+        and len(alignment_rows) == base_state_count
+        and all(
+            isinstance(row, Mapping)
+            and isinstance(row.get("sample_id"), str)
+            and row.get("enforcement")
+            == "disclosure_only_3cm_15deg"
+            and row.get("translation_limit_m") == 0.03
+            and row.get("rotation_limit_degrees") == 15.0
+            and isinstance(row.get("passed_3cm_15deg"), bool)
+            for row in alignment_rows
+        )
+        and len({row["sample_id"] for row in alignment_rows})
+        == base_state_count
+    )
+    alignment_counts_valid = (
+        isinstance(alignment_pass_count, int)
+        and not isinstance(alignment_pass_count, bool)
+        and alignment_pass_count >= 0
+        and isinstance(alignment_failure_count, int)
+        and not isinstance(alignment_failure_count, bool)
+        and alignment_failure_count >= 0
+        and valid_base_state_count
+        and alignment_pass_count + alignment_failure_count
+        == base_state_count
+        and alignment_audit.get("base_state_count") == base_state_count
+        and alignment_rows_valid
+        and sum(
+            row.get("passed_3cm_15deg") is True
+            for row in alignment_rows
+            if isinstance(row, Mapping)
+        )
+        == alignment_pass_count
+        and sum(
+            row.get("passed_3cm_15deg") is False
+            for row in alignment_rows
+            if isinstance(row, Mapping)
+        )
+        == alignment_failure_count
     )
     checks = {
         "status_complete": status.get("status") == "complete",
@@ -206,6 +278,47 @@ def _verify_formal_smoke_gate(
         "robot_init_input_state_valid": robot_check_valid,
         "future_rgb_not_read": result.get("future_rgb_read") is False,
         "success_outcome_not_read": result.get("success_outcome_read") is False,
+        "trajectory_label_source_matches": (
+            result.get("trajectory_label_source")
+            == SIMULATOR_TRAJECTORY_LABEL_SOURCE
+            == cfg.probe.trajectory_label_source
+            == smoke_cfg.probe.trajectory_label_source
+        ),
+        "alignment_audit_valid": (
+            isinstance(supplied_alignment_sha, str)
+            and len(supplied_alignment_sha) == 64
+            and supplied_alignment_sha
+            == sha256_canonical(unhashed_alignment)
+            and result.get("alignment_audit_sha256")
+            == supplied_alignment_sha
+            and alignment_audit.get("config_fingerprint")
+            == smoke_cfg.fingerprint
+            and alignment_audit.get("schema_version")
+            == "thought4.phase4.alignment_audit.v1"
+            and alignment_audit.get("trajectory_label_source")
+            == SIMULATOR_TRAJECTORY_LABEL_SOURCE
+            and alignment_audit.get("alignment_policy")
+            == "disclosure_only_3cm_15deg"
+            and alignment_counts_valid
+            and result.get("alignment_audit_pass_count")
+            == alignment_pass_count
+            and result.get("alignment_audit_failure_count")
+            == alignment_failure_count
+            and alignment_audit.get("selection_effect")
+            == "none_all_planned_base_states_retained"
+            and result.get("alignment_selection_effect")
+            == "none_all_planned_base_states_retained"
+            and alignment_audit.get("future_rgb_read") is False
+            and alignment_audit.get("success_outcome_read") is False
+        ),
+        "trajectory_pairing_valid": (
+            result.get("exact_state_trajectory_pairing")
+            == EXACT_STATE_TRAJECTORY_PAIRING
+            == alignment_audit.get("exact_state_trajectory_pairing")
+            and result.get("robot_init_trajectory_pairing")
+            == ROBOT_INIT_TRAJECTORY_PAIRING
+            == alignment_audit.get("robot_init_trajectory_pairing")
+        ),
     }
     if expected_project_commit is not None:
         checks["same_project_commit"] = (
@@ -221,9 +334,10 @@ def _verify_formal_smoke_gate(
             f"formal smoke prerequisite hard checks failed: {failed}"
         )
     return {
-        "schema_version": "thought4.phase4.formal_smoke_gate.v2",
+        "schema_version": "thought4.phase4.formal_smoke_gate.v3",
         "smoke_config_fingerprint": smoke_cfg.fingerprint,
         "smoke_result_sha256": supplied_sha,
+        "smoke_alignment_audit_sha256": supplied_alignment_sha,
         "checks": checks,
         "passed": True,
     }
@@ -336,7 +450,7 @@ def _write_common_render_artifacts(
     states: Mapping[str, Any],
     *,
     resume: bool,
-) -> tuple[dict[str, Any], list[Path]]:
+) -> tuple[dict[str, Any], dict[str, Any], list[Path]]:
     cohort = materialized_cohort_manifest(
         plans,
         states,
@@ -377,6 +491,7 @@ def _write_common_render_artifacts(
                     for key in sorted(sample.labels)
                 },
                 "trajectory_label_source": sample.trajectory_label_source,
+                "trajectory_label_pairing": sample.trajectory_label_pairing,
                 "initial_object_layout_sha256": (
                     sample.initial_object_layout_sha256
                 ),
@@ -420,7 +535,174 @@ def _write_common_render_artifacts(
         if resume
         else atomic_write_jsonl(output / "label_manifest.jsonl", label_rows)
     )
-    return cohort, [cohort_path, render_path, label_path]
+    alignment_audit = _alignment_audit_payload(cfg, plans, samples)
+    alignment_path = (
+        write_or_verify_json(output / "alignment_audit.json", alignment_audit)
+        if resume
+        else atomic_write_json(output / "alignment_audit.json", alignment_audit)
+    )
+    return cohort, alignment_audit, [
+        cohort_path,
+        render_path,
+        label_path,
+        alignment_path,
+    ]
+
+
+def _linear_quantile(values: Sequence[float], fraction: float) -> float:
+    ordered = sorted(float(value) for value in values)
+    if not ordered or not 0.0 <= fraction <= 1.0:
+        raise Phase4ExecutionError("alignment quantile input is invalid")
+    position = (len(ordered) - 1) * fraction
+    lower = math.floor(position)
+    upper = math.ceil(position)
+    if lower == upper:
+        return ordered[lower]
+    weight = position - lower
+    return ordered[lower] * (1.0 - weight) + ordered[upper] * weight
+
+
+def _alignment_audit_payload(
+    cfg: Thought4Config,
+    plans: Sequence[Any],
+    samples: Sequence[Any],
+) -> dict[str, Any]:
+    """Aggregate outcome-blind demonstration alignment without selecting rows."""
+
+    clean_samples = [sample for sample in samples if sample.condition == "clean"]
+    if len(clean_samples) != len(plans):
+        raise Phase4ExecutionError(
+            "alignment audit requires exactly one Clean row per planned base state"
+        )
+    simulator_replay = (
+        cfg.probe.trajectory_label_source
+        == SIMULATOR_TRAJECTORY_LABEL_SOURCE
+    )
+    rows: list[dict[str, Any]] = []
+    for sample in clean_samples:
+        alignment = dict(sample.demonstration_state_alignment)
+        if alignment.get("applicable") is not True:
+            raise Phase4ExecutionError("Clean alignment audit row is not applicable")
+        translation = float(alignment["translation_error_m"])
+        rotation = float(alignment["rotation_geodesic_error_degrees"])
+        passed = alignment.get("passed") is True
+        enforcement = alignment.get("enforcement")
+        expected_enforcement = (
+            "disclosure_only_3cm_15deg"
+            if simulator_replay
+            else "hard_gate_3cm_15deg"
+        )
+        if enforcement != expected_enforcement:
+            raise Phase4ExecutionError(
+                "alignment audit enforcement differs from the frozen protocol"
+            )
+        if not math.isfinite(translation) or not math.isfinite(rotation):
+            raise Phase4ExecutionError("alignment audit contains NaN/Inf")
+        rows.append(
+            {
+                "sample_id": sample.plan.identity.sample_id,
+                "episode_id": sample.plan.identity.episode_id,
+                "episode_index": int(sample.plan.episode_index),
+                "frame_index": int(sample.plan.frame_index),
+                "split": sample.plan.split,
+                "translation_error_m": translation,
+                "rotation_geodesic_error_degrees": rotation,
+                "translation_limit_m": float(alignment["translation_limit_m"]),
+                "rotation_limit_degrees": float(
+                    alignment["rotation_limit_degrees"]
+                ),
+                "enforcement": enforcement,
+                "passed_3cm_15deg": passed,
+            }
+        )
+    rows.sort(key=lambda row: row["sample_id"])
+    if len({row["sample_id"] for row in rows}) != len(rows):
+        raise Phase4ExecutionError("alignment audit contains duplicate sample IDs")
+    translations = [float(row["translation_error_m"]) for row in rows]
+    rotations = [
+        float(row["rotation_geodesic_error_degrees"]) for row in rows
+    ]
+    failed = [row for row in rows if not row["passed_3cm_15deg"]]
+    split_counts = {}
+    for split in ("train", "development", "test"):
+        subset = [row for row in rows if row["split"] == split]
+        split_counts[split] = {
+            "total": len(subset),
+            "passed": sum(bool(row["passed_3cm_15deg"]) for row in subset),
+            "failed": sum(not row["passed_3cm_15deg"] for row in subset),
+        }
+
+    def summary(values: Sequence[float]) -> dict[str, float]:
+        return {
+            "mean": sum(values) / len(values),
+            "median": _linear_quantile(values, 0.5),
+            "p90": _linear_quantile(values, 0.9),
+            "p95": _linear_quantile(values, 0.95),
+            "max": max(values),
+        }
+
+    expected_sources = {
+        sample.trajectory_label_source for sample in samples
+    }
+    if simulator_replay and expected_sources != {
+        SIMULATOR_TRAJECTORY_LABEL_SOURCE
+    }:
+        raise Phase4ExecutionError(
+            "simulator-replay protocol produced mixed trajectory label sources"
+        )
+    if simulator_replay:
+        exact_pairings = {
+            sample.trajectory_label_pairing
+            for sample in samples
+            if sample.condition in {"clean", "camera", "lighting"}
+        }
+        robot_pairings = {
+            sample.trajectory_label_pairing
+            for sample in samples
+            if sample.condition == "robot_init"
+        }
+        if exact_pairings != {EXACT_STATE_TRAJECTORY_PAIRING}:
+            raise Phase4ExecutionError(
+                "exact-state trajectory labels are not shared-world paired"
+            )
+        if robot_pairings and robot_pairings != {
+            ROBOT_INIT_TRAJECTORY_PAIRING
+        }:
+            raise Phase4ExecutionError(
+                "Robot-init trajectory label pairing is invalid"
+            )
+    payload: dict[str, Any] = {
+        "schema_version": "thought4.phase4.alignment_audit.v1",
+        "config_fingerprint": cfg.fingerprint,
+        "trajectory_label_source": (
+            cfg.probe.trajectory_label_source
+            or "historical_mixed_demonstration_and_robot_init_simulator"
+        ),
+        "alignment_policy": (
+            "disclosure_only_3cm_15deg"
+            if simulator_replay
+            else "hard_gate_3cm_15deg"
+        ),
+        "selection_effect": "none_all_planned_base_states_retained",
+        "exact_state_trajectory_pairing": (
+            EXACT_STATE_TRAJECTORY_PAIRING if simulator_replay else "historical"
+        ),
+        "robot_init_trajectory_pairing": (
+            ROBOT_INIT_TRAJECTORY_PAIRING if simulator_replay else "historical"
+        ),
+        "future_rgb_read": False,
+        "success_outcome_read": False,
+        "base_state_count": len(rows),
+        "pass_count": len(rows) - len(failed),
+        "failure_count": len(failed),
+        "split_counts": split_counts,
+        "translation_error_m": summary(translations),
+        "rotation_error_degrees": summary(rotations),
+        "failed_sample_ids": [row["sample_id"] for row in failed],
+        "rows": rows,
+    }
+    payload["audit_sha256"] = sha256_canonical(payload)
+    return payload
 
 
 def _write_feature_shards(
@@ -621,7 +903,7 @@ def run_real_smoke(cfg: Thought4Config, *, resume: bool = False) -> dict[str, An
                 "real smoke Robot-init input-state check failed"
             )
         gc.collect()
-        _cohort, common_paths = _write_common_render_artifacts(
+        _cohort, alignment_audit, common_paths = _write_common_render_artifacts(
             output, cfg, plans, samples, states, resume=resume
         )
         _progress("model_load_started")
@@ -686,6 +968,17 @@ def run_real_smoke(cfg: Thought4Config, *, resume: bool = False) -> dict[str, An
             "probe_backward": backward,
             "identity_replacement": identity_replacement,
             "robot_init_input_state_check": robot_init_check,
+            "trajectory_label_source": cfg.probe.trajectory_label_source,
+            "alignment_audit_sha256": alignment_audit["audit_sha256"],
+            "alignment_audit_pass_count": alignment_audit["pass_count"],
+            "alignment_audit_failure_count": alignment_audit["failure_count"],
+            "alignment_selection_effect": alignment_audit["selection_effect"],
+            "exact_state_trajectory_pairing": alignment_audit[
+                "exact_state_trajectory_pairing"
+            ],
+            "robot_init_trajectory_pairing": alignment_audit[
+                "robot_init_trajectory_pairing"
+            ],
             "inference_rows": inference_rows,
             "future_rgb_read": False,
             "success_outcome_read": False,
@@ -871,7 +1164,7 @@ def run_formal_diagnosis(
         _progress("formal_paired_render_started", base_states=len(plans))
         samples, states = render_probe_samples(cfg, plans)
         gc.collect()
-        cohort, common_paths = _write_common_render_artifacts(
+        cohort, alignment_audit, common_paths = _write_common_render_artifacts(
             output, cfg, plans, samples, states, resume=resume
         )
         _progress("formal_model_load_started")
@@ -1013,6 +1306,14 @@ def run_formal_diagnosis(
         integrity["runtime_model_audit"] = runtime_audit
         integrity["inference_rows"] = inference_rows
         integrity["smoke_gate"] = smoke_gate
+        integrity["trajectory_label_source"] = cfg.probe.trajectory_label_source
+        integrity["alignment_audit"] = {
+            "audit_sha256": alignment_audit["audit_sha256"],
+            "base_state_count": alignment_audit["base_state_count"],
+            "pass_count": alignment_audit["pass_count"],
+            "failure_count": alignment_audit["failure_count"],
+            "selection_effect": alignment_audit["selection_effect"],
+        }
         integrity_path = _json_artifact(
             output / "execution_integrity.json", integrity, resume=resume
         )

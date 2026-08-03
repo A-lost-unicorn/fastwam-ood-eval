@@ -36,8 +36,8 @@ interface、camera equivariance，还是几何假设本身不成立。
 - test/OOD/success 不参与样本、层或 checkpoint 选择。
 
 真实 smoke 是技术 Gate，不共享 formal 科学结果：只取 2 个 base state、
-Clean/Camera/Lighting 三条件、Video layer 15（hidden/K/V）和 Action block 15
-input。smoke 还必须让 source-A identity replacement 通过 matched replay floor；
+Clean/Camera/Lighting/Robot-init 四条件、Video layer 15（hidden/K/V）和 Action
+block 15 input。smoke 还必须让 source-A identity replacement 通过 matched replay floor；
 replacement 固定使用 `mot.video_kv_cache.15.v` consumer argument，与 formal
 候选边界同类。它不训练
 正式 panel，也不生成方法选择。
@@ -47,17 +47,40 @@ replacement 固定使用 `mot.video_kv_cache.15.v` consumer argument，与 forma
 LeRobot demonstration 只读取 action、EEF state、episode/frame identity；不读取
 future RGB。输入状态 `t` 通过 official init state + demonstration action prefix
 恢复，动作 gripper 从数据约定 `g∈[0,1]` 转为 LIBERO 的 `1−2g`。
-prefix 后的 Clean EEF 必须与 parquet 第 `t` 帧在 3 cm / 15° 的预注册宽松阈值内
-一致，否则时间对齐 fail closed；实际误差和阈值写入 label manifest。Camera 与
-Lighting 复用该 exact state。Robot-init 不与 Clean EEF 对齐，而以自身状态生成
-未来 simulator-replay 标签，并明确标记 alignment 不适用。
+
+formal v5 的动作—运动标签统一来自真实 simulator 输入状态 `t`：
+
+1. 冻结 `state_t`，按顺序执行 demonstration actions
+   `a_t...a_{t+H-1}`；
+2. 第 `j` 个目标是执行 `a_{t+j}` 后得到的状态 `t+j+1`，所以标签覆盖
+   `t+1...t+H`；
+3. 保存相对 `state_t` 的 EEF world translation、future EEF world rotation、
+   action gripper 和 episode-safe valid mask；
+4. 无论 replay 是否完成，都在 `finally` 中恢复 `state_t`；
+5. replay 的 future observation 只读取 robot EEF，不读取或保存 RGB，不读取
+   reward/done/success 来筛选样本。
+
+Clean 只重放一次 world trajectory；Clean/Camera/Lighting 共享这条完全相同的
+world trajectory，再分别用各自 camera extrinsic 转换为 camera-frame 标签。这一
+设计避免三个环境各自重放产生数值差异，从而保持 exact-state 单变量配对。
+Robot-init 从自己的 input state 独立重放，所以其 trajectory 不是 exact-state
+pair。标签来源统一写为 `simulator_action_replay_from_input_t`，配对语义分别写为
+`shared_clean_world_replay_transformed_to_condition_camera` 和
+`condition_specific_world_replay`。
+
+prefix 后的 Clean EEF 与 parquet 第 `t` 帧仍按原预注册 3 cm / 15° 阈值计算，
+但在 simulator-replay v5 中它是 **QC 披露而非样本选择/硬门禁**。所有原 64 个
+state identity 均保留；实际误差、pass/fail、split 计数、分位数与失败 sample ID
+写入 `alignment_audit.json` 和 label manifest。不得放宽阈值、筛掉失败状态、用
+备用状态替换或把对齐结果用于选层/选方法。历史 v4 配置仍保留原 hard-gate 语义，
+确保旧工件可解释。
 
 Clean 状态恢复后，将完全相同的 flat MuJoCo state 注入 Camera 与 Lighting
 variant。每条记录保存 simulator、RGB、depth、EEF/object、camera、lighting
 SHA。variant 由 split seed、task、episode、frame 的哈希确定，不读实验结果。
 Robot-init 使用自身状态，`exact_state_pair=false`；它先执行相同 demonstration
 action prefix 恢复到时间 `t`，再从该 Robot-init 状态离线重放未来 action 以生成
-自身的 EEF trajectory 标签，不能套用 Clean 的未来 EEF。
+自身的 EEF trajectory 标签，不能套用 Clean 的 trajectory。
 
 在执行任何 prefix 前，collector 对所有 task object/fixture 的 position+quaternion
 做排序快照：Robot-init 必须在 `1e-7` 容差内与 Clean 保持同一 object layout，

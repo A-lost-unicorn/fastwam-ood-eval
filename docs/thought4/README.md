@@ -10,11 +10,11 @@ probe 结果写成 OOD improvement。
 | --- | --- |
 | 10 项代码/数据审计 | COMPLETE |
 | hooks、labels、probe、intervention、decision | IMPLEMENTED |
-| Thought4 CPU/mock 单测 | COMPLETE（41 passed） |
-| 全项目回归 | COMPLETE（438 passed；5 条 NVML 环境 warning） |
+| Thought4 CPU/mock 单测 | COMPLETE（43 passed） |
+| 全项目回归 | COMPLETE（440 passed；5 条 NVML 环境 warning） |
 | smoke/formal dry-run | COMPLETE（严格零写入） |
-| 真实单卡 smoke | v1/v2 工程失败；v3 **PASSED（未覆盖 Robot-init）**；v4 **ENGINEERING FAILED（observation path）**；v5 **INTERRUPTED / RESUME BUG（无科学结果）**；v6 **NOT RUN** |
-| 正式 64-state diagnosis | v1 工程失败；v2/v3 未运行且由新代码身份取代；v4 **NOT RUN** |
+| 真实单卡 smoke | v1/v2/v4 工程失败；v3 **PASSED（无 Robot-init）**；v5 中断；v6 **PASSED / NON-SCIENTIFIC**；simulator-replay v7 **NOT RUN** |
+| 正式 64-state diagnosis | v1 工程失败；v2/v3 未运行；v4 **ENGINEERING FAILED（pre-model alignment）**；simulator-replay v5 **PRE-REGISTERED / NOT RUN** |
 | Geo-REPA / SE(3)-Align | **NOT IMPLEMENTED（按协议锁定）** |
 
 ## 文档入口
@@ -46,3 +46,15 @@ Phase 4 只允许输出以下一个分类：
 4. `geometry_hypothesis_not_supported` → 返回预处理/坐标/shortcut 审计。
 
 正式结果产生前不能预先选择方法。
+
+## simulator-replay v5 冻结说明
+
+formal v4 在第 2 个排序状态因 Clean prefix 与 parquet EEF 超出 3 cm 阈值而
+停止。对原 64 个冻结状态的只读审计显示 56 通过、8 失败；因此这不是单条偶然
+误差，也不能靠略微放宽阈值处理。v5 保留原 64 个 state identity 和原
+3 cm / 15° 阈值，把对齐改为完整 QC 披露；动作—运动标签则从每个真实 simulator
+输入状态 `t` 重放冻结 demonstration actions 得到。它不读取 future RGB、success、
+OOD 或 policy outcome，也不筛除/替换任何状态。
+
+新执行顺序严格为 `smoke v7 → formal v5`。旧 smoke v6 虽已通过，但不能为改过
+代码身份的 formal v5 解锁。

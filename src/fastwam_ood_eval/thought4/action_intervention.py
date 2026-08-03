@@ -242,12 +242,14 @@ def geometry_shuffle_hidden(
     donor_hidden: Any,
     subspace: GeometrySubspace,
 ) -> tuple[Any, dict[str, float]]:
+    import torch
+
     if target_hidden.shape != donor_hidden.shape:
         raise ActionInterventionError("target/donor hidden shapes differ")
     donor_coordinates = geometry_coordinates(donor_hidden, subspace)
     target_coordinates = geometry_coordinates(target_hidden, subspace)
     basis = subspace.basis.to(
-        device=target_hidden.device, dtype=target_hidden.dtype
+        device=target_hidden.device, dtype=torch.float32
     )
     projected = target_coordinates @ basis.T
     projected_energy = float(projected.float().square().sum().detach().cpu())

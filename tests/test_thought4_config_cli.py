@@ -10,6 +10,7 @@ import pytest
 
 from fastwam_ood_eval.thought4.config import (
     EXACT_STATE_TRAJECTORY_PAIRING,
+    FP32_SUBSPACE_ARITHMETIC,
     ROBOT_INIT_TRAJECTORY_PAIRING,
     SIMULATOR_TRAJECTORY_LABEL_SOURCE,
     Thought4ConfigError,
@@ -29,6 +30,7 @@ from fastwam_ood_eval.thought4.phase4 import (
     _alignment_audit_payload,
     _require_confirmation,
     _verify_formal_smoke_gate,
+    _write_probe_stage_artifacts,
     dry_run_payload,
 )
 from fastwam_ood_eval.thought4.schemas import SampleIdentity, sha256_canonical
@@ -41,10 +43,10 @@ from fastwam_ood_eval.thought4.video_feature_extractor import (
 
 def test_frozen_configs_validate_and_formal_cohort_is_64() -> None:
     smoke = load_thought4_config(
-        "configs/thought4/phase4_geometry_action_smoke_v7.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v8.yaml"
     )
     formal = load_thought4_config(
-        "configs/thought4/phase4_geometry_action_diagnosis_v5.yaml"
+        "configs/thought4/phase4_geometry_action_diagnosis_v6.yaml"
     )
     assert smoke.experiment.mode == "smoke"
     assert smoke.backbone.video_layers == (15,)
@@ -58,7 +60,7 @@ def test_frozen_configs_validate_and_formal_cohort_is_64() -> None:
         "robot_init",
     )
     previous_smoke = load_thought4_config(
-        "configs/thought4/phase4_geometry_action_smoke_v6.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v7.yaml"
     )
     assert replace(
         smoke,
@@ -67,6 +69,12 @@ def test_frozen_configs_validate_and_formal_cohort_is_64() -> None:
             smoke.probe,
             trajectory_label_source=(
                 previous_smoke.probe.trajectory_label_source
+            ),
+        ),
+        intervention=replace(
+            smoke.intervention,
+            subspace_arithmetic=(
+                previous_smoke.intervention.subspace_arithmetic
             ),
         ),
     ) == previous_smoke
@@ -91,9 +99,15 @@ def test_frozen_configs_validate_and_formal_cohort_is_64() -> None:
                 historical_smoke.probe.trajectory_label_source
             ),
         ),
+        intervention=replace(
+            smoke.intervention,
+            subspace_arithmetic=(
+                historical_smoke.intervention.subspace_arithmetic
+            ),
+        ),
     ) == historical_smoke
     previous_formal = load_thought4_config(
-        "configs/thought4/phase4_geometry_action_diagnosis_v4.yaml"
+        "configs/thought4/phase4_geometry_action_diagnosis_v5.yaml"
     )
     assert replace(
         formal,
@@ -102,6 +116,12 @@ def test_frozen_configs_validate_and_formal_cohort_is_64() -> None:
             formal.probe,
             trajectory_label_source=(
                 previous_formal.probe.trajectory_label_source
+            ),
+        ),
+        intervention=replace(
+            formal.intervention,
+            subspace_arithmetic=(
+                previous_formal.intervention.subspace_arithmetic
             ),
         ),
     ) == previous_formal
@@ -117,6 +137,12 @@ def test_frozen_configs_validate_and_formal_cohort_is_64() -> None:
                 historical_formal.probe.trajectory_label_source
             ),
         ),
+        intervention=replace(
+            formal.intervention,
+            subspace_arithmetic=(
+                historical_formal.intervention.subspace_arithmetic
+            ),
+        ),
     ) == historical_formal
     assert (
         smoke.probe.trajectory_label_source
@@ -126,11 +152,24 @@ def test_frozen_configs_validate_and_formal_cohort_is_64() -> None:
         formal.probe.trajectory_label_source
         == SIMULATOR_TRAJECTORY_LABEL_SOURCE
     )
+    assert smoke.intervention.subspace_arithmetic == FP32_SUBSPACE_ARITHMETIC
+    assert formal.intervention.subspace_arithmetic == FP32_SUBSPACE_ARITHMETIC
+    assert smoke.fingerprint == (
+        "81d3885ccb5b58806c1a729e509c039f6e1cb33a34ff242f8fa16785796149d7"
+    )
+    assert formal.fingerprint == (
+        "3b14a7d7fd09deda9253bb1cd9950d9c4b5bd0cdf9f124a4dfede22add5c24f6"
+    )
+    assert dry_run_payload(formal, stage="formal")[
+        "planned_cohort_sha256"
+    ] == (
+        "9af7cf7c1933fb1e5574099361f6d7dcc7500727480ecb4bbf010089f28d8f04"
+    )
     assert previous_smoke.fingerprint == (
-        "90d1290e9ec9a644b968e4965deab53052c784c23c717ce1b632cfd7435c2ce3"
+        "72eeaed07fb5f2b8457106dd3d5cd89333a47dca19bd4533bb9c6a90b13ebb90"
     )
     assert previous_formal.fingerprint == (
-        "7783f2371fd2c1e781dc673817c4bcbbc2f85a5123e5dc67df29db768102efd1"
+        "7b2a8e7ba6a51fe5246599324b09983d8df19824bfc906d7e8fd3932276fbb3a"
     )
     assert formal.experiment.mode == "formal"
     assert formal.cohort.frames_per_episode == 2
@@ -157,7 +196,7 @@ def test_frozen_configs_validate_and_formal_cohort_is_64() -> None:
 
 def test_dry_run_is_read_only_and_does_not_import_torch(tmp_path: Path) -> None:
     cfg = load_thought4_config(
-        "configs/thought4/phase4_geometry_action_smoke_v7.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v8.yaml"
     )
     before = set(Path("outputs/thought4").rglob("*")) if Path("outputs/thought4").exists() else set()
     had_torch = "torch" in sys.modules
@@ -170,6 +209,10 @@ def test_dry_run_is_read_only_and_does_not_import_torch(tmp_path: Path) -> None:
     assert payload["demonstration_alignment_policy"] == (
         "disclosure_only_3cm_15deg"
     )
+    assert payload["subspace_arithmetic"] == FP32_SUBSPACE_ARITHMETIC
+    assert payload["planned_cohort_sha256"] == (
+        "a67ff85321dc684a80b853b58ab133905232a275e6d71255fd1c966b9a3d6c12"
+    )
     assert before == after
     assert ("torch" in sys.modules) == had_torch
 
@@ -178,7 +221,7 @@ def test_config_artifact_is_json_roundtrip_stable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cfg = load_thought4_config(
-        "configs/thought4/phase4_geometry_action_smoke_v7.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v8.yaml"
     )
     payload = config_to_dict(cfg)
     assert json.loads(json.dumps(payload)) == payload
@@ -192,6 +235,9 @@ def test_config_artifact_is_json_roundtrip_stable(
     assert payload["probe"]["trajectory_label_source"] == (
         SIMULATOR_TRAJECTORY_LABEL_SOURCE
     )
+    assert payload["intervention"]["subspace_arithmetic"] == (
+        FP32_SUBSPACE_ARITHMETIC
+    )
     monkeypatch.chdir(tmp_path)
     path = Path("outputs/thought4/config_roundtrip/config.json")
     atomic_write_json(path, payload)
@@ -200,7 +246,7 @@ def test_config_artifact_is_json_roundtrip_stable(
 
 def test_alignment_audit_discloses_failures_without_selecting_rows() -> None:
     cfg = load_thought4_config(
-        "configs/thought4/phase4_geometry_action_smoke_v7.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v8.yaml"
     )
     plans = tuple(
         PlannedBaseState(
@@ -272,8 +318,8 @@ def test_runner_scripts_require_explicit_confirmation() -> None:
     assert expected_egl in smoke and expected_egl in formal
     assert "export MUJOCO_EGL_DEVICE_ID=0" not in smoke
     assert "export MUJOCO_EGL_DEVICE_ID=0" not in formal
-    assert "phase4_geometry_action_smoke_v7.yaml" in smoke
-    assert "phase4_geometry_action_diagnosis_v5.yaml" in formal
+    assert "phase4_geometry_action_smoke_v8.yaml" in smoke
+    assert "phase4_geometry_action_diagnosis_v6.yaml" in formal
 
 
 def test_confirmation_requires_physical_egl_id(
@@ -333,15 +379,68 @@ def test_feature_shard_resume_is_checksum_validated_and_read_only(
         read_feature_shard(writer.path, expected_source="A")
 
 
+def test_probe_stage_artifacts_commit_before_intervention_and_resume_verify(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    cfg = load_thought4_config(
+        Path(__file__).parents[1]
+        / "configs/thought4/phase4_geometry_action_diagnosis_v6.yaml"
+    )
+    output = Path("outputs/thought4/probe_stage")
+    video = {"schema_version": "video", "rows": []}
+    action = {"schema_version": "action", "rows": []}
+    selection = {
+        "module_path": "mot.video_kv_cache.15.v",
+        "feature_key": "mot.video_kv_cache.15.v|spatial_mean",
+        "target": "eef_object_translation_camera",
+    }
+    layer, stage, paths = _write_probe_stage_artifacts(
+        output,
+        cfg,
+        video_result=video,
+        action_result=action,
+        selection=selection,
+        resume=False,
+    )
+    assert len(paths) == 4 and all(path.is_file() for path in paths)
+    assert stage["status"] == "complete_before_intervention"
+    assert stage["frozen_intervention_selection"] == selection
+    assert stage["test_used_for_selection"] is False
+    assert layer["rows"] == []
+    supplied = stage["result_sha256"]
+    assert supplied == sha256_canonical(
+        {key: value for key, value in stage.items() if key != "result_sha256"}
+    )
+    _write_probe_stage_artifacts(
+        output,
+        cfg,
+        video_result=video,
+        action_result=action,
+        selection=selection,
+        resume=True,
+    )
+    with pytest.raises(Thought4ArtifactError, match="differs during resume"):
+        _write_probe_stage_artifacts(
+            output,
+            cfg,
+            video_result=video,
+            action_result={"schema_version": "changed", "rows": []},
+            selection=selection,
+            resume=True,
+        )
+
+
 def test_formal_requires_sha_valid_completed_real_smoke(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     smoke_path = Path(
-        "configs/thought4/phase4_geometry_action_smoke_v7.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v8.yaml"
     ).resolve()
     formal_path = Path(
-        "configs/thought4/phase4_geometry_action_diagnosis_v5.yaml"
+        "configs/thought4/phase4_geometry_action_diagnosis_v6.yaml"
     ).resolve()
     smoke = load_thought4_config(smoke_path)
     formal = load_thought4_config(formal_path)
@@ -388,6 +487,28 @@ def test_formal_requires_sha_valid_completed_real_smoke(
     }
     alignment_audit["audit_sha256"] = sha256_canonical(alignment_audit)
     atomic_write_json(root / "alignment_audit.json", alignment_audit)
+    reconstruction = {
+        "schema_version": "thought4.phase4.bitwise_correct_reconstruction.v1",
+        "subspace_arithmetic": FP32_SUBSPACE_ARITHMETIC,
+        "input_shape": [1, 98, 3072],
+        "input_dtype": "torch.bfloat16",
+        "compute_dtype": "torch.float32",
+        "output_dtype": "torch.bfloat16",
+        "single_output_cast": True,
+        "residual_reconstruction_max_abs": 0.0,
+        "input_sha256": "c" * 64,
+        "output_sha256": "c" * 64,
+        "bitwise_equal_after_output_cast": True,
+        "passed": True,
+        "technical_weight_sha256": "d" * 64,
+        "basis_sha256": "e" * 64,
+        "basis_dtype": "torch.float32",
+        "subspace_rank": 3,
+        "action_replacement": {"action_l2": 0.0},
+        "allowed_action_l2": 1e-6,
+        "action_replacement_passed": True,
+    }
+    reconstruction["contract_sha256"] = sha256_canonical(reconstruction)
     result = {
         "status": "passed",
         "scientific_result": False,
@@ -405,6 +526,7 @@ def test_formal_requires_sha_valid_completed_real_smoke(
             "passed": True,
             "module_path": "mot.video_kv_cache.15.v",
             "hook_location": "forward_action_with_video_cache argument",
+            "bf16_fp32_subspace_reconstruction": reconstruction,
         },
         "robot_init_input_state_check": {
             "passed": True,
@@ -429,6 +551,7 @@ def test_formal_requires_sha_valid_completed_real_smoke(
         ),
         "exact_state_trajectory_pairing": EXACT_STATE_TRAJECTORY_PAIRING,
         "robot_init_trajectory_pairing": ROBOT_INIT_TRAJECTORY_PAIRING,
+        "subspace_arithmetic": FP32_SUBSPACE_ARITHMETIC,
     }
     result["result_sha256"] = sha256_canonical(result)
     atomic_write_json(root / "smoke_result.json", result)
@@ -436,6 +559,35 @@ def test_formal_requires_sha_valid_completed_real_smoke(
         formal, smoke_config_path=smoke_path
     )
     assert gate["passed"] is True
+
+    non_bitwise = json.loads(json.dumps(result))
+    non_bitwise_contract = non_bitwise["identity_replacement"][
+        "bf16_fp32_subspace_reconstruction"
+    ]
+    non_bitwise_contract["bitwise_equal_after_output_cast"] = False
+    non_bitwise_contract["passed"] = False
+    non_bitwise_contract["contract_sha256"] = sha256_canonical(
+        {
+            key: value
+            for key, value in non_bitwise_contract.items()
+            if key != "contract_sha256"
+        }
+    )
+    non_bitwise["result_sha256"] = sha256_canonical(
+        {
+            key: value
+            for key, value in non_bitwise.items()
+            if key != "result_sha256"
+        }
+    )
+    atomic_write_json(
+        root / "smoke_result.json", non_bitwise, overwrite=True
+    )
+    with pytest.raises(
+        Phase4ExecutionError, match="bf16_fp32_reconstruction_valid"
+    ):
+        _verify_formal_smoke_gate(formal, smoke_config_path=smoke_path)
+    atomic_write_json(root / "smoke_result.json", result, overwrite=True)
 
     without_robot_check = dict(result)
     without_robot_check.pop("robot_init_input_state_check")

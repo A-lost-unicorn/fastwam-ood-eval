@@ -1,6 +1,6 @@
 # Thought4 实验记录与论文表格
 
-正式科学结果尚未运行；真实 smoke v3/v6 已通过，但只属于工程证据。本文件的论文
+正式科学结果尚未运行；真实 smoke v3/v6/v7 已通过，但只属于工程证据。本文件的论文
 数字必须从
 `outputs/thought4/.../artifact_manifest.json` 对应工件生成，不手抄猜测。
 
@@ -8,7 +8,7 @@
 
 | 字段 | 值 |
 | --- | --- |
-| project commit | smoke v1 `c629475bb601...`；v2 `67ea98347ce1...`；v3 `fd713d580303...`；v4 `fb49f57...`；v5 `833071f9e3f2...`；v6/formal v4 `aeb02106c483...`；v7/formal v5 实现已提交，精确 SHA 由真实 run pre-validation 冻结 |
+| project commit | smoke v1 `c629475...`；v2 `67ea983...`；v3 `fd713d5...`；v4 `fb49f57...`；v5 `833071f...`；v6/formal v4 `aeb0210...`；smoke v7/formal v5 `229a0f383d7638b1919aa6a08f5aa3ea999a5cfe`；v8/v6 待本次干净提交冻结 |
 | Fast-WAM commit | `45d8e145...` |
 | checkpoint SHA | `1000437c...` |
 | smoke v1 config fingerprint | `caef470ae35e0d1dafdc8f07ba4b8a088d6df26acebce787f900bdf7dda9caba` |
@@ -24,6 +24,8 @@
 | smoke v6 planned cohort SHA | `84ec20b2f03d59ed1d2c8d2b76f78be456ce408c87a8e2cbdc7f05f3435d9206` |
 | smoke v7 config fingerprint | `72eeaed07fb5f2b8457106dd3d5cd89333a47dca19bd4533bb9c6a90b13ebb90` |
 | smoke v7 planned cohort SHA | `36bd5f967fbb145b73522cdd90d28b44dfd7ea47ad4f9f84fac93cd9760c8cbd` |
+| smoke v8 config fingerprint | `81d3885ccb5b58806c1a729e509c039f6e1cb33a34ff242f8fa16785796149d7` |
+| smoke v8 planned cohort SHA | `a67ff85321dc684a80b853b58ab133905232a275e6d71255fd1c966b9a3d6c12` |
 | formal v1 config / cohort SHA | `62951df5...ae44` / `340db6c1...708`（工程失败身份） |
 | formal v2 config / cohort SHA | `cc608953...6f21` / `e3a6363f...5ca`（未运行，被新代码身份取代） |
 | formal v3 config fingerprint | `44639a0229c7899dbc754ed8c2b743fd649f35ce5d729ef525ab99321575a27b` |
@@ -32,11 +34,16 @@
 | formal v4 planned cohort SHA | `640af37c911e87f8ae950d648e98cceb20c5c178b50e547864924cd05771a683` |
 | formal v5 config fingerprint | `7b2a8e7ba6a51fe5246599324b09983d8df19824bfc906d7e8fd3932276fbb3a` |
 | formal v5 planned cohort SHA | `26394c6a856a8292eb5f2a0f125fa307ecec23ec9a907294ad05e9b2bbf5ccda` |
-| physical GPU | smoke v1/v2：1；smoke v3/formal v1/smoke v4/v5/v6/formal v4：2；v7/formal v5 待运行 |
+| formal v6 config fingerprint | `3b14a7d7fd09deda9253bb1cd9950d9c4b5bd0cdf9f124a4dfede22add5c24f6` |
+| formal v6 planned cohort SHA | `9af7cf7c1933fb1e5574099361f6d7dcc7500727480ecb4bbf010089f28d8f04` |
+| physical GPU | smoke v1/v2：1；smoke v3/formal v1/smoke v4/v5/v6/formal v4/smoke v7/formal v5：2；v8/v6 待运行 |
 | smoke v3 start / finish | 2026-07-31 11:16:46 / 11:27:19 UTC |
 | smoke v3 backbone SHA before / after | `ac0dd59...b4f8` / `ac0dd59...b4f8` |
 | smoke v6 start / finish | 2026-08-01 10:07:40 / 10:18:42 UTC |
 | smoke v6 result SHA | `b260977ae826e8c860074bd3402a3914dbc52e3f887cc090dad5ff3be2bc4c37` |
+| smoke v7 start / finish | 2026-08-03 02:32:15 / 02:43:10 UTC |
+| smoke v7 result SHA | `9d81d79afa9f3efcadf1a015f596f33e60414198b72f7c1e6cfa5a1322a1fbf9` |
+| formal v5 start / finish | 2026-08-03 03:03:08 / 04:13:40 UTC；ENGINEERING FAILED |
 | v7/v5 trajectory source | `simulator_action_replay_from_input_t` |
 | future RGB read | false |
 | success outcome read | false |
@@ -45,14 +52,14 @@
 
 | 检查 | 结果 |
 | --- | --- |
-| Thought4 CPU/mock | 43 passed |
-| Thought1–4 全项目回归 | 440 passed；5 条 NVML 环境 warning 不影响测试结论 |
-| 文档校验 | 84 个 Markdown；本地链接全部有效；`docs/` 根目录整洁 |
+| Thought4 CPU/mock | 46 passed |
+| Thought1–4 全项目回归 | 443 passed；5 条 NVML 环境 warning 不影响测试结论 |
+| 文档校验 | 85 个 Markdown；本地链接全部有效；`docs/` 根目录整洁 |
 | smoke dry-run | PASS；Torch/model/simulator/write 均为 false |
 | formal dry-run | PASS；Torch/model/simulator/write 均为 false |
 | simulator-replay render-only | PASS；2 states×4 conditions；Clean/Lighting label SHA 逐 state 相同；replay 后 state 精确恢复；audit SHA `30ea849e...94664`；未加载 Fast-WAM |
-| 真实 GPU smoke | v1/v2/v4 **ENGINEERING FAILED**；v3 **PASSED / NON-SCIENTIFIC**；v5 **INTERRUPTED / RESUME BUG**；v6 **PASSED / NON-SCIENTIFIC**；v7 **NOT RUN** |
-| 正式 diagnosis | v1 **ENGINEERING FAILED（pre-model）**；v2/v3 未运行；v4 **ENGINEERING FAILED（pre-model alignment）**；v5 **PRE-REGISTERED / NOT RUN** |
+| 真实 GPU smoke | v1/v2/v4 **ENGINEERING FAILED**；v3/v6/v7 **PASSED / NON-SCIENTIFIC**；v5 **INTERRUPTED / RESUME BUG**；v8 **PRE-REGISTERED / NOT RUN** |
+| 正式 diagnosis | v1/v4 **ENGINEERING FAILED（pre-model）**；v2/v3 未运行；v5 **ENGINEERING FAILED（post-probe, pre-intervention outcome）**；v6 **PRE-REGISTERED / NOT RUN** |
 
 ## Smoke v1 失败记录（非科学结果）
 
@@ -215,7 +222,7 @@ future RGB、success、OOD 或 policy outcome，也未写入/修改 v4 工件：
 prefix，另 2 条来自同一低对齐 episode 31。该审计只描述 replay fidelity，不是
 policy 或方法效果。
 
-## simulator-replay v5 预注册（尚未运行）
+## simulator-replay v5 预注册与执行
 
 在上述失败与审计之后，冻结以下单变量修复：
 
@@ -228,7 +235,42 @@ policy 或方法效果。
 - 不读取 future RGB、success、OOD、policy outcome，不改变 probe/layer/seed/threshold；
 - 新身份为 smoke v7 / formal v5，必须先通过新的 smoke；旧 v6 PASS 不复用。
 
-当前分类仍为 `PRE-REGISTERED / NOT RUN`，不能据此填写下方科学表格。
+smoke v7 在 commit `229a0f383d7638b1919aa6a08f5aa3ea999a5cfe`、GPU 2
+完成：2 个 base states、8 条四条件样本、80 条 feature、2/2 alignment pass，
+backbone SHA 前后相同，raw identity replacement action L2=0；结果 SHA 为
+`9d81d79afa9f3efcadf1a015f596f33e60414198b72f7c1e6cfa5a1322a1fbf9`。
+该结果是有效技术 Gate，但没有覆盖 subspace projection/reconstruction。
+
+formal v5 随后运行并保留以下工程证据：
+
+| 字段 | 值 |
+| --- | --- |
+| Run ID / GPU | `phase4_geometry_action_diagnosis_v5` / 2 |
+| 时间 | 2026-08-03 03:03:08–04:13:40 UTC |
+| config fingerprint | `7b2a8e7ba6a51fe5246599324b09983d8df19824bfc906d7e8fd3932276fbb3a` |
+| 已完成 | 64 base states；256 paired render；256 labels；12,544 feature records；Video/Action probe panel 在内存完成 |
+| alignment | 56 pass / 8 fail；全部保留；内部 audit SHA `78c181b7dbd094fbb6f420b69523e162079725e09ea266b9278c0122d15dd925` |
+| 失败位置 | 第一条 geometry-subspace intervention 的 correct reconstruction |
+| 错误 | `correct geometry reconstruction exceeded BF16 tolerance` |
+| 科学输出 | 无 intervention、evidence、method、integrity、report；无 classification |
+
+旧代码只在 intervention 之后写 probe JSON，所以 v5 工件中没有可登记的
+`video_probe_results.json` 或 `action_probe_results.json`。v5 目录冻结，禁止覆盖、
+补写或 resume。
+
+## FP32 subspace formal v6 预注册（当前，尚未运行）
+
+formal v5 失败后只登记以下工程修复：
+
+- FP32 coordinates/projection/residual/reconstruction，最终只 cast 一次 BF16；
+- correct control 必须 `torch.equal`、input/output SHA 相同、max-abs=0；
+- smoke v8 用真实 BF16 cache 和真实 consumer replacement 覆盖该路径；
+- probe panel 在 intervention 前原子落盘并由 `probe_stage_result.json` 冻结；
+- 新 formal v6 namespace，不覆盖、不 resume v5；
+- 64-state cohort、probe、层、seed、threshold、统计和方法规则完全不变。
+
+当前分类仍为 `PRE-REGISTERED / NOT RUN`，不能据此填写下方科学表格。完整预注册见
+[formal v6 FP32 修复预注册](fp32_subspace_v6_preregistration.md)。
 
 ## Table A：Video geometry readability
 

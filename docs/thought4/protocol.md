@@ -42,6 +42,11 @@ replacement 固定使用 `mot.video_kv_cache.15.v` consumer argument，与 forma
 候选边界同类。它不训练
 正式 panel，也不生成方法选择。
 
+formal v5 的工程失败后，当前 smoke v8 还必须使用真实 captured BF16 cache 走完
+生产 subspace 路径：FP32 projection/residual/reconstruction、单次 BF16 output
+cast、逐位 correct-control 恢复和 reconstructed consumer replacement。旧 smoke
+v7 的 raw identity replacement PASS 不能替代这一新增 Gate。
+
 ## 3. 数据生成
 
 LeRobot demonstration 只读取 action、EEF state、episode/frame identity；不读取
@@ -156,6 +161,12 @@ h_res = h - z Uᵀ
 h_shuffle = h_res + norm_match(z_donor) Uᵀ
 ```
 
+formal v6 冻结所有 `z`、projection、residual 和 replacement arithmetic 为 FP32；
+SVD basis 保持 FP32，只在 Action consumer 边界将最终 tensor cast 一次回 captured
+BF16。correct control 在该 cast 后必须与输入 `torch.equal`，input/output tensor
+SHA 必须一致且 max-abs 必须为 0。任何失败都直接停止，不得放宽旧 `5e-4` 阈值或
+用动作空间容差替代 tensor 逐位检查。
+
 donor 必须同 task、不同 episode、尽量匹配 progress bin，并是固定 seed 的一一
 derangement。correct/shuffle 固定 observation、language、proprio、action seed、
 initial noise、denoise schedule、checkpoint 和 preprocessing。输出动作 L1/L2、
@@ -164,8 +175,14 @@ floor。
 
 `denoise_schedule_sha256` 覆盖 scheduler 类型与完整 config、steps、sigma shift、
 horizon 和 rand device。每个 seed 的 correct reconstruction 不仅检查 hidden
-误差，也必须在动作空间低于 `max(1e-6, 2×replay_floor+1e-8)`；shuffle 只有超过
+逐位恢复，也必须在动作空间低于 `max(1e-6, 2×replay_floor+1e-8)`；shuffle 只有超过
 同一容差才计为 above floor。
+
+Phase 4-A/B panel 和 development-only intervention selection 完成后，必须先原子
+落盘 `video_probe_results.json`、`action_probe_results.json`、
+`layer_summary.json` 和 `probe_stage_result.json`，再开始 Phase 4-C。该顺序只提高
+故障可审计性，不允许用已落盘 probe 结果修改本协议或在 intervention 失败时生成
+method classification。
 
 同时分别记录 SVD 截断后的 probe `explained_weight_energy`，以及被选 hidden 在
 该子空间内的实际投影能量比 `explained_feature_energy`，不得混称。

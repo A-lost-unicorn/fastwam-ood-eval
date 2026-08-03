@@ -16,7 +16,10 @@ from fastwam_ood_eval.thought4.action_intervention import (
     geometry_shuffle_hidden,
     validate_seed_identity,
 )
-from fastwam_ood_eval.thought4.config import Thought4Config
+from fastwam_ood_eval.thought4.config import (
+    FP32_SUBSPACE_ARITHMETIC,
+    Thought4Config,
+)
 from fastwam_ood_eval.thought4.feature_hooks import (
     ScopedVideoKVCacheCapture,
     ScopedVideoKVCacheReplacement,
@@ -231,6 +234,59 @@ def _capture_raw_feature(
     return values[0]
 
 
+def _require_fp32_subspace_protocol(cfg: Thought4Config) -> None:
+    if cfg.intervention.subspace_arithmetic != FP32_SUBSPACE_ARITHMETIC:
+        raise InterventionRuntimeError(
+            "the repaired intervention requires the frozen FP32/single-cast "
+            "subspace arithmetic contract"
+        )
+
+
+def _bitwise_correct_reconstruction(
+    hidden: Any,
+    subspace: Any,
+) -> tuple[Any, dict[str, Any]]:
+    """Require FP32 reconstruction to recover captured BF16 exactly."""
+
+    import torch
+
+    if hidden.dtype != torch.bfloat16:
+        raise InterventionRuntimeError(
+            f"correct-control input must be BF16, got {hidden.dtype}"
+        )
+    correct = correct_reconstruction(hidden, subspace)
+    bitwise_equal = (
+        correct.output.shape == hidden.shape
+        and correct.output.dtype == hidden.dtype
+        and correct.output.device == hidden.device
+        and torch.equal(correct.output, hidden)
+    )
+    metadata: dict[str, Any] = {
+        "schema_version": "thought4.phase4.bitwise_correct_reconstruction.v1",
+        "subspace_arithmetic": FP32_SUBSPACE_ARITHMETIC,
+        "input_shape": list(hidden.shape),
+        "input_dtype": str(hidden.dtype),
+        "compute_dtype": str(torch.float32),
+        "output_dtype": str(correct.output.dtype),
+        "single_output_cast": True,
+        "residual_reconstruction_max_abs": (
+            correct.residual_reconstruction_error
+        ),
+        "input_sha256": tensor_sha256(hidden),
+        "output_sha256": tensor_sha256(correct.output),
+        "bitwise_equal_after_output_cast": bitwise_equal,
+        "passed": bitwise_equal,
+    }
+    if not bitwise_equal:
+        raise InterventionRuntimeError(
+            "correct geometry reconstruction is not bitwise equal after the "
+            "single BF16 output cast: "
+            f"max_abs={correct.residual_reconstruction_error:.9g}, "
+            f"input_dtype={hidden.dtype}, output_dtype={correct.output.dtype}"
+        )
+    return correct, metadata
+
+
 def run_identity_replacement_smoke(
     cfg: Thought4Config,
     runtime: FrozenFastWAMRuntime,
@@ -238,6 +294,9 @@ def run_identity_replacement_smoke(
 ) -> dict[str, Any]:
     """Exercise the real source-A replacement path without a scientific effect."""
 
+    import torch
+
+    _require_fp32_subspace_protocol(cfg)
     # Exercise the direct action-consumed source-A replacement boundary that
     # formal Phase 4-C is allowed to select.
     module_path = f"mot.video_kv_cache.{cfg.backbone.video_layers[0]}.v"
@@ -252,6 +311,28 @@ def run_identity_replacement_smoke(
         sample,
         spec=spec,
         seed=seed,
+    )
+    generator = torch.Generator(device="cpu").manual_seed(
+        int(cfg.experiment.seed) + 808
+    )
+    technical_weight = torch.randn(
+        (3, raw.shape[-1]), generator=generator, dtype=torch.float32
+    )
+    technical_subspace = subspace_from_linear_weight(
+        technical_weight,
+        energy_threshold=cfg.intervention.rank_energy_threshold,
+        max_rank=min(3, cfg.intervention.max_rank),
+    )
+    reconstructed, reconstruction_contract = (
+        _bitwise_correct_reconstruction(raw, technical_subspace)
+    )
+    reconstruction_contract.update(
+        {
+            "technical_weight_sha256": tensor_sha256(technical_weight),
+            "basis_sha256": tensor_sha256(technical_subspace.basis),
+            "basis_dtype": str(technical_subspace.basis.dtype),
+            "subspace_rank": technical_subspace.rank,
+        }
     )
     reference = _run_action(cfg, runtime, sample, seed=seed)
     replay_rows = [
@@ -281,18 +362,49 @@ def run_identity_replacement_smoke(
         ),
     )
     identity_metrics = compare_action_chunks(reference, replaced)
+    reconstructed_action = _run_action(
+        cfg,
+        runtime,
+        sample,
+        seed=seed,
+        replacement=(
+            spec,
+            lambda original, value=reconstructed.output: value.to(
+                device=original.device, dtype=original.dtype
+            ),
+        ),
+    )
+    reconstruction_metrics = compare_action_chunks(
+        reference, reconstructed_action
+    )
     replay_l2 = float(replay_floor["action_l2"])
     identity_l2 = float(identity_metrics["action_l2"])
     # Exact replay is expected.  The small absolute allowance only covers
     # nondeterministic low-level kernels when the measured replay floor is zero.
     tolerance = max(1e-6, replay_l2 * 2.0 + 1e-8)
-    passed = identity_l2 <= tolerance
+    reconstruction_l2 = float(reconstruction_metrics["action_l2"])
+    reconstruction_contract["action_replacement"] = reconstruction_metrics
+    reconstruction_contract["allowed_action_l2"] = tolerance
+    reconstruction_contract["action_replacement_passed"] = (
+        reconstruction_l2 <= tolerance
+    )
+    reconstruction_contract["passed"] = (
+        reconstruction_contract["passed"]
+        and reconstruction_contract["action_replacement_passed"]
+    )
+    reconstruction_contract["contract_sha256"] = sha256_canonical(
+        reconstruction_contract
+    )
+    passed = (
+        identity_l2 <= tolerance and reconstruction_contract["passed"]
+    )
     if not passed:
         raise InterventionRuntimeError(
-            "identity source-A replacement exceeds the measured replay floor"
+            "identity or FP32-reconstructed source-A replacement exceeds the "
+            "measured replay floor"
         )
     payload: dict[str, Any] = {
-        "schema_version": "thought4.phase4.identity_replacement_smoke.v1",
+        "schema_version": "thought4.phase4.identity_replacement_smoke.v2",
         "module_path": module_path,
         "hook_location": "forward_action_with_video_cache argument",
         "action_seed_identity": asdict(
@@ -303,6 +415,8 @@ def run_identity_replacement_smoke(
         "captured_feature_sha256": tensor_sha256(raw),
         "replay_floor": replay_floor,
         "identity_replacement": identity_metrics,
+        "bf16_fp32_subspace_reconstruction": reconstruction_contract,
+        "subspace_arithmetic": FP32_SUBSPACE_ARITHMETIC,
         "allowed_action_l2": tolerance,
         "passed": passed,
         "scientific_result": False,
@@ -383,6 +497,8 @@ def run_geometry_subspace_intervention(
 
     import torch
 
+    _require_fp32_subspace_protocol(cfg)
+
     eligible = [
         sample
         for sample in samples
@@ -453,11 +569,9 @@ def run_geometry_subspace_intervention(
             raise InterventionRuntimeError(
                 "norm-matched donor coordinate ratio exceeds tolerance"
             )
-        correct = correct_reconstruction(target_hidden, subspace)
-        if correct.residual_reconstruction_error > 5e-4:
-            raise InterventionRuntimeError(
-                "correct geometry reconstruction exceeded BF16 tolerance"
-            )
+        correct, correct_contract = _bitwise_correct_reconstruction(
+            target_hidden, subspace
+        )
         for seed in cfg.intervention.action_seeds:
             identity_correct = _seed_identity(
                 cfg, runtime, target, int(seed)
@@ -531,6 +645,7 @@ def run_geometry_subspace_intervention(
                 "correct_vs_shuffle": correct_shuffle,
                 "correct_shuffle_exceeds_floor": exceeds,
                 "action_l2_replay_tolerance": action_l2_threshold,
+                "correct_reconstruction": correct_contract,
                 **intervention_metadata,
             }
             row["row_sha256"] = sha256_canonical(row)
@@ -545,6 +660,8 @@ def run_geometry_subspace_intervention(
             "rank": subspace.rank,
             "explained_weight_energy": subspace.explained_weight_energy,
             "basis_sha256": tensor_sha256(subspace.basis),
+            "basis_dtype": str(subspace.basis.dtype),
+            "arithmetic": FP32_SUBSPACE_ARITHMETIC,
         },
         "geometry_coordinate_condition_shift": coordinate_shift,
         "rows": rows,

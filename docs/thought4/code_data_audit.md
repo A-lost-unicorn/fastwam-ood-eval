@@ -176,6 +176,13 @@ identity replacement，以先验证 formal 会使用的同类边界。正式使�
 - correct/shuffle norm matching；
 - frozen action seed/noise/schedule。
 
+formal v5 证明 raw identity replacement 不足以覆盖真实 subspace arithmetic：旧
+路径把 FP32 basis 降为 BF16 后，correct reconstruction 在第一次 intervention
+即失败。当前 v8/v6 合同要求所有 coordinates/projection/residual/reconstruction
+均为 FP32，只在 consumer 边界 cast 一次 BF16；correct output 必须与 captured
+input 逐位相同并具有相同 tensor SHA。smoke v8 使用真实 capture 和真实 consumer
+replacement 覆盖整条路径，formal gate 重算其合同 SHA，不允许放宽阈值。
+
 如果真实 smoke 发现该 hook 未触发、shape 不稳定或 replacement replay 不稳定，
 Phase 4-C 必须 fail closed；不得静默改成整条 hidden replacement。v1 不自动切换
 到 Action-side fallback；若确实需要 `action_encoder`/`head`，必须另开协议版本并
@@ -314,14 +321,16 @@ configs/thought4/phase4_geometry_action_diagnosis_v1.yaml # formal v1 失败身�
 configs/thought4/phase4_geometry_action_diagnosis_v2.yaml # 未运行，旧代码身份
 configs/thought4/phase4_geometry_action_diagnosis_v3.yaml # 未运行，resume 修复前身份
 configs/thought4/phase4_geometry_action_diagnosis_v4.yaml # alignment 失败身份
-configs/thought4/phase4_geometry_action_diagnosis_v5.yaml # 当前 simulator-replay runner
+configs/thought4/phase4_geometry_action_diagnosis_v5.yaml # BF16 arithmetic 工程失败，冻结
+configs/thought4/phase4_geometry_action_diagnosis_v6.yaml # 当前 FP32 arithmetic runner
 configs/thought4/phase4_geometry_action_smoke.yaml       # v1 失败身份，保留
 configs/thought4/phase4_geometry_action_smoke_v2.yaml    # v2 失败身份，保留
 configs/thought4/phase4_geometry_action_smoke_v3.yaml    # 已通过，无 Robot-init
 configs/thought4/phase4_geometry_action_smoke_v4.yaml    # observation-path 失败
 configs/thought4/phase4_geometry_action_smoke_v5.yaml    # 中断后暴露 resume 序列化缺陷
 configs/thought4/phase4_geometry_action_smoke_v6.yaml    # 已通过，旧标签协议
-configs/thought4/phase4_geometry_action_smoke_v7.yaml    # 当前 simulator-replay runner
+configs/thought4/phase4_geometry_action_smoke_v7.yaml    # simulator-replay 已通过
+configs/thought4/phase4_geometry_action_smoke_v8.yaml    # 当前 FP32 arithmetic Gate
 scripts/run_thought4_phase4_smoke.sh
 scripts/run_thought4_phase4_diagnosis.sh
 ```
@@ -343,7 +352,8 @@ held-out grouped bootstrap 只建立在 3 个 episode 上。主 CLI 只
 
 v6/v4 resume 修复后的专项结果为 `41 passed`，全项目为 `438 passed`（5 条
 NVML 环境 warning）；simulator-replay v5 增加回归后为 Thought4 `43 passed`、
-全项目 `440 passed`（同样 5 条 NVML 环境 warning）。真实 simulator-replay
+全项目 `440 passed`（同样 5 条 NVML 环境 warning）；FP32 v6 合同增加后为
+Thought4 `46 passed`、全项目 `443 passed`（同样 5 条 warning）。真实 simulator-replay
 render-only 回归另在 GPU 2 完成 2 states×4 conditions：统一
 label source、shared/condition-specific pairing、replay 后 state 恢复、finite/mask、
 Clean/Lighting label SHA 和 alignment audit SHA 均通过；未加载 Fast-WAM。上述真实
@@ -357,8 +367,11 @@ inference tensor 没有 `_version` 而停止；未生成 feature/probe/intervent
 外部中断，resume 因 tuple/list JSON 表示差异被误拒绝。v6 在工件边界 canonicalize
 配置并增加回归；smoke v6 随后通过。formal v4 在第二个 state 的 parquet
 alignment hard gate 前停止；完整审计为 56/64 pass、8/64 fail。新 v5 协议保留
-全部 state 并从实际 input `t` simulator replay 生成 motion target；smoke v7/formal
-v5 均为 **NOT RUN**。任何历史工件或旧 smoke 都不能代替新 formal gate。
+全部 state 并从实际 input `t` simulator replay 生成 motion target；smoke v7 已
+通过。formal v5 完成 render/feature/probe 计算后，在第一次 BF16 subspace correct
+reconstruction 停止，且旧编排未先保存 probe JSON。当前预注册 FP32/single-cast/
+bitwise correct smoke v8 与全新 formal v6，并在 intervention 前提交四个 probe
+工件。任何历史工件或旧 smoke 都不能代替新 formal gate。
 
 最短执行顺序：
 

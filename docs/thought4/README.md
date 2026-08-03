@@ -10,17 +10,18 @@ probe 结果写成 OOD improvement。
 | --- | --- |
 | 10 项代码/数据审计 | COMPLETE |
 | hooks、labels、probe、intervention、decision | IMPLEMENTED |
-| Thought4 CPU/mock 单测 | COMPLETE（43 passed） |
-| 全项目回归 | COMPLETE（440 passed；5 条 NVML 环境 warning） |
+| Thought4 CPU/mock 单测 | COMPLETE（46 passed） |
+| 全项目回归 | COMPLETE（443 passed；5 条 NVML 环境 warning） |
 | smoke/formal dry-run | COMPLETE（严格零写入） |
-| 真实单卡 smoke | v1/v2/v4 工程失败；v3 **PASSED（无 Robot-init）**；v5 中断；v6 **PASSED / NON-SCIENTIFIC**；simulator-replay v7 **NOT RUN** |
-| 正式 64-state diagnosis | v1 工程失败；v2/v3 未运行；v4 **ENGINEERING FAILED（pre-model alignment）**；simulator-replay v5 **PRE-REGISTERED / NOT RUN** |
+| 真实单卡 smoke | simulator-replay v7 **PASSED / NON-SCIENTIFIC**；FP32 arithmetic v8 **PRE-REGISTERED / NOT RUN** |
+| 正式 64-state diagnosis | v5 在 probe 后、首次 intervention 前 **ENGINEERING FAILED**；FP32 arithmetic v6 **PRE-REGISTERED / NOT RUN** |
 | Geo-REPA / SE(3)-Align | **NOT IMPLEMENTED（按协议锁定）** |
 
 ## 文档入口
 
 - [代码与数据审计](code_data_audit.md)
 - [冻结研究协议](protocol.md)
+- [formal v6 FP32 修复预注册](fp32_subspace_v6_preregistration.md)
 - [实现与数据流](implementation.md)
 - [运行手册](runbook.md)
 - [实验记录与论文表格](experiment_record.md)
@@ -47,7 +48,7 @@ Phase 4 只允许输出以下一个分类：
 
 正式结果产生前不能预先选择方法。
 
-## simulator-replay v5 冻结说明
+## formal v6 FP32 修复冻结说明
 
 formal v4 在第 2 个排序状态因 Clean prefix 与 parquet EEF 超出 3 cm 阈值而
 停止。对原 64 个冻结状态的只读审计显示 56 通过、8 失败；因此这不是单条偶然
@@ -56,5 +57,13 @@ formal v4 在第 2 个排序状态因 Clean prefix 与 parquet EEF 超出 3 cm �
 输入状态 `t` 重放冻结 demonstration actions 得到。它不读取 future RGB、success、
 OOD 或 policy outcome，也不筛除/替换任何状态。
 
-新执行顺序严格为 `smoke v7 → formal v5`。旧 smoke v6 虽已通过，但不能为改过
-代码身份的 formal v5 解锁。
+simulator-replay smoke v7 随后通过，但 formal v5 在真实 BF16 cache 上执行
+geometry reconstruction 时触发旧 `5e-4` hard check。根因是旧实现把 FP32 basis
+降为 BF16 后完成整段 subspace arithmetic；v7 只验证 raw identity replacement，
+没有覆盖真实 projection/reconstruction，所以它不能为修复后的 formal 解锁。
+
+已预注册单变量工程修复：coordinates、residual 和 reconstruction 全部用 FP32，
+只在 consumer 边界 cast 一次 BF16；correct control 必须 `torch.equal` 且
+input/output SHA 相同，绝不放宽阈值。新执行顺序严格为 `smoke v8 → formal v6`。
+formal v5 原目录冻结，不覆盖、不 resume；v6 还会在 intervention 前先落盘 probe
+结果。完整边界见 [formal v6 预注册](fp32_subspace_v6_preregistration.md)。

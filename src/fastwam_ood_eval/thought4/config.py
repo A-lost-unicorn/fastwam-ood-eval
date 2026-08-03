@@ -52,6 +52,9 @@ EXACT_STATE_TRAJECTORY_PAIRING = (
     "shared_clean_world_replay_transformed_to_condition_camera"
 )
 ROBOT_INIT_TRAJECTORY_PAIRING = "condition_specific_world_replay"
+FP32_SUBSPACE_ARITHMETIC = (
+    "fp32_coordinates_residual_single_output_cast_bitwise_correct"
+)
 
 
 @dataclass(frozen=True)
@@ -138,6 +141,9 @@ class InterventionConfig:
     action_seeds: tuple[int, ...]
     norm_ratio_tolerance: float
     replay_floor_repeats: int
+    # None preserves historical v1-v5 config fingerprints.  The repaired
+    # formal v6 protocol opts in explicitly and is checked by smoke v8.
+    subspace_arithmetic: str | None
 
 
 @dataclass(frozen=True)
@@ -156,6 +162,8 @@ class Thought4Config:
         payload = asdict(self)
         if payload["probe"].get("trajectory_label_source") is None:
             payload["probe"].pop("trajectory_label_source", None)
+        if payload["intervention"].get("subspace_arithmetic") is None:
+            payload["intervention"].pop("subspace_arithmetic", None)
         for section in ("experiment", "backbone", "cohort"):
             for key, value in list(payload[section].items()):
                 if isinstance(value, Path):
@@ -166,8 +174,8 @@ class Thought4Config:
 DEFAULTS: dict[str, Any] = {
     "schema_version": THOUGHT4_CONFIG_SCHEMA,
     "experiment": {
-        "name": "phase4_geometry_action_diagnosis_v5",
-        "output_dir": "outputs/thought4/phase4_geometry_action_diagnosis_v5",
+        "name": "phase4_geometry_action_diagnosis_v6",
+        "output_dir": "outputs/thought4/phase4_geometry_action_diagnosis_v6",
         "seed": 4407,
         "mode": "formal",
     },
@@ -246,6 +254,7 @@ DEFAULTS: dict[str, Any] = {
         "action_seeds": [4437, 4438, 4439],
         "norm_ratio_tolerance": 0.05,
         "replay_floor_repeats": 2,
+        "subspace_arithmetic": None,
     },
 }
 
@@ -390,6 +399,11 @@ def _as_config(data: Mapping[str, Any]) -> Thought4Config:
             ),
             replay_floor_repeats=int(
                 merged["intervention"]["replay_floor_repeats"]
+            ),
+            subspace_arithmetic=(
+                None
+                if merged["intervention"]["subspace_arithmetic"] is None
+                else str(merged["intervention"]["subspace_arithmetic"])
             ),
         ),
     )
@@ -589,12 +603,22 @@ def validate_config(cfg: Thought4Config) -> None:
         )
     if cfg.intervention.replay_floor_repeats < 2:
         raise Thought4ConfigError("replay_floor_repeats must be at least two")
+    if cfg.intervention.subspace_arithmetic not in {
+        None,
+        FP32_SUBSPACE_ARITHMETIC,
+    }:
+        raise Thought4ConfigError(
+            "intervention.subspace_arithmetic must be the frozen FP32/single-cast "
+            "contract or omitted for a historical config"
+        )
 
 
 def config_to_dict(cfg: Thought4Config) -> dict[str, Any]:
     payload = asdict(cfg)
     if payload["probe"].get("trajectory_label_source") is None:
         payload["probe"].pop("trajectory_label_source", None)
+    if payload["intervention"].get("subspace_arithmetic") is None:
+        payload["intervention"].pop("subspace_arithmetic", None)
     payload["experiment"]["output_dir"] = str(cfg.experiment.output_dir)
     payload["backbone"]["checkpoint_path"] = str(cfg.backbone.checkpoint_path)
     payload["backbone"]["dataset_stats_path"] = str(

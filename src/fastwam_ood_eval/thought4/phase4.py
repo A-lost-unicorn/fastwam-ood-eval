@@ -24,6 +24,7 @@ from fastwam_ood_eval.thought4.cohort import (
 )
 from fastwam_ood_eval.thought4.config import (
     EXACT_STATE_TRAJECTORY_PAIRING,
+    FP32_SUBSPACE_ARITHMETIC,
     ROBOT_INIT_TRAJECTORY_PAIRING,
     SIMULATOR_TRAJECTORY_LABEL_SOURCE,
     Thought4Config,
@@ -82,6 +83,53 @@ def _text_artifact(path: Path, value: str, *, resume: bool) -> Path:
     )
 
 
+def _write_probe_stage_artifacts(
+    output: Path,
+    cfg: Thought4Config,
+    *,
+    video_result: Mapping[str, Any],
+    action_result: Mapping[str, Any],
+    selection: Mapping[str, Any],
+    resume: bool,
+) -> tuple[dict[str, Any], dict[str, Any], list[Path]]:
+    """Commit completed Phase 4-A/B evidence before Phase 4-C starts."""
+
+    from fastwam_ood_eval.thought4.report import build_layer_summary
+
+    video_path = _json_artifact(
+        output / "video_probe_results.json", video_result, resume=resume
+    )
+    action_path = _json_artifact(
+        output / "action_probe_results.json", action_result, resume=resume
+    )
+    layer_summary = build_layer_summary(video_result, action_result)
+    layer_path = _json_artifact(
+        output / "layer_summary.json", layer_summary, resume=resume
+    )
+    payload: dict[str, Any] = {
+        "schema_version": "thought4.phase4.probe_stage.v1",
+        "status": "complete_before_intervention",
+        "config_fingerprint": cfg.fingerprint,
+        "video_probe_result_sha256": sha256_canonical(video_result),
+        "action_probe_result_sha256": sha256_canonical(action_result),
+        "layer_summary_sha256": layer_summary["summary_sha256"],
+        "frozen_intervention_selection": dict(selection),
+        "test_used_for_selection": False,
+        "future_rgb_read": False,
+        "success_outcome_read": False,
+    }
+    payload["result_sha256"] = sha256_canonical(payload)
+    stage_path = _json_artifact(
+        output / "probe_stage_result.json", payload, resume=resume
+    )
+    return layer_summary, payload, [
+        video_path,
+        action_path,
+        layer_path,
+        stage_path,
+    ]
+
+
 def dry_run_payload(cfg: Thought4Config, *, stage: str) -> dict[str, Any]:
     """Strictly read-only: no Torch import, CUDA/model load or artifact write."""
 
@@ -113,6 +161,9 @@ def dry_run_payload(cfg: Thought4Config, *, stage: str) -> dict[str, Any]:
             == SIMULATOR_TRAJECTORY_LABEL_SOURCE
             else "hard_gate_3cm_15deg"
         ),
+        "subspace_arithmetic": (
+            cfg.intervention.subspace_arithmetic or "historical_bf16_arithmetic"
+        ),
         "planned_split_counts": {
             split: sum(value.split == split for value in plans)
             for split in ("train", "development", "test")
@@ -139,7 +190,7 @@ def _verify_formal_smoke_gate(
     *,
     expected_project_commit: str | None = None,
     smoke_config_path: str | Path = (
-        "configs/thought4/phase4_geometry_action_smoke_v7.yaml"
+        "configs/thought4/phase4_geometry_action_smoke_v8.yaml"
     ),
 ) -> dict[str, Any]:
     from fastwam_ood_eval.thought4.config import load_thought4_config
@@ -192,6 +243,20 @@ def _verify_formal_smoke_gate(
         == "model_input_t_after_demonstration_prefix"
         and robot_check.get("reset_state_is_disclosure_only") is True
     )
+    identity_result = result.get("identity_replacement")
+    reconstruction = (
+        identity_result.get("bf16_fp32_subspace_reconstruction")
+        if isinstance(identity_result, Mapping)
+        else None
+    )
+    if isinstance(reconstruction, Mapping):
+        reconstruction_unhashed = dict(reconstruction)
+        reconstruction_sha = reconstruction_unhashed.pop(
+            "contract_sha256", None
+        )
+    else:
+        reconstruction_unhashed = {}
+        reconstruction_sha = None
     supplied_alignment_sha = alignment_audit.get("audit_sha256")
     unhashed_alignment = dict(alignment_audit)
     unhashed_alignment.pop("audit_sha256", None)
@@ -269,6 +334,33 @@ def _verify_formal_smoke_gate(
             and result.get("identity_replacement", {}).get("hook_location")
             == "forward_action_with_video_cache argument"
         ),
+        "bf16_fp32_reconstruction_valid": (
+            isinstance(reconstruction, Mapping)
+            and reconstruction.get("schema_version")
+            == "thought4.phase4.bitwise_correct_reconstruction.v1"
+            and reconstruction.get("subspace_arithmetic")
+            == FP32_SUBSPACE_ARITHMETIC
+            and reconstruction.get("input_dtype") == "torch.bfloat16"
+            and reconstruction.get("compute_dtype") == "torch.float32"
+            and reconstruction.get("output_dtype") == "torch.bfloat16"
+            and reconstruction.get("basis_dtype") == "torch.float32"
+            and reconstruction.get("single_output_cast") is True
+            and reconstruction.get("residual_reconstruction_max_abs") == 0.0
+            and reconstruction.get("input_sha256")
+            == reconstruction.get("output_sha256")
+            and reconstruction.get("bitwise_equal_after_output_cast") is True
+            and reconstruction.get("action_replacement_passed") is True
+            and reconstruction.get("passed") is True
+            and isinstance(reconstruction_sha, str)
+            and reconstruction_sha
+            == sha256_canonical(reconstruction_unhashed)
+        ),
+        "subspace_arithmetic_matches": (
+            result.get("subspace_arithmetic")
+            == FP32_SUBSPACE_ARITHMETIC
+            == cfg.intervention.subspace_arithmetic
+            == smoke_cfg.intervention.subspace_arithmetic
+        ),
         "robot_init_smoke_condition_present": (
             set(smoke_cfg.cohort.conditions)
             == {"clean", "camera", "lighting", "robot_init"}
@@ -334,7 +426,7 @@ def _verify_formal_smoke_gate(
             f"formal smoke prerequisite hard checks failed: {failed}"
         )
     return {
-        "schema_version": "thought4.phase4.formal_smoke_gate.v3",
+        "schema_version": "thought4.phase4.formal_smoke_gate.v4",
         "smoke_config_fingerprint": smoke_cfg.fingerprint,
         "smoke_result_sha256": supplied_sha,
         "smoke_alignment_audit_sha256": supplied_alignment_sha,
@@ -979,6 +1071,7 @@ def run_real_smoke(cfg: Thought4Config, *, resume: bool = False) -> dict[str, An
             "robot_init_trajectory_pairing": alignment_audit[
                 "robot_init_trajectory_pairing"
             ],
+            "subspace_arithmetic": cfg.intervention.subspace_arithmetic,
             "inference_rows": inference_rows,
             "future_rgb_read": False,
             "success_outcome_read": False,
@@ -1224,6 +1317,27 @@ def run_formal_diagnosis(
                 target=cfg.intervention.target_label,
                 seed=cfg.probe.seeds[0],
             )
+            # Persist completed probe evidence before the higher-risk policy
+            # intervention.  A Phase 4-C engineering failure must not erase or
+            # strand already-completed Phase 4-A/B results in process memory.
+            layer_summary, probe_stage, probe_stage_paths = (
+                _write_probe_stage_artifacts(
+                    output,
+                    cfg,
+                    video_result=video_panel.result,
+                    action_result=action_panel.result,
+                    selection=selection,
+                    resume=resume,
+                )
+            )
+            video_path, action_path, layer_path, probe_stage_path = (
+                probe_stage_paths
+            )
+            _progress(
+                "probe_artifacts_committed",
+                module_path=selection["module_path"],
+                result=str(probe_stage_path),
+            )
             probe_key = (
                 selection["feature_key"],
                 selection["target"],
@@ -1254,31 +1368,14 @@ def run_formal_diagnosis(
         )
         from fastwam_ood_eval.thought4.report import (
             build_artifact_manifest,
-            build_layer_summary,
             diagnostic_report_markdown,
             execution_integrity,
         )
 
-        video_path = _json_artifact(
-            output / "video_probe_results.json",
-            video_panel.result,
-            resume=resume,
-        )
-        action_path = _json_artifact(
-            output / "action_probe_results.json",
-            action_panel.result,
-            resume=resume,
-        )
         intervention_path = _json_artifact(
             output / "intervention_results.json",
             intervention,
             resume=resume,
-        )
-        layer_summary = build_layer_summary(
-            video_panel.result, action_panel.result
-        )
-        layer_path = _json_artifact(
-            output / "layer_summary.json", layer_summary, resume=resume
         )
         evidence, evidence_payload = derive_diagnostic_evidence(
             video_panel.result,
@@ -1306,6 +1403,10 @@ def run_formal_diagnosis(
         integrity["runtime_model_audit"] = runtime_audit
         integrity["inference_rows"] = inference_rows
         integrity["smoke_gate"] = smoke_gate
+        integrity["probe_stage"] = probe_stage
+        integrity["subspace_arithmetic"] = (
+            cfg.intervention.subspace_arithmetic
+        )
         integrity["trajectory_label_source"] = cfg.probe.trajectory_label_source
         integrity["alignment_audit"] = {
             "audit_sha256": alignment_audit["audit_sha256"],
@@ -1336,6 +1437,7 @@ def run_formal_diagnosis(
             bundle_checksum_path,
             video_path,
             action_path,
+            probe_stage_path,
             intervention_path,
             layer_path,
             evidence_path,

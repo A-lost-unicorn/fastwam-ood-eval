@@ -105,6 +105,32 @@ geometry basis 不被 raw activation scale 混淆。
 选择 feature group，再以跨 seed mean 原单位指标判定可读性；每个被选 row SHA 和
 逐 seed paired gap 都写入 `diagnostic_evidence.json`。
 
+## FP32 subspace arithmetic 与 correct control
+
+真实 Action-consumed K/V cache 是 BF16。formal v5 的旧实现把 linear-probe SVD
+basis 转为 BF16 后执行 `h - P(h) + P(h)`，因此在第一次 intervention 前无法通过
+correct reconstruction。formal v6 的生产路径固定为：
+
+```text
+captured BF16 hidden
+  → hidden.float() + FP32 basis
+  → FP32 coordinates / projection / residual / replacement
+  → one output cast to captured BF16 dtype
+  → Action consumer
+```
+
+`geometry_subspace.py` 不再按 hidden dtype 降精度 basis；
+`intervention_runtime.py` 对 correct control 强制 shape/dtype/device 不变、
+`torch.equal`、input/output SHA 相同和 cast 后 max-abs=0。smoke v8 从真实 capture
+构造固定 technical subspace，先执行上述逐位检查，再把 reconstructed BF16 tensor
+送入真实 K/V consumer。正式 gate 会重算该子工件的 canonical SHA。动作 replay
+floor 仍用于推理复现，但不参与或放宽 tensor 逐位判定。
+
+formal v6 还把 Phase 4-A/B 的四个工件放到 Phase 4-C 调用之前提交：两个 probe
+result、layer summary 和 `probe_stage_result.json`。因此 intervention 工程失败不会
+再次丢失已完成 probe panel；最终 evidence/method/integrity/report 仍只在
+intervention 成功后生成。
+
 ## 显存设计
 
 Fast-WAM 已观测加载峰值约 23.68 GiB，接近 4090 上限。真实链路先完成所有

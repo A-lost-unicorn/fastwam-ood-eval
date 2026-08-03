@@ -1,0 +1,81 @@
+schema_version: thought4.phase4.config.v1
+
+experiment:
+  name: phase4_geometry_action_diagnosis_v6
+  output_dir: outputs/thought4/phase4_geometry_action_diagnosis_v6
+  seed: 4407
+  mode: formal
+
+runtime:
+  backend: fastwam
+  device: cuda:0
+  action_denoise_steps: 20
+  feature_dtype: float32
+  shard_size: 16
+
+backbone:
+  checkpoint_path: checkpoints/fastwam_release/libero_uncond_2cam224.pt
+  checkpoint_sha256: 1000437cfcf55c000094f79a2600634c502bcb5b492476b94bf8509883a49579
+  dataset_stats_path: checkpoints/fastwam_release/libero_uncond_2cam224_dataset_stats.json
+  fastwam_commit: 45d8e1458921d83f8ad6cf9ce993d371208dabd0
+  frozen_parameter_sha256: ac0dd59de78495dc8ed5c5601e24951b78f3fd6ad40843d76b83106eccceb4f8
+  video_layers: [0, 7, 15, 22, 29]
+  action_hooks:
+    - action_expert.action_encoder
+    - action_expert.blocks.15.norm1
+    - action_expert.blocks.29.norm1
+    - action_expert.head
+
+cohort:
+  suite: libero_goal
+  task_ids: [0]
+  dataset_root: data/libero_mujoco3.3.2/libero_goal_no_noops_lerobot
+  dataset_revision: 117413dc0ca99c7cd64036c4eaa4a316c537d692
+  # One-based task_classification.json IDs; runtime subtracts one.
+  condition_task_ids:
+    clean: [1]
+    camera: [691, 697, 698, 706, 711]
+    lighting: [2313, 2314, 2334, 2337, 2351]
+    robot_init: [282, 283, 284, 285, 294]
+  target_object_name: wooden_cabinet_1
+  split_seed: 4407
+  train_base_states: 40
+  development_base_states: 12
+  test_base_states: 12
+  frames_per_episode: 2
+  conditions: [clean, camera, lighting, robot_init]
+
+rendering:
+  camera_name: agentview
+  image_height: 224
+  image_width: 224
+  require_depth: true
+  exact_state_conditions: [clean, camera, lighting]
+
+probe:
+  models: [linear, mlp]
+  pooling: [spatial_mean, foreground_mean, robot_object_roi]
+  mlp_hidden_dim: 256
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  max_epochs: 100
+  patience: 12
+  batch_size: 32
+  seeds: [4407, 4408, 4409]
+  bootstrap_replicates: 2000
+  bootstrap_seed: 4417
+  horizon: 32
+  trajectory_label_source: simulator_action_replay_from_input_t
+
+intervention:
+  enabled: true
+  source_preference: A
+  target_label: eef_object_translation_camera
+  layer_selection_split: development
+  rank_energy_threshold: 0.95
+  max_rank: 32
+  donor_seed: 4427
+  action_seeds: [4437, 4438, 4439]
+  norm_ratio_tolerance: 0.05
+  replay_floor_repeats: 2
+  subspace_arithmetic: fp32_coordinates_residual_single_output_cast_bitwise_correct

@@ -28,6 +28,8 @@ from fastwam_ood_eval.thought4.geometry_subspace import (
     subspace_from_linear_weight,
 )
 from fastwam_ood_eval.thought4.intervention_runtime import (
+    InterventionRuntimeError,
+    _bitwise_correct_reconstruction,
     geometry_coordinate_condition_shift,
 )
 from fastwam_ood_eval.thought4.probe_models import linear_weight
@@ -131,6 +133,57 @@ def test_geometry_subspace_is_orthogonal_and_correct_reconstructs() -> None:
     correct = correct_reconstruction(hidden, subspace)
     assert torch.allclose(correct.output, hidden, atol=1e-5)
     assert correct.residual_reconstruction_error < 1e-5
+
+
+def test_bf16_correct_reconstruction_uses_fp32_and_is_bitwise_equal() -> None:
+    torch.manual_seed(51)
+    subspace = subspace_from_linear_weight(
+        torch.randn(3, 64, dtype=torch.float32), max_rank=3
+    )
+    hidden = (torch.randn(2, 7, 64) * 3.0).to(torch.bfloat16)
+    old_basis = subspace.basis.to(torch.bfloat16)
+    old_projection = (hidden @ old_basis) @ old_basis.T
+    old_reconstruction = (hidden - old_projection) + old_projection
+    assert not torch.equal(old_reconstruction, hidden)
+    assert float(
+        (old_reconstruction.float() - hidden.float()).abs().max()
+    ) > 0.0
+
+    correct = correct_reconstruction(hidden, subspace)
+    assert correct.original_coordinates.dtype == torch.float32
+    assert correct.residual.dtype == torch.float32
+    assert correct.output.dtype == torch.bfloat16
+    assert torch.equal(correct.output, hidden)
+    assert correct.residual_reconstruction_error == 0.0
+
+    donor = (torch.randn(2, 7, 64) * 3.0).to(torch.bfloat16)
+    replacement = replace_geometry_coordinates(
+        hidden,
+        geometry_coordinates(donor, subspace),
+        subspace,
+        norm_match=True,
+    )
+    assert replacement.output.dtype == torch.bfloat16
+    assert torch.isfinite(replacement.output).all()
+
+
+def test_runtime_correct_control_freezes_bitwise_contract() -> None:
+    torch.manual_seed(52)
+    subspace = subspace_from_linear_weight(
+        torch.randn(3, 64, dtype=torch.float32), max_rank=3
+    )
+    hidden = (torch.randn(1, 11, 64) * 4.0).to(torch.bfloat16)
+    correct, contract = _bitwise_correct_reconstruction(hidden, subspace)
+    assert torch.equal(correct.output, hidden)
+    assert contract["compute_dtype"] == "torch.float32"
+    assert contract["input_dtype"] == "torch.bfloat16"
+    assert contract["output_dtype"] == "torch.bfloat16"
+    assert contract["single_output_cast"] is True
+    assert contract["residual_reconstruction_max_abs"] == 0.0
+    assert contract["input_sha256"] == contract["output_sha256"]
+    assert contract["bitwise_equal_after_output_cast"] is True
+    with pytest.raises(InterventionRuntimeError, match="must be BF16"):
+        _bitwise_correct_reconstruction(hidden.float(), subspace)
 
 
 def test_shuffle_replaces_only_geometry_coordinates() -> None:

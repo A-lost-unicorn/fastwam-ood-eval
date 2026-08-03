@@ -32,8 +32,9 @@ data pointer、shape、dtype、device、stride，并在 scope 退出时把 live 
 对应回归同时覆盖“可正常 capture”和“发生 mutation 必须 fail closed”。
 
 若旧 v2 已生成 `run_status.json`，不要 `--resume` 或删除旧目录。历史 v3 已完成
-并证明 inference-safe hook 链路。历史 v6 已通过，但当前 simulator-replay runner
-指向 `phase4_geometry_action_smoke_v7`。v2–v6 工件不可拼入 v7 或 formal v5。
+并证明 inference-safe hook 链路。历史 simulator-replay v7 也已通过；当前 FP32
+runner 指向 `phase4_geometry_action_smoke_v8`。v2–v7 工件不可拼入 v8 或 formal
+v6。
 
 ## Formal 报 Robot-init initial state 没变化
 
@@ -116,9 +117,10 @@ translation=0.031214m, rotation=2.153deg
 - 将 v4 记为 formal 科学结果。
 
 确认的 simulator-replay v5 修复保留全部 64 个 identity，将对齐保留为 QC
-disclosure，并从实际 simulator input state `t` 重放 action 生成运动标签。运行
-全新 smoke v7；通过后再运行 formal v5。`alignment_audit.json` 必须存在且 SHA、
-计数、label source 和 pairing 与 smoke result 一致，否则 formal gate fail closed。
+disclosure，并从实际 simulator input state `t` 重放 action 生成运动标签；其
+smoke v7 已通过。当前 smoke v8/formal v6 继续使用同一标签协议。
+`alignment_audit.json` 必须存在且 SHA、计数、label source 和 pairing 与 smoke
+result 一致，否则 formal gate fail closed。
 
 ## Hook 注册成功但 call count 为 0
 
@@ -185,3 +187,24 @@ prefix 到 `t`，再离线执行 `t...t+H-1` 的 demonstration action，标签�
 Clean/Camera/Lighting 则必须共享一次 Clean world replay，再分别做 camera
 transform；若三条件分别执行 simulator future replay，会把数值积分差异混入
 exact-state paired gap，同样必须停止。
+
+## Formal v5 报 correct geometry reconstruction exceeded BF16 tolerance
+
+这不是 smoke v7 作假，也不是整条 geometry-subspace 方法从根本上错误。v7 只将
+captured raw BF16 tensor 原样替换回 consumer；formal v5 首次执行了旧代码的
+BF16 projection/residual/reconstruction。旧代码把 FP32 basis 转成 BF16，导致
+correct algebraic control 在 output cast 后不能恢复输入。
+
+不要执行以下操作：
+
+- 提高或删除旧 `5e-4` reconstruction threshold；
+- 只看 correct action 是否在 replay tolerance 内；
+- resume、覆盖或手工补写 formal v5；
+- 选择其他 intervention layer、rank、seed 或 sample 绕过失败；
+- 把 v5 内存中算过但未落盘的 probe 写成论文结果。
+
+当前修复只允许 FP32 coordinates/projection/residual/reconstruction 和一次 BF16
+output cast。先运行 smoke v8；其 `bf16_fp32_subspace_reconstruction` 必须显示
+input/output SHA 相同、max-abs=0、bitwise=true、action replacement pass。通过后
+才能在同一 commit 运行全新 formal v6。formal v6 会在 intervention 前先写
+`probe_stage_result.json`，因此后续工程失败也不会再次丢失已完成 panel。

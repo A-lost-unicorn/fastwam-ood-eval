@@ -204,7 +204,7 @@ correct algebraic control 在 output cast 后不能恢复输入。
 - 把 v5 内存中算过但未落盘的 probe 写成论文结果。
 
 当前修复只允许 FP32 coordinates/projection/residual/reconstruction 和一次 BF16
-output cast。先运行 smoke v8；其 `bf16_fp32_subspace_reconstruction` 必须显示
-input/output SHA 相同、max-abs=0、bitwise=true、action replacement pass。通过后
-才能在同一 commit 运行全新 formal v6。formal v6 会在 intervention 前先写
-`probe_stage_result.json`，因此后续工程失败也不会再次丢失已完成 panel。
+output cast。smoke v8 已显示 input/output SHA 相同、max-abs=0、bitwise=true、
+action replacement pass；同 commit formal v6 也在 intervention 前写出
+`probe_stage_result.json` 并完成。不得因结果已成功而回头修改或覆盖 v5/v6；
+正式数字见 [formal v6 结果](formal_v6_results.md)。

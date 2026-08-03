@@ -14,6 +14,12 @@
 | Thought 3 Phase 2 | `outputs/thought3/phase2_full_28_4_a0_a1_v1/phase2_training_result.json` | `5ab57efa2747072a14170ef2ecdfc86cfb7bd36528d138cb14b27fdb17f53d93` |
 | Phase 2 A0 sample rows | `outputs/thought3/phase2_full_28_4_a0_a1_v1/tracks/a0/development_final_objectives.jsonl` | `8e370049e467b08fcb720fc664b026fad33ccda824404d70ec7385b7eecf7273` |
 | Phase 2 A1 sample rows | `outputs/thought3/phase2_full_28_4_a0_a1_v1/tracks/a1/development_final_objectives.jsonl` | `7f4f02412c0d4121870b0839350e10ec63af239eae8779cb67df0b9e049e7ee1` |
+| Thought 4 smoke v8 | `outputs/thought4/phase4_geometry_action_smoke_v8/smoke_result.json` | `c2e1199172e1dda004385ec1c723707fb087e6f935bb5803f324ddfb88c49a02` |
+| Thought 4 probe-first commit | `outputs/thought4/phase4_geometry_action_diagnosis_v6/probe_stage_result.json` | `db7f6816b3dbf7a1b5574bd9cd7543a6351d7cf126d4f4f7c1de6c3beb9740ff` |
+| Thought 4 diagnostic evidence | `outputs/thought4/phase4_geometry_action_diagnosis_v6/diagnostic_evidence.json` | `0542a72b5c733a018e1fd99341bfdbfe501b8bd05a4a88d16566c5685bc14c6b` |
+| Thought 4 intervention | `outputs/thought4/phase4_geometry_action_diagnosis_v6/intervention_results.json` | `8aeaf2fda57870f512787c9f63ff67b86b9c161c30d3f13b3a81af4aaa601b9c` |
+| Thought 4 method selection | `outputs/thought4/phase4_geometry_action_diagnosis_v6/method_selection.json` | `8fdd9417803b072ec4af160eb395a06d792d0e613c437d27c68a05ccec68c79b` |
+| Thought 4 artifact manifest | `outputs/thought4/phase4_geometry_action_diagnosis_v6/artifact_manifest.json` | `d1c5ef118a0cc5950790b5d425f25c8c89c32ec0183c2d376b2baf01004912af` |
 
 作图脚本会重新计算并记录这些 SHA，见
 [figure data manifest](figures/data_manifest.json)。若任一来源 hash 变化，应先
@@ -53,6 +59,10 @@ MPLCONFIGDIR=/tmp/fastwam-paper-mpl \
 - `docs/paper/figures/figure5_evidence_chain.svg`
 - `docs/paper/tables/core_results.csv`
 - `docs/paper/tables/phase2_per_sample.csv`
+
+Thought4 暂未加入五张旧图的自动生成脚本；其冻结数值以
+[`tables/thought4_diagnosis.csv`](tables/thought4_diagnosis.csv) 保存，并逐项
+追溯到 formal v6 JSON。不得把该 CSV 当成独立机器权威来源。
 
 图 1 的误差线来自 Thought 1 row-bootstrap CI；图 2 的差值区间来自 40 task
 等权、suite-stratified task-cluster bootstrap 10,000 次。图 3 的 Phase 1
@@ -120,6 +130,25 @@ bash scripts/run_thought3_phase2_full_28_4.sh --resume
 停止规则；不得事后选择 step 50/100/150、调整 LR/门槛、启动 A2/A4 或用 OOD
 outcome 调参。
 
+### Thought 4：smoke v8 与 formal v6
+
+两项均已完成，以下命令只用于确认原入口；不得覆盖或 `--resume` 已完成的 v8/v6
+namespace：
+
+```bash
+CONFIRM_THOUGHT4_PHASE4_SMOKE=YES \
+THOUGHT4_GPU_ID=2 \
+bash scripts/run_thought4_phase4_smoke.sh
+
+CONFIRM_THOUGHT4_PHASE4_FORMAL=YES \
+THOUGHT4_GPU_ID=2 \
+bash scripts/run_thought4_phase4_diagnosis.sh
+```
+
+v8 smoke 耗时 655.90 秒；formal v6 耗时 4,728.05 秒，冻结分类为
+`camera_equivariance_gap`。完整数值、claim boundary 与下一分支见
+[formal v6 结果报告](../thought4/formal_v6_results.md)。
+
 Thought 1 和 Thought 2 的完整首次运行命令、显存门禁、后台运行及恢复方式分别见
 [Thought 1 手册](../thought1/execution_guide.md)和
 [Thought 2 手册](../thought2/execution_guide.md)。
@@ -155,3 +184,9 @@ git status --short
 - 原始工件 SHA；
 - 证据等级及明确的不可写结论。
 
+Thought4 的只读审计验证了 artifact manifest 中 1,586 个 entry 的路径、大小与
+文件 SHA。需要单独披露：`execution_integrity.json` 的
+`integrity_sha256=a08ac875...e59f5e71` 只覆盖写入时的 11 字段核心 payload，
+不覆盖后追加的 runtime/smoke/probe 字段；完整文件 SHA
+`be301260...bd347` 仍由有效 manifest 覆盖。该缺陷不改变诊断分类，但冻结输出
+不得原地修补。

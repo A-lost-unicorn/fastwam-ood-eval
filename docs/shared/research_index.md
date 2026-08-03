@@ -1,6 +1,6 @@
 # 研究总控：Fast-WAM 在 OOD 环境中真的不需要未来想象吗？
 
-更新日期：2026-07-30
+更新日期：2026-08-03
 
 本文是项目的研究入口与证据总账。论文正文与图表见
 [完整论文](../paper/manuscript.md)，分层论证见
@@ -10,7 +10,7 @@
 
 ## 1. 论文主线
 
-论文不是直接提出一个新模型，而是依次建立四层证据：
+论文不是直接提出一个新模型，而是依次建立五层证据：
 
 1. **环境鲁棒性**：冻结官方 Fast-WAM，测标准 LIBERO 到 LIBERO-Plus 的成功率下降。
 2. **未来一致性**：不改变控制动作，离线观察同一 checkpoint 生成的未来是否与实际变化相符。
@@ -18,10 +18,15 @@
    具体内容是否改变动作。
 4. **未来任务效用**：用 matched K=0/K=1 训练判断动作敏感性是否形成
    held-out 收益；只有先通过该门禁，才允许扩展 K=2/K=4 和 OOD rollout。
+5. **缺口定位**：冻结 Video/Action 主干，以 exact-state Camera/Lighting probes
+   和 geometry-subspace intervention 区分 representation、interface 与
+   camera-equivariance gap。
 
-四层结论不能互相替代。阶段一的失败不能证明未来有用；阶段二的一致性不能
+五层结论不能互相替代。阶段一的失败不能证明未来有用；阶段二的一致性不能
 证明动作依赖未来；动作受 future 影响也不能证明任务收益。当前第四层在冻结
 K=1 配方上得到离线负结果，因此 OOD success 因果问题保持未回答。
+Thought4 进一步将下一方法假设定位为 `camera_equivariance_gap`，但仍没有产生
+任何新方法 success 结果。
 
 ## 2. 当前真实状态
 
@@ -35,6 +40,7 @@ K=1 配方上得到离线负结果，因此 OOD success 因果问题保持未回
 | 阶段二统计协议 | episode→task 分层、task bootstrap、首 probe/outcome gate 已实现 | 10,000 次 suite-stratified task bootstrap；730/732 outcome match | **post-run analysis 完成，非 preregistered confirmatory**。DRAFT 未在正式指标前冻结；人工 endpoint 待完成 |
 | 阶段二 B：action-conditioned future consistency | 严格门禁、schema、runner、测试已实现 | CPU/mock 与门禁测试通过 | **阻塞**。官方 release 为 `action_conditioned=false`，且没有可信匹配 checkpoint |
 | 阶段三：Future-to-Action Adapter | Phase 0 审计完成；Phase 1 分支 A；Phase 2 完整双卡训练完成 | Phase 1 correct-null/shuffle/action-hash 均 `8/8`；Phase 2 A0 reduction `+1.845%`、A1 `−1.712%`，A1 比 A0 高 `3.624%` 且 4/4 dev sample 更差 | **有效离线负结果，路线停止**：future 内容会改变动作，但冻结 K=1 Adapter 未形成 held-out utility；Phase 3/OOD/A2/A4 锁定 |
+| Thought4：Geometry–Action Gap | FP32 smoke v8 与 64-state formal v6 完成；1,586 工件只读审计 | 256 paired samples、12,544 features；Camera gap 0.020273 m > Lighting 0.011660 m；rank-3 shuffle 36/36 超过 replay floor | **FORMAL DIAGNOSTIC 完成**：`camera_equivariance_gap`；只解锁 Geo-REPA + relative pose / camera-ray equivariance，尚无方法/rollout 效果 |
 
 因此，“阶段一已经完成”的准确说法是：**阶段一工程、正式全量计算、聚合与
 完整性审计均已完成；失败机制人工 taxonomy 尚未完成，但不阻塞主成功率结论。**
@@ -86,6 +92,7 @@ outputs/thought2_future_blind_*       # 阶段二 public packet/private key
 outputs/thought2_shadow_*            # 阶段二 B
 outputs/thought2/five_category_formal_v1/ # 阶段二五类正式 raw + 独立派生分析
 outputs/thought3/...                 # 阶段三训练、cache、评测
+outputs/thought4/...                 # 冻结 geometry/action probes 与 formal diagnosis
 ```
 
 阶段二 future diagnostics 只读阶段一 `experiment_manifest.json` 和
@@ -157,6 +164,9 @@ outcome JSONL 前使用 `frozen_before_source_outcomes`；现有 v2 则走更窄
 | 阶段三 Phase 0 E9a-v2.1 audit | CPU-only、0 forward/backward/optimizer/checkpoint tensor load、0 CUDA、父目录 0 write；27/27 checks true | 恢复登记为 `audit_valid_scientific_failed`；normalization tail signal 合法，但 `sample_tail_mitigation_not_supported`、无独立复验 candidate、E9b locked |
 | 阶段三 Phase 1 K=1 online CF | 单卡 8 sample；B0 replay/null L2/L∞ 均 0；correct-null L2 mean/p50/p95 `0.011052/0.011001/0.015738`；correct-shuffle `0.012092/0.011685/0.017690`；两者及 action hash 均 `8/8` 过冻结门槛；paired correct-null overhead `258.95 ms` mean | **有效 SMOKE、分支 A**：future 内容会改变该 checkpoint 的动作，但 action cosine 仍约 `0.9997`、单 task/无 rollout；不能写 success/OOD。模型加载峰值 `23,679.51 MiB`，policy 峰值 `13,009.92 MiB` |
 | 阶段三 Phase 2 full 28/4 | A0/A1 各 200×28 training objectives；12/12 hard checks、32/32 manifest descriptors、8/8 checkpoint provenance；双卡 tracks 约 69 分钟 | **VALID OFFLINE NEGATIVE**：A0 `+1.845%`、A1 `−1.712%`；A1 final 比 A0 高 `3.624%`，4/4 dev sample 更差；`phase3_unlocked=false` |
+| Thought4 formal v6 readability | Video geometry error `0.032814` vs mean/shuffle `0.061369/0.067243`；Action current geometry `0.021851` vs `0.061369/0.077118`；Action SE(3) `0.105583` vs `0.197027/0.225015` | 三组冻结 linear probe 均越过 5% controls；支持 Clean geometry/motion 可读，不等于策略正确使用 |
+| Thought4 formal v6 Camera gap | Video Camera−Clean RMSE `+0.020273 m`、Lighting `+0.011660 m`；rank-3 coordinate Camera−Lighting `0.146284`，95% CI `[0.088519,0.200310]` | 冻结规则支持 Camera-specific equivariance gap；Robot-init 非 exact-state 且 distinct pattern=false |
+| Thought4 formal v6 intervention | 12 test states×3 action seeds；36/36 correct bitwise、36/36 shuffle 超 replay floor；action L2 mean `0.000768`；backbone SHA 前后相同 | probe-defined geometry subspace 对动作有技术因果影响；未执行 action rollout，不能写 success/OOD improvement |
 
 20-step pilot 的 episode-weighted Clean→OOD 描述值为：latent L1
 `0.1512→0.2002`、cosine distance `0.1168→0.1942`、motion-direction cosine
@@ -228,6 +238,10 @@ OOD 一致性下降假设”，不能进入论文结论表。
 - 阶段三 Phase 2 完整 28/4 A0/A1 单配方协议与结果：
   [thought3_phase2_full_28_4_protocol.md](../thought3/phase2_adapter/protocol.md)、
   [thought3_phase2_full_28_4_report.md](../thought3/phase2_adapter/report.md)
+- Thought4 冻结协议、FP32 预注册与正式结果：
+  [thought4_protocol.md](../thought4/protocol.md)、
+  [thought4_fp32_preregistration.md](../thought4/fp32_subspace_v6_preregistration.md)、
+  [thought4_formal_v6_results.md](../thought4/formal_v6_results.md)
 - 阶段三加速路线、Phase 2/3 草案与硬停止规则：
   [thought3_accelerated_roadmap.md](../thought3/foundations/accelerated_roadmap.md)
 - 阶段三数据/训练/评测：[thought3_data_protocol.md](../thought3/foundations/data_protocol.md)、[thought3_training.md](../thought3/foundations/training.md)、[thought3_evaluation.md](../thought3/foundations/evaluation.md)
@@ -250,12 +264,15 @@ OOD 一致性下降假设”，不能进入论文结论表。
    OOD pilot、A2/A4、checkpoint/LR/weight/K 调参，也不消费 E9b reserve。
 5. 负结果、Phase 1→Phase 2 证据链、论文图表与完整论文草稿已整理；若未来
    提出新方法，必须作为新的、独立预注册路线，不能覆盖本结果。
-6. 当前不得覆盖 E.5–E.9 Run ID、事后放宽门槛、根据动作差异挑 checkpoint，
+6. Thought4 formal v6 已完成并冻结 `camera_equivariance_gap`；下一项新研究只允许
+   `Geo-REPA + relative pose / camera-ray equivariance`，先 held-out representation/
+   SE(3)，再预注册 Camera rollout。当前不得写成方法已有效。
+7. 当前不得覆盖 E.5–E.9 Run ID、事后放宽门槛、根据动作差异挑 checkpoint，
    或把 engineering smoke 写成 success/OOD 证据。
-7. 在不按自动 metric/outcome 挑案例的前提下，冻结正式 human-review budget、
+8. 在不按自动 metric/outcome 挑案例的前提下，冻结正式 human-review budget、
    seed 和每 job 至多一个 probe；至少两名 reviewer 独立标注并保留 agreement/
    adjudication。
-8. 人工 endpoint 只回答 goal progress、physical plausibility、局部 action
+9. 人工 endpoint 只回答 goal progress、physical plausibility、局部 action
    execution 和 future–actual agreement；不把它升级成 future-to-action 因果。
-9. 阶段三 Phase F/G OOD 草案未解锁并保持 archived；不得用阶段一既有 OOD
+10. 阶段三 Phase F/G OOD 草案未解锁并保持 archived；不得用阶段一既有 OOD
    outcome 事后选择 Adapter、K 或 checkpoint。

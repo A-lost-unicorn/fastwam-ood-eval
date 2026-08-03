@@ -1,22 +1,28 @@
-# 论文证据链：从 OOD 缺口到 Future Utility 负结果
+# 论文证据链：从 OOD 缺口、Future Utility 负结果到相机等变性诊断
 
-更新日期：2026-07-30  
+更新日期：2026-08-03
 适用范围：Fast-WAM 官方 `libero_uncond_2cam224` checkpoint、标准 LIBERO、
-LIBERO-Plus，以及本项目冻结的 K=1 Future-to-Action Adapter 配方。
+LIBERO-Plus、本项目冻结的 K=1 Future-to-Action Adapter 配方，以及 Thought4
+冻结的 geometry–action diagnosis；不包含 Geo-REPA 或任何新方法效果。
 
 ![Thought1 到 Thought3 的证据阶梯](figures/figure5_evidence_chain.svg)
 
 ## 1. 总结
 
-整条研究路线不是一次模型对比，而是四层逐级收紧的问题：
+整条研究路线不是一次模型对比，而是五层逐级收紧的问题：
 
 1. **行为事实**：Fast-WAM 在环境 OOD 下是否掉点？
 2. **观察关联**：模型生成的 shadow future 在 OOD 下是否更不一致，并与失败相关？
 3. **技术因果**：替换 future latent 内容是否会改变动作？
 4. **任务效用**：让动作读取 K=1 future 后，是否真的改善 held-out 目标或 OOD success？
+5. **缺口定位**：Camera OOD 的主要问题更接近 geometry unreadability、
+   action interface gap，还是 camera equivariance gap？
 
 前三层分别得到“是、是、是”；第四层在当前冻结配方上的离线答案是“没有观察到
-改善”。因此论文最稳健的主结论是：
+改善”。第五层进一步发现 Clean geometry 在 Video/Action 表征中可读、Camera
+扰动造成的 exact-state gap 显著大于 Lighting，且一个冻结的 rank-3 geometry
+subspace 干预会改变动作，因此将下一方法假设定位为 `camera_equivariance_gap`。
+论文最稳健的主结论仍是：
 
 > Future sensitivity is not future utility：future 内容能够改变动作，但这一
 > 技术敏感性没有自动转化为 held-out 控制收益。
@@ -38,6 +44,11 @@ success 的总体因果效应。
 | C8 | K=1 改善 Clean/OOD success | Phase 2 停止规则禁止 rollout | 无结果 | 在线任务效用 | **未回答** |
 | C9 | K=2/K=4 形成更优收益–延迟曲线 | 只有 cache/工程 smoke，无正式训练与 rollout | 无结果 | 比较效用 | **未回答** |
 | C10 | Fast-WAM 在 OOD 中普遍不需要 future | 现有样本、task、K、seed 和配方均不足 | 无总体可识别证据 | 总体命题 | **不得声称** |
+| C11 | Clean geometry/motion 在冻结表征中可线性读取 | 64 base state 的 dev/test split；三 seed linear probe | Video translation error 0.032814 m；Action current 0.021851 m；Action future SE(3) 0.105583，均优于 mean/shuffle control | 冻结表征诊断 | **支持** |
+| C12 | Camera shift 具有超出 Lighting 的表征缺口 | exact-state paired Camera/Lighting；冻结层与 probe | Video Camera−Clean +0.020273 m，Lighting +0.011660 m；rank-3 Camera−Lighting 0.146284，95% CI [0.088519, 0.200310] | 配对表征诊断 | **支持** |
+| C13 | probe-defined geometry subspace 对动作有技术因果影响 | 12 test state × 3 action seed；correct/shuffle intervention | correct 36/36 逐位恢复；shuffle 36/36 超 replay floor；action L2 mean 0.000768 | 技术因果干预 | **支持** |
+| C14 | Robot-init 具有独立于 Camera 的同类缺口 | Robot-init 不是 exact-state control，冻结 distinct-pattern 判据 | `robot_init_pattern_distinct=false` | 探索诊断 | **不支持** |
+| C15 | Geo-REPA / relative pose / camera-ray equivariance 改善 OOD success | 方法尚未实现或 rollout | 无结果 | 方法效用 | **未回答** |
 
 “支持”只覆盖表中对应设计，不向其他 task、机器人平台、训练 seed、Adapter
 结构或 K 外推。
@@ -161,7 +172,7 @@ K=1 improves OOD rollout success                     未测试
 按预注册停止规则，Phase 3 rollout、A2/A4 和事后 checkpoint/LR/K 选择均未启动。
 这使负结果得以保留，也阻止用 OOD outcome 反向调参。
 
-## 5. Thought 1 → Thought 3 的完整链条
+## 5. Thought 1 → Thought 4 的完整链条
 
 | 阶段 | 输入是否改动 | 动作是否改动 | outcome 是否读取 | 获得的最强结论 |
 | --- | --- | --- | --- | --- |
@@ -169,6 +180,7 @@ K=1 improves OOD rollout success                     未测试
 | Thought 2 | 旁路生成 future | 否，hash 保护 | 是，仅关联分析 | OOD future proxy 变差并与失败相关 |
 | Thought 3 Phase 1 | correct/null/shuffle future | 是，固定其余随机量 | 否 | future 内容对动作有技术因果影响 |
 | Thought 3 Phase 2 | A0/K0 与 A1/K1 训练输入 | 是，matched 训练 | 只读 action target；不读 success/OOD | K=1 未改善本配方 held-out objective |
+| Thought 4 formal v6 | exact-state Camera/Lighting 与冻结 geometry subspace | 仅干预离线 action tensor | 否 | 缺口定位为 camera equivariance；尚无新方法效用 |
 
 该链条逐步排除了三个常见逻辑跳跃：
 
@@ -178,7 +190,44 @@ K=1 improves OOD rollout success                     未测试
 3. **从动作敏感跳到“future 有用”**：Thought 3 Phase 2 的负结果表明两者必须
    分开验证。
 
-## 6. 从 0 到 1 的实施过程
+## 6. Thought 4：Geometry–Action Gap 定位
+
+[Thought4 formal v6 报告](../thought4/formal_v6_results.md)在不训练 Fast-WAM、
+不读取 future RGB、success 或 OOD rollout 的条件下，使用 64 个 base state
+构造 256 个配对样本并捕获 12,544 条中间特征。运行前由 smoke v8 在真实
+`[1,98,3072]` BF16 hidden 上验证 FP32 subspace arithmetic：correct control
+经过 BF16→FP32 reconstruction→BF16 replacement 后逐位恢复，action L2 为 0。
+
+三组跨 seed probe 均通过冻结 readability control：
+
+| Probe | Clean error | Mean control | Shuffle control | 相对 mean 改善 |
+| --- | ---: | ---: | ---: | ---: |
+| Video current geometry / translation | 0.032814 m | 0.061369 m | 0.067243 m | 46.53% |
+| Action current geometry / translation | 0.021851 m | 0.061369 m | 0.077118 m | 64.39% |
+| Action future motion / SE(3) composite | 0.105583 | 0.197027 | 0.225015 | 46.41% |
+
+这排除了“Clean geometry 在所测表征中完全不可读”这一简单解释。随后，冻结
+Video probe 在 exact-state paired panel 上得到 Camera−Clean RMSE
+`+0.020273 m`，Lighting 为 `+0.011660 m`；三个 probe seed 的 Camera 点估计
+均高于 Lighting。选定 rank-3 坐标的 Camera−Lighting 配对差为 `0.146284`
+（95% bootstrap CI `[0.088519, 0.200310]`）。Robot-init 不是 exact-state
+control，且冻结判据为 `robot_init_pattern_distinct=false`，不能写成独立机制。
+
+最后，在 12 个 test state × 3 个 action seed 上，只替换 probe-defined rank-3
+geometry subspace：
+
+- correct reconstruction 为 36/36 逐位恢复，排除重建/数值噪声；
+- shuffled coordinates 为 36/36 超过 replay floor；
+- action L2 mean 为 `0.000768`，translation/rotation difference mean 分别为
+  `0.001094/0.000410`，gripper difference 为 0；
+- backbone 参数 SHA 前后相同，未训练模型。
+
+因此 Thought4 能支持“Camera-specific representation/equivariance gap 与动作
+敏感性并存”，冻结分类为 `camera_equivariance_gap`。它只为下一项独立研究
+推荐 `Geo-REPA + relative pose / camera-ray equivariance`，不能写成该方法
+已经改善 representation、action 或 rollout success。
+
+## 7. 从 0 到 1 的实施过程
 
 | 时间/里程碑 | 从无到有的能力 | 关键卡点与处理 | 证据资格 |
 | --- | --- | --- | --- |
@@ -191,6 +240,8 @@ K=1 improves OOD rollout success                     未测试
 | Gate E.1–E.9 | 从可拟合性到 multi-flow、fresh cohort、trajectory、tail audit | 区分 invalid run 与 valid negative；禁止降门槛/挑 step | 开发与 fail-closed 证据 |
 | Thought 3 Phase 1 | online correct/null/shuffle action intervention | formal null、B0 replay、no-cache/no-target/no-RGB | 技术因果 smoke |
 | Thought 3 Phase 2 | 完整 matched A0/A1 单配方训练 | 双 GPU 独立轨、固定 step-200、12 项 hard check | 离线负结果 |
+| Thought 4 smoke v8 | 真实 BF16 capture 的 FP32 subspace arithmetic | correct 必须逐位恢复；不靠放宽 tolerance | 数值/干预门禁 |
+| Thought 4 formal v6 | exact-state paired probes、probe-first commit、rank-3 intervention | simulator replay 对齐、1,586 工件 manifest、自哈希作用域审计 | 正式离线机制诊断 |
 
 Gate E 的完整协议、失败与恢复记录见
 [Gate E 索引](../thought3/gate_e/)。它们的论文价值主要是说明研究流程如何避免：
@@ -200,7 +251,7 @@ Gate E 的完整协议、失败与恢复记录见
 - 根据 development 结果挑 step、LR 或门槛；
 - 在离线方向为负时仍打开 OOD rollout 并据此调参。
 
-## 7. 论文可写、必须限定与不可写
+## 8. 论文可写、必须限定与不可写
 
 ### 可写
 
@@ -211,6 +262,10 @@ Gate E 的完整协议、失败与恢复记录见
 - 在一个 task 的预注册 28/4 matched 配方中，K=1 未改善 held-out action
   objective，且比 K=0 高 3.624%。
 - 现有证据展示了 future sensitivity 与 future utility 的分离。
+- Clean geometry/motion 在所测冻结表征中可读；Camera 的 exact-state gap 大于
+  Lighting，且 probe-defined rank-3 geometry subspace 会改变动作 tensor。
+- Thought4 的冻结分类为 `camera_equivariance_gap`，它是方法选择依据而不是
+  新方法效果。
 
 ### 必须同时限定
 
@@ -220,6 +275,11 @@ Gate E 的完整协议、失败与恢复记录见
 - Phase 1 的 8/8 是动作 hash/sensitivity，不是成功率。
 - Phase 2 的 4/4 是描述性单 task development 结果，不是总体显著性结论。
 - Phase 2 没有读取 OOD、rollout success 或真实 future RGB。
+- Thought4 只做冻结 probe 与离线 action intervention；36/36 不是 episode
+  success，Robot-init 也不是 exact-state control。
+- `execution_integrity.json` 的自哈希只覆盖写入时的 11 字段核心 payload；后续
+  追加字段由 1,586-entry artifact manifest 的逐文件 SHA 覆盖。该作用域缺陷已
+  披露，冻结结果不原地修补。
 
 ### 不可写
 
@@ -228,16 +288,18 @@ Gate E 的完整协议、失败与恢复记录见
 - K=1 会降低或提升 OOD 成功率；
 - K=2/K=4 无用；
 - Fast-WAM、所有 WAM 或所有 OOD 场景都不需要未来想象；
+- Geo-REPA、relative pose 或 camera-ray equivariance 已经有效；
+- rank-3 action tensor 变化会提高 Camera OOD success；
 - 仿真结论等价于真机或跨平台结论。
 
-## 8. 当前论文结论与下一项独立研究
+## 9. 当前论文结论与下一项独立研究
 
 当前论文可以作为一篇**审计与负结果论文**完成：它回答“现有证据是否足以支持
 future utility”，答案是否定的，并展示为什么需要将关联、动作依赖与任务效用
 拆开。
 
-若未来开启新研究，不应回用当前四条 development sample 调参。需要重新
-预注册多个 task/seed 的独立训练与在线 Clean/OOD rollout，保留 B0、A0、
-A1、A-shuffle 对照；只有 K=1 出现独立正向 success 信号后，才扩展 K=2/K=4
-收益–延迟曲线。该新研究不能事后改变本文负结果的登记。
-
+若未来重启 future utility 路线，不应回用当前四条 development sample 调参。
+若沿 Thought4 开启新方法，应把 `Geo-REPA + relative pose / camera-ray
+equivariance` 作为全新预注册实验：先在未使用 state/task 上验证 held-out
+representation 与 SE(3) 指标，再运行 matched Camera rollout。两条新研究均
+不能事后改变本文 K=1 负结果或 formal v6 诊断的登记。

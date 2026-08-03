@@ -4,16 +4,16 @@
 
 **项目名称：** 机器人世界动作模型的 OOD 泛化评测与未来效用审计  
 **项目角色：** 独立研究与工程实现  
-**项目时间：** 2026.07  
+**项目时间：** 2026.07–2026.08
 **技术栈：** Python、PyTorch、CUDA/EGL、MuJoCo、Fast-WAM、LIBERO/LIBERO-Plus、torchrun、pytest、YAML、safetensors、Bootstrap
 
-**项目简介：** 围绕“Fast-WAM 在标准环境表现接近饱和时，面对相机、光照、背景、物体布局和机器人初态变化是否仍然可靠，以及显式 future 是否真正改善动作”这一问题，搭建覆盖在线行为评测、离线 future 一致性诊断、动作输入反事实和轻量 Adapter 效用验证的四层研究与工程系统。项目强调同 checkpoint 公平比较、全过程 provenance、可恢复计算和结论边界，既给出大规模 OOD 鲁棒性结果，也保留未观察到 future utility 的有效负结果。
+**项目简介：** 围绕“Fast-WAM 在标准环境表现接近饱和时，面对相机、光照、背景、物体布局和机器人初态变化是否仍然可靠，以及显式 future 是否真正改善动作”这一问题，搭建覆盖在线行为评测、离线 future 一致性诊断、动作输入反事实、轻量 Adapter 效用验证和 geometry–action 缺口定位的五层研究与工程系统。项目强调同 checkpoint 公平比较、全过程 provenance、可恢复计算和结论边界，既给出大规模 OOD 鲁棒性结果，也保留未观察到 future utility 的有效负结果。
 
 ## 二、可直接放入详细简历的版本
 
-**机器人世界动作模型的 OOD 泛化评测与未来效用审计**｜独立研究与工程实现｜2026.07
+**机器人世界动作模型的 OOD 泛化评测与未来效用审计**｜独立研究与工程实现｜2026.07–08
 
-- 审计 Fast-WAM 官方推理链路与训练配置，将模糊的“未来想象能否改善泛化”拆成行为鲁棒性、观察关联、动作技术依赖和任务效用四层问题，避免把不同 checkpoint 对比或离线相关性包装成因果收益。
+- 审计 Fast-WAM 官方推理链路与训练配置，将模糊的“未来想象能否改善泛化”拆成行为鲁棒性、观察关联、动作技术依赖、任务效用与缺口定位五层问题，避免把不同 checkpoint 对比或离线相关性包装成因果收益。
 - 从 0 到 1 实现配置驱动的 Clean/OOD 评测框架：以进程级 adapter 隔离原版 LIBERO 与 LIBERO-Plus 的同名 Python 包，复用官方 checkpoint loader、观测/动作预后处理和成功判定；通过受信路径校验兼容 PyTorch 2.6+ 的旧 init-state 加载。
 - 设计内容哈希 job ID、配对 seed、episode 级多 GPU 稳定分片、append+fsync JSONL、incomplete-only resume 和聚合完整性门禁；在 3 张 GPU 上完成 `7,571` 次真实 rollout、`2,399,314` 个 action step 和 `3,563` 个失败视频，达到 `0 exception`、`0` job 重复/遗漏。
 - 在 4 个 LIBERO suite、40 个基础任务和 5 类官方环境扰动上完成 `800` 次 Clean 与 `6,771` 次 runnable OOD 评测；同一 checkpoint 成功率由 `97.25%` 降至 `47.70%`，绝对下降 `49.55` 个百分点，并定位相机视角为跨 suite 最敏感因素（`15.13%`），光照最稳健（`81.88%`）。
@@ -22,7 +22,8 @@
 - 在不改动 Fast-WAM backbone 的前提下设计 `1,371,137` 参数 zero-gated Future-to-Action Adapter，完成 K=1/2/4 paired latent cache、原子 shard、断点恢复、多级 checksum、Adapter-only checkpoint 和真实未来信息泄漏门禁；`32×3=96` 条真实 latent 的 `12/12` shard 通过恢复与单字节损坏审计。
 - 预注册 K=1 online correct/null/shuffle 技术反事实，以 B0 重放确定 replay floor，以 parameter-free null 验证基础动作逐位一致，以 other-episode shuffle 只替换 future 内容；`8/8` 固定样本的 correct-null、correct-shuffle 和 action hash 均超过冻结门槛，证明 future 内容会改变动作，但不将其误写成成功率或任务收益。
 - 执行双 GPU、K=0/K=1 matched Adapter 训练，共完成 `11,200` 个训练 objective、8 个可恢复 checkpoint 和 12/12 hard checks；固定 step-200 上 K=0 held-out loss 改善 `1.845%`，K=1 恶化 `1.712%`，K=1 最终 loss 比 K=0 高 `3.624%` 且 `4/4` development sample 更差，遂按预注册规则停止 Phase 3/OOD rollout，避免 outcome-driven 调参。
-- 建立覆盖配置、分片、resume、RNG 隔离、cache、Adapter 冻结、反事实和旧 CLI 回归的测试体系；当前全量测试为 `397 passed`、5 个仅与不可用 NVML 相关的环境 warning。
+- 设计冻结 geometry–action diagnosis：在 `64` 个 base state 上构造 `256` 个 exact-state/探索配对样本并捕获 `12,544` 条特征；测得 Video Camera−Clean geometry gap `+0.020273 m`，高于 Lighting `+0.011660 m`，且 rank-3 subspace shuffle 在 `36/36` 次干预中改变动作而 correct control 逐位恢复，将下一假设定位为 `camera_equivariance_gap`，不越界声称新方法或成功率收益。
+- 建立覆盖配置、分片、resume、RNG 隔离、cache、Adapter 冻结、反事实、FP32 reconstruction 和旧 CLI 回归的测试体系；当前全量测试为 `443 passed`、5 个仅与不可用 NVML 相关的环境 warning。
 
 ## 三、心路历程与决策考量
 
@@ -93,7 +94,7 @@ shadow future 在 OOD 下是否更不一致并与失败相关？
 
 ### 研究亮点
 
-- 没有把“模型能生成 future”“动作会随 future 改变”“future 提高任务表现”混为同一命题，而是用四层证据逐级验证。
+- 没有把“模型能生成 future”“动作会随 future 改变”“future 提高任务表现”混为同一命题，而是用五层证据逐级验证并定位 Camera 表征缺口。
 - 正式报告负结果，并用冻结停止规则阻止事后选择，体现了比单一正指标更强的实验设计能力。
 - 对所有结论标记证据等级：正式 rollout、post-run 关联分析、技术 smoke 和离线 development 结果各自使用不同措辞。
 
@@ -148,11 +149,11 @@ PyTorch 2.6+ 将 `torch.load` 默认改为 `weights_only=True`，而旧 LIBERO i
 
 ### 投递算法/具身智能岗位
 
-优先保留四层证据链、shadow future、correct/null/shuffle、zero-gated Adapter、held-out flow 和有效负结果，突出实验设计、模型理解与因果边界。
+优先保留五层证据链、shadow future、correct/null/shuffle、zero-gated Adapter、held-out flow、有效负结果和 Camera 等变性诊断，突出实验设计、模型理解与因果边界。
 
 ### 投递机器学习工程/MLOps 岗位
 
-优先保留多 GPU rollout、确定性 job manifest、断点恢复、原子 shard、checksum、provenance、397 项测试和 0 重复/遗漏，突出长任务可靠性与可复现系统。
+优先保留多 GPU rollout、确定性 job manifest、断点恢复、原子 shard、checksum、provenance、443 项测试和 0 重复/遗漏，突出长任务可靠性与可复现系统。
 
 ### 投递研究工程师岗位
 
@@ -166,6 +167,8 @@ PyTorch 2.6+ 将 `torch.load` 默认改为 `weights_only=True`，而旧 LIBERO i
 - 阶段二使用 decoded-frame VAE proxy，不是语义 future 正确率；也不能写成 future error 导致失败。
 - 阶段三 Phase 1 的 `8/8` 是单 task 技术动作敏感性 smoke，不是成功率、总体显著性或 OOD 提升。
 - 阶段三 Phase 2 只有一个 LIBERO-Goal task、28 train/4 development；`4/4` 是描述性结果，不能推广为所有 future 或所有 WAM 都无用。
+- Thought4 的 `36/36` 是离线 action tensor 干预，不是机器人成功；分类为
+  `camera_equivariance_gap`，Geo-REPA/relative pose/camera rays 仍是待验证方法。
 - 当前没有完成失败视频的人工 taxonomy；可以写“保存并审计 3,563 个失败视频”，不能写“人工归纳出若干失败模式”。
 - 仿真结果不能外推为真机、跨机器人平台、unseen task 或 unseen object 结论。
 
@@ -175,6 +178,7 @@ PyTorch 2.6+ 将 `torch.load` 默认改为 `weights_only=True`，而旧 LIBERO i
 - Future consistency 正式结果：`docs/thought2/formal_results.md`
 - K=1 动作反事实：`docs/thought3/phase1_action/report.md`
 - 28/4 matched 训练结果：`docs/thought3/phase2_adapter/report.md`
+- Camera geometry–action 正式诊断：`docs/thought4/formal_v6_results.md`
 - 工程难点与阶段台账：`docs/shared/engineering_highlights.md`
 - 论文证据链：`docs/paper/evidence_chain.md`
-- 当前测试结果：2026-07-30 本地执行 `pytest -q`，`397 passed, 5 warnings`
+- 当前测试结果：2026-08-03 本地执行 `pytest -q`，`443 passed, 5 warnings`

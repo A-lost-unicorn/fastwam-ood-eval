@@ -1,6 +1,6 @@
 # 实验、卡点与结论台账
 
-更新日期：2026-07-30
+更新日期：2026-08-03
 
 本台账只记录可追溯事实。机器工件是权威来源，本文是便于论文、周报、简历和面试使用的索引。
 
@@ -420,6 +420,9 @@
 | 2026-08-03 / Thought4 smoke v7 | simulator-replay 代码身份需要新的真实技术 Gate | commit `229a0f3`、GPU 2；2 states×4 conditions、80 features、2/2 alignment pass；BF16 raw identity replacement action L2=0；backbone SHA 前后相同 | 登记 `PASSED / NON-SCIENTIFIC`，result SHA `9d81d79a...1fbf9`；只解锁同 commit formal v5 | 否；未执行 subspace projection/reconstruction，无 probe/method/OOD/success 结论 |
 | 2026-08-03 / Thought4 formal v5 | 64-state simulator-replay 已完成 render/feature/probe 计算，首次 geometry intervention 报 correct reconstruction 超出 BF16 tolerance | 旧实现把 FP32 orthonormal basis 降为 BF16后执行 projection/residual/reconstruction；raw identity smoke 未覆盖该路径。256 renders/labels、12,544 features；alignment 56/8 且全部保留 | 冻结 v5 `error`，不覆盖、不 resume；无 intervention/method/classification。旧编排未在 intervention 前落盘 probe result，不能补写科学数字 | 否；纯工程数值失败，没有科学结果，也不能据此否定 geometry hypothesis |
 | 2026-08-03 / Thought4 FP32 formal v6 预注册 | 需要修复 BF16 arithmetic，同时防止高风险 intervention 再次遮蔽已完成 probe panel | FP32 coordinates/projection/residual/reconstruction + 单次 BF16 cast；correct 必须逐位相等/SHA 相同/max-abs=0；smoke v8 真实 capture→reconstruct→consumer replacement；probe 四工件先落盘 | 全新 smoke v8/formal v6；原 64 identity、probe/layer/seed/threshold/method rules 不变；当前 `PRE-REGISTERED / NOT RUN` | 否；绝不放宽旧阈值，不复用 v7 Gate，不复制 v5 工件，不读 future RGB/success/OOD |
+| 2026-08-03 / Thought4 smoke v8 | 需证明修复后的生产路径能在真实 BF16 K/V 上逐位恢复并进入 Action consumer | commit `46d03f2`、GPU 2；`[1,98,3072]` BF16 capture；FP32 arithmetic + 单次 BF16 cast；input/output SHA 相同、max-abs=0、action L2=0；21 项 formal gate 全过 | 登记 `PASSED / NON-SCIENTIFIC`；result SHA `b6741808...473f1`，只解锁同 commit formal v6 | 否；真实技术 Gate，不是 geometry gap、方法效果或 success 结果 |
+| 2026-08-03 / Thought4 formal v6 | 需在冻结模型中区分 Video representation、Video→Action interface 与 camera equivariance gap | 64 states×4 conditions、12,544 features；Video/Action probe 先落盘；rank-3 matched shuffle；36/36 correct bitwise、36/36 action effect above floor；backbone SHA 不变 | 冻结分类 `camera_equivariance_gap`；唯一分支 `Geo-REPA + relative pose / camera-ray equivariance`。Camera paired RMSE gap 0.020273 m，Lighting 0.011660 m；coordinate Camera−Lighting 0.146284，95% CI [0.088519,0.200310] | 否；有效 formal diagnostic，不是 policy improvement。未读 future RGB/success，未执行 action rollout |
+| 2026-08-03 / Thought4 formal v6 只读完整性审计 | completed 结果需要验证 1,586 个 manifest 工件及各层自哈希 | artifact manifest 1,586/1,586 file size+SHA 匹配；主要科学 JSON 内部 SHA 有效；发现 `execution_integrity` SHA 在追加 telemetry 前计算，只精确覆盖核心 11 字段 | 原 v6 不修改；登记为有效结果 + 已披露 self-hash scope 缺陷。完整 integrity 文件仍由有效 artifact-manifest file SHA 覆盖；新运行前修 writer | 否；没有数据/分类 mismatch，不以结果后审计改变 threshold、selection 或 recommendation |
 
 冷启动观测：2-step smoke 中 Wan 组件装载约 `336–433 s`；20-step OOD
 三进程观测到约 `604.37 s`，Clean 单进程为 `521.74 s`。这不是单次 future

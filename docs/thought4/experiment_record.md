@@ -1,14 +1,13 @@
 # Thought4 实验记录与论文表格
 
-正式科学结果尚未运行；真实 smoke v3/v6/v7 已通过，但只属于工程证据。本文件的论文
-数字必须从
+formal v6 冻结诊断已经完成；真实 smoke 仍只属于工程证据。本文件的论文数字必须从
 `outputs/thought4/.../artifact_manifest.json` 对应工件生成，不手抄猜测。
 
 ## 运行身份
 
 | 字段 | 值 |
 | --- | --- |
-| project commit | smoke v1 `c629475...`；v2 `67ea983...`；v3 `fd713d5...`；v4 `fb49f57...`；v5 `833071f...`；v6/formal v4 `aeb0210...`；smoke v7/formal v5 `229a0f383d7638b1919aa6a08f5aa3ea999a5cfe`；v8/v6 待本次干净提交冻结 |
+| project commit | smoke v1 `c629475...`；v2 `67ea983...`；v3 `fd713d5...`；v4 `fb49f57...`；v5 `833071f...`；v6/formal v4 `aeb0210...`；smoke v7/formal v5 `229a0f3...`；smoke v8/formal v6 `46d03f23e88afef79aa63204c13dea6dd3eb7d19` |
 | Fast-WAM commit | `45d8e145...` |
 | checkpoint SHA | `1000437c...` |
 | smoke v1 config fingerprint | `caef470ae35e0d1dafdc8f07ba4b8a088d6df26acebce787f900bdf7dda9caba` |
@@ -36,7 +35,7 @@
 | formal v5 planned cohort SHA | `26394c6a856a8292eb5f2a0f125fa307ecec23ec9a907294ad05e9b2bbf5ccda` |
 | formal v6 config fingerprint | `3b14a7d7fd09deda9253bb1cd9950d9c4b5bd0cdf9f124a4dfede22add5c24f6` |
 | formal v6 planned cohort SHA | `9af7cf7c1933fb1e5574099361f6d7dcc7500727480ecb4bbf010089f28d8f04` |
-| physical GPU | smoke v1/v2：1；smoke v3/formal v1/smoke v4/v5/v6/formal v4/smoke v7/formal v5：2；v8/v6 待运行 |
+| physical GPU | smoke v1/v2：1；其余真实 Thought4 smoke/formal：2 |
 | smoke v3 start / finish | 2026-07-31 11:16:46 / 11:27:19 UTC |
 | smoke v3 backbone SHA before / after | `ac0dd59...b4f8` / `ac0dd59...b4f8` |
 | smoke v6 start / finish | 2026-08-01 10:07:40 / 10:18:42 UTC |
@@ -44,7 +43,11 @@
 | smoke v7 start / finish | 2026-08-03 02:32:15 / 02:43:10 UTC |
 | smoke v7 result SHA | `9d81d79afa9f3efcadf1a015f596f33e60414198b72f7c1e6cfa5a1322a1fbf9` |
 | formal v5 start / finish | 2026-08-03 03:03:08 / 04:13:40 UTC；ENGINEERING FAILED |
-| v7/v5 trajectory source | `simulator_action_replay_from_input_t` |
+| smoke v8 start / finish | 2026-08-03 05:45:24 / 05:56:20 UTC；10m55.90s |
+| smoke v8 result SHA | `b674180826bece52c327e22e56220c9749f15b0be019b29f56e228b8432473f1` |
+| formal v6 start / finish | 2026-08-03 05:57:33 / 07:16:21 UTC；1h18m48.05s |
+| formal v6 method-selection SHA | `a6a9351819b54c26fc3421b65f6e74752b61e3f9dc34a12ec5c1a8a746793b33` |
+| v7–v6 trajectory source | `simulator_action_replay_from_input_t` |
 | future RGB read | false |
 | success outcome read | false |
 
@@ -54,12 +57,12 @@
 | --- | --- |
 | Thought4 CPU/mock | 46 passed |
 | Thought1–4 全项目回归 | 443 passed；5 条 NVML 环境 warning 不影响测试结论 |
-| 文档校验 | 85 个 Markdown；本地链接全部有效；`docs/` 根目录整洁 |
+| 文档校验 | 2026-08-03：86 个 Markdown；全部本地链接有效；`docs/` root clean |
 | smoke dry-run | PASS；Torch/model/simulator/write 均为 false |
 | formal dry-run | PASS；Torch/model/simulator/write 均为 false |
 | simulator-replay render-only | PASS；2 states×4 conditions；Clean/Lighting label SHA 逐 state 相同；replay 后 state 精确恢复；audit SHA `30ea849e...94664`；未加载 Fast-WAM |
-| 真实 GPU smoke | v1/v2/v4 **ENGINEERING FAILED**；v3/v6/v7 **PASSED / NON-SCIENTIFIC**；v5 **INTERRUPTED / RESUME BUG**；v8 **PRE-REGISTERED / NOT RUN** |
-| 正式 diagnosis | v1/v4 **ENGINEERING FAILED（pre-model）**；v2/v3 未运行；v5 **ENGINEERING FAILED（post-probe, pre-intervention outcome）**；v6 **PRE-REGISTERED / NOT RUN** |
+| 真实 GPU smoke | v1/v2/v4 **ENGINEERING FAILED**；v3/v6/v7/v8 **PASSED / NON-SCIENTIFIC**；v5 **INTERRUPTED / RESUME BUG** |
+| 正式 diagnosis | v1/v4 **ENGINEERING FAILED（pre-model）**；v2/v3 未运行；v5 **ENGINEERING FAILED（post-probe）**；v6 **FORMAL COMPLETE** |
 
 ## Smoke v1 失败记录（非科学结果）
 
@@ -258,7 +261,7 @@ formal v5 随后运行并保留以下工程证据：
 `video_probe_results.json` 或 `action_probe_results.json`。v5 目录冻结，禁止覆盖、
 补写或 resume。
 
-## FP32 subspace formal v6 预注册（当前，尚未运行）
+## FP32 subspace smoke v8 / formal v6 结果
 
 formal v5 失败后只登记以下工程修复：
 
@@ -269,16 +272,22 @@ formal v5 失败后只登记以下工程修复：
 - 新 formal v6 namespace，不覆盖、不 resume v5；
 - 64-state cohort、probe、层、seed、threshold、统计和方法规则完全不变。
 
-当前分类仍为 `PRE-REGISTERED / NOT RUN`，不能据此填写下方科学表格。完整预注册见
-[formal v6 FP32 修复预注册](fp32_subspace_v6_preregistration.md)。
+上述预注册已按顺序完整执行。smoke v8 的真实 BF16 input/output SHA 相同、
+max-abs=0、bitwise=true；formal v6 在 intervention 前成功提交 probe stage，随后
+完成 36 个 matched intervention 和冻结方法分类。完整数字与完整性审计见
+[formal v6 正式结果](formal_v6_results.md)。
+
+结果后只读审计重算了 artifact manifest 的 1,586 个文件，0 mismatch。唯一 caveat
+是 `execution_integrity.json` 的内部 SHA 只覆盖先生成的核心字段，没有在追加
+smoke/probe/alignment telemetry 后重算；完整文件仍由 artifact manifest 的 file
+SHA 覆盖。原 v6 不修改，结果登记为有效 formal diagnostic，并披露该 self-hash
+scope 缺陷。
 
 ## Table A：Video geometry readability
 
-| Module/layer | Pool | Probe | Target | Clean | Camera | Lighting | Robot-init | Camera−Clean paired 95% CI |
+| Module/layer | Pool | Probe | Target | Clean RMSE | Camera gap | Lighting gap | Robot-init gap | Camera lower-min / upper-max |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |
-| 待运行 | | Linear | depth | | | | | |
-| 待运行 | | MLP | camera pose | | | | | |
-| 待运行 | | Linear | EEF–object | | | | | |
+| `mot.video_kv_cache.15.v` | spatial mean | Linear，3 seeds | EEF–object camera translation | 0.032814 m | +0.020273 m | +0.011660 m | +0.001583 m（非 exact） | 0.002092 / 0.040799 m |
 
 同时记录 zero、target-mean、shuffled-label control；不能只展示最优 MLP。
 所有指标使用反标准化后的原始目标单位；另从每条 probe row 登记 train-only
@@ -286,42 +295,40 @@ normalizer SHA、constant-dimension 数和 best development epoch。
 
 ## Table B：Action motion readability
 
-| Module/layer | Denoise step | Probe | Target | Clean | Camera | Lighting | Robot-init | Linear−MLP |
+| Module/layer | Denoise step | Probe | Target | Clean error | Mean control | Shuffle control | Camera gap | Lighting gap |
 | --- | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| 待运行 | 19（第 20 步） | Linear | current EEF–object geometry | | | | | |
-| 待运行 | 19（第 20 步） | Linear | translation ADE/FDE | | | | | |
-| 待运行 | 19（第 20 步） | MLP | rotation geodesic | | | | | |
-| 待运行 | 19（第 20 步） | Linear | gripper | | | | | |
-| 待运行 | 19（第 20 步） | MLP | SE(3) composite | | | | | |
+| `action_expert.blocks.15.norm1` | 19（第 20 步） | Linear，3 seeds | current EEF–object geometry | 0.021851 m | 0.061369 m | 0.077118 m | +0.023903 m | +0.002909 m |
+| `action_expert.blocks.15.norm1` | 19（第 20 步） | Linear，3 seeds | future SE(3) composite | 0.105583 | 0.197027 | 0.225015 | +0.051516 | +0.012175 |
 
 ## Table C：geometry-subspace intervention
 
-| Layer | Rank | Energy | Norm ratio | Replay floor L2 | Correct–shuffle L2 | Above floor |
-| --- | ---: | ---: | ---: | ---: | ---: | --- |
-| 待运行 | | | | | | |
+| Layer | Rank | Weight energy | Feature energy mean | Norm ratio range | Correct–shuffle action L2 mean | Above floor |
+| --- | ---: | ---: | ---: | --- | ---: | ---: |
+| `mot.video_kv_cache.15.v` | 3 | 100% | 0.1043% | [0.999999894, 1.000000061] | 0.000768 | 36/36 |
 
 记录 target/donor episode、mapping SHA、action noise/schedule/preprocessing SHA 和
 每个 timestep 差异。
 
 | Selected feature | Camera coordinate L2 | Lighting coordinate L2 | Camera−Lighting paired 95% CI | Robot-init（非 exact） |
 | --- | ---: | ---: | --- | ---: |
-| 待运行 | | | | |
+| layer-15 cache V / spatial mean | 0.295093 | 0.148809 | [0.088519, 0.200310]；estimate 0.146284 | 0.096476 |
 
 ## 唯一结论
 
 ```text
-classification: NOT RUN
-recommendation: NOT RUN
+classification: camera_equivariance_gap
+recommendation: Geo-REPA + relative pose / camera-ray equivariance
 ```
 
-只有 `method_selection.json` schema/SHA 验证通过后填写。论文表述必须是：
-“冻结表征诊断支持/不支持某种 gap”，而不是“方法提高 OOD success”。
+`method_selection.json` schema/SHA 已验证。论文表述必须是：“冻结表征诊断支持
+camera-equivariance gap”，而不是“方法提高 OOD success”。
 
-## 简历可用工程表达（结果前）
+## 简历可用工程表达
 
-> 为 5B Video DiT + Action DiT 机器人策略设计冻结式 geometry–action gap
-> 诊断栈：审计真实 MoT K/V 消费链路，构建同 MuJoCo state 的
-> Clean/Camera/Lighting paired rendering、episode-safe SE(3) probes、SVD
-> geometry-subspace matched intervention，以及全链路 SHA/不可覆盖工件协议。
+> 为 5B Video DiT + Action DiT 策略构建冻结式 geometry–action gap 诊断栈，
+> 在 64 个 base state / 256 条四条件样本上训练 1,272 组轻量 probe，并以
+> rank-3 matched intervention 验证 36/36 动作敏感；定位 Camera shift 的几何
+> 破坏显著高于 Lighting，冻结分类为 camera-equivariance gap。
 
-真实结果出来后，只可增加已由工件支持的数字。
+这里的 `1,272` 是 Video 1,080 + Action 192 probe rows，不是 1,272 个独立 episode；
+简历中必须保留“冻结诊断、未做新方法 success rollout”的范围。

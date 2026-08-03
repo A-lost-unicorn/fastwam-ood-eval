@@ -5,7 +5,7 @@
 **作者：** 待填写  
 **单位：** 待填写  
 **联系邮箱：** 待填写  
-**稿件状态：** 完整研究草稿，证据冻结于 2026-07-30
+**稿件状态：** 完整研究草稿，证据冻结于 2026-08-03
 
 ---
 
@@ -14,7 +14,8 @@
 世界动作模型可以在生成机器人动作的同时建模视觉未来，但测试时是否必须显式
 想象未来，尤其在环境分布外（out-of-distribution, OOD）条件下，仍缺少分层且
 可识别的实证分析。本文以官方 Fast-WAM `libero_uncond_2cam224` checkpoint
-为对象，构建从行为评测、离线一致性、技术反事实到轻量 Adapter 效用的四层
+为对象，构建从行为评测、离线一致性、技术反事实、轻量 Adapter 效用到机制
+定位的五层
 证据链。首先，在冻结权重、动作接口和基础任务后，我们完成 800 个标准 LIBERO
 与 6,771 个 runnable LIBERO-Plus rollout。成功率从 97.25% 降至 47.70%，
 绝对下降 49.55 个百分点；相机视角扰动最严重，成功率仅 15.13%。其次，在
@@ -29,23 +30,30 @@ correct/null/shuffle 反事实确认 future 内容在 8/8 样本上改变动作�
 K=0 的 held-out action objective 改善 1.845%，K=1 则恶化 1.712%；K=1
 最终 loss 比 K=0 高 3.624%，四条 development sample 均更差。根据冻结停止
 规则，我们没有继续选择 checkpoint、训练 K=2/K=4 或启动 OOD rollout。
+为定位最严重的 Camera 缺口，我们进一步冻结主干，在 64 个 base state 的
+exact-state paired diagnosis 中发现 Video Camera−Clean geometry error gap
+为 0.020273 m，高于 Lighting 的 0.011660 m；probe-defined rank-3 geometry
+subspace 的 shuffle 在 36/36 次离线干预中使动作超过 replay floor，而 correct
+control 逐位恢复。冻结分类为 `camera_equivariance_gap`，但尚未训练或评测
+Geo-REPA 等新方法。
 结果表明，**future 内容能影响动作并不意味着 future 对控制有用**。本文既不
 证明 Fast-WAM 在 OOD 中普遍不需要未来，也不证明未来无效；它给出一个可复现的
 负结果与方法学结论：future prediction、future-conditioned action sensitivity
 和任务效用必须分别验证。
 
 **关键词：** 世界动作模型；机器人操作；分布外泛化；未来想象；反事实评测；
-负结果；LIBERO-Plus
+相机等变性；负结果；LIBERO-Plus
 
 ## Abstract
 
 World action models can jointly model visual futures and robot actions, yet it
 remains unclear whether explicit test-time future imagination is necessary,
 particularly under out-of-distribution (OOD) environment shifts. We present a
-four-level evidence audit of the released Fast-WAM
+five-level evidence audit of the released Fast-WAM
 `libero_uncond_2cam224` checkpoint, separating behavioral robustness,
-observational future consistency, technical action sensitivity, and downstream
-utility. First, with model weights, action interfaces, and base tasks frozen,
+observational future consistency, technical action sensitivity, downstream
+utility, and mechanism localization. First, with model weights, action
+interfaces, and base tasks frozen,
 we execute 800 standard LIBERO and 6,771 runnable LIBERO-Plus rollouts.
 Success drops from 97.25% to 47.70%, an absolute decrease of 49.55 percentage
 points; camera perturbations are most severe at 15.13% success. Second, across
@@ -63,6 +71,13 @@ task, K=0 improves the held-out action objective by 1.845%, whereas K=1
 worsens it by 1.712%; the final K=1 loss is 3.624% higher than K=0 and is
 worse on all four development samples. Frozen stopping rules prevent
 post-hoc checkpoint selection, K=2/K=4 training, and OOD rollout evaluation.
+To localize the dominant camera failure, we additionally freeze the backbone
+and run an exact-state geometry–action diagnosis over 64 base states. The
+Video Camera-minus-Clean geometry-error gap is 0.020273 m, compared with
+0.011660 m for Lighting. Shuffling a probe-defined rank-3 geometry subspace
+changes actions above the replay floor in 36/36 offline interventions, while
+the correct reconstruction is bitwise exact. This yields the frozen diagnosis
+`camera_equivariance_gap`, not evidence that a proposed remedy already works.
 Our central finding is that **future sensitivity is not future utility**.
 The study does not establish that future imagination is universally
 unnecessary; instead, it provides a reproducible negative result and an
@@ -70,7 +85,8 @@ evaluation framework that keeps prediction quality, action dependence, and
 task utility conceptually and experimentally distinct.
 
 **Keywords:** world action model; robotic manipulation; out-of-distribution
-generalization; future imagination; counterfactual evaluation; negative result
+generalization; future imagination; counterfactual evaluation; camera
+equivariance; negative result
 
 ---
 
@@ -102,7 +118,9 @@ future prediction 变差和任务失败，也不能自动得到“future error �
 Fast-WAM 在标准 LIBERO [2] 与 LIBERO-Plus [3] 环境扰动之间的真实性能差距，
 再将其 future prediction 作为不干预控制的 shadow observer，随后实现轻量
 Future-to-Action Adapter，通过输入反事实确认 future 是否进入动作，最后使用
-matched K=0/K=1 训练检查这种依赖能否转化为 held-out action objective 收益。
+matched K=0/K=1 训练检查这种依赖能否转化为 held-out action objective 收益，
+并用冻结的 geometry–action probe 与离线 subspace intervention 定位最严重的
+Camera 缺口属于哪一类机制。
 
 本文的主要贡献如下：
 
@@ -119,6 +137,9 @@ matched K=0/K=1 训练检查这种依赖能否转化为 held-out action objectiv
    不用 checkpoint、K 或 OOD outcome 进行事后选择。
 5. **可审计的研究方法。** 所有阶段隔离输出、记录 SHA、区分 invalid
    engineering run 与 valid negative result，并提供从机器工件自动生成的图表。
+6. **Camera 缺口的冻结机制诊断。** 通过 exact-state Camera/Lighting 对照、
+   跨 seed linear probe、FP32 subspace arithmetic 与 correct/shuffle 动作干预，
+   将下一方法假设定位为 camera equivariance，而不把离线动作变化写成成功率。
 
 本文的结论不是“未来无用”，而是一个更窄也更可靠的命题：在所测 Fast-WAM
 checkpoint 与轻量 K=1 Adapter 配方下，future 的动作敏感性没有转化为
@@ -260,14 +281,16 @@ A0 用于分离“新增 Adapter/训练”与“future 内容”的影响；它�
 - **RQ4：** 这种影响是否在冻结的轻量 Adapter 配方中改善 held-out action
   objective？
 - **RQ5：** 现有证据是否足以回答 future 能否改善 OOD success？
+- **RQ6：** 最严重的 Camera OOD 缺口更符合 geometry unreadability、action
+  interface gap，还是 camera equivariance gap？
 
 ## 4. 方法
 
 ### 4.1 总体证据阶梯
 
-![从 Thought 1 到 Thought 3 的证据阶梯](figures/figure5_evidence_chain.svg)
+![从 Thought 1 到 Thought 3 的 future-utility 证据阶梯](figures/figure5_evidence_chain.svg)
 
-四个阶段使用独立 namespace 和输出目录。Thought 1/2 冻结后，Thought 3
+五层证据使用独立 namespace 和输出目录。Thought 1/2 冻结后，Thought 3
 不能修改其 runner、结果或 checkpoint。每一阶段只在前一阶段回答了更弱问题后
 进入更强干预；工程失败不登记为科学结果。
 
@@ -391,6 +414,30 @@ direction 要求：
 任一不满足即停止，不复验完整 checkpoint、不启动 OOD rollout、不训练 A2/A4，
 也不选择 step 50/100/150。
 
+### 4.7 Thought 4：冻结 Geometry–Action Gap 诊断
+
+Thought4 不重开 Adapter 路线，也不训练 Fast-WAM。它使用一个固定
+`libero_goal` task 的 64 个 base state，按 40/12/12 划分 train/dev/test，
+对每个 state 渲染 Clean、Camera、Lighting 与 Robot-init 共 256 个样本。Camera
+与 Lighting 保持 simulator state 和动作前缀一致；Robot-init 会改变初始机器人
+状态，故只作为非 exact-state 探索对照。
+
+我们在冻结 Video/Action 主干上捕获中间表征，并以跨三个 seed 的 linear probe
+分别读取当前 geometry translation、当前 action geometry translation 和未来
+SE(3) motion。probe 选择只读 development；test/OOD 不参与层选择。运行顺序为：
+
+1. 先完成全部 Video/Action probe，并将 `probe_stage_result.json` 原子落盘；
+2. 再选择 `mot.video_kv_cache.15.v` 的 rank-3 probe-defined subspace；
+3. 对 12 个 test state × 3 个 action seed 执行 correct/shuffle coordinate
+   replacement；
+4. correct control 必须逐位恢复，shuffle 必须超过实测 replay floor。
+
+为避免 BF16 reconstruction 自身造成假动作差异，正式实验前的 smoke v8 使用真实
+`[1,98,3072]` BF16 capture，所有 basis/projection/reconstruction 在 FP32 中
+完成，只在 replacement 前做一次 BF16 cast。correct hidden 与输入 SHA 相同，
+correct action L2 为 0。该实验只读取冻结表征和离线动作 tensor，不执行环境
+action，不读取 success，也不评测任何新方法。
+
 ## 5. 实验设置
 
 ### 5.1 模型与软件
@@ -415,6 +462,8 @@ LIBERO-Plus commit 分别为 `8f1084e...` 与 `4976dc30...`。
 | Thought 3 Phase 1 | fixed train sample | 8 |
 | Thought 3 Phase 2 | train / development sample | 28 / 4 |
 | Phase 2 training | A0 / A1 objective | 5,600 / 5,600 |
+| Thought 4 | base state / paired render | 64 / 256 |
+| Thought 4 | feature row / intervention comparison | 12,544 / 36 |
 
 这些分母服务于不同研究问题，不能相加成一个“总样本量”，也不能将 Phase 1 的
 8/8 或 Phase 2 的 4/4 表述为机器人成功率。
@@ -426,7 +475,10 @@ suite/category/difficulty/task 分层。Thought 2 以 40 task 等权为 primary�
 进行 suite-stratified task-cluster bootstrap 10,000 次；多个 category
 contrast 使用 BH q-value 辅助解释。Phase 1 是确定性工程反事实，只报告配对
 效应、replay floor 与计数，不进行总体推断。Phase 2 只有四条 development
-sample，按预注册方向作描述性判定，不追加事后显著性检验。
+sample，按预注册方向作描述性判定，不追加事后显著性检验。Thought4 的 probe
+跨三 seed 报告 frozen control；Camera/Lighting 使用 exact-state paired gap，
+selected-coordinate contrast 使用按 base state 分组的 2,000 次 bootstrap。
+Robot-init 不满足 exact-state，因此不能进入同等级的机制判定。
 
 ### 5.4 硬件与审计
 
@@ -434,7 +486,9 @@ sample，按预注册方向作描述性判定，不追加事后显著性检验�
 分片；Phase 1 严格单卡以共享 live model 和确定性状态；Phase 2 使用两张卡
 并行 A0/A1，每个进程只暴露一个逻辑 `cuda:0`。所有阶段记录 peak allocated/
 reserved memory、状态文件、config fingerprint、source/checkpoint SHA 和
-artifact checksum。
+artifact checksum。Thought4 formal v6 使用单张 RTX 4090，耗时 4,728.05 秒
+（1:18:48）；1,586-entry artifact manifest 的逐文件路径、大小与 SHA 已只读
+复核。
 
 ## 6. 结果
 
@@ -572,6 +626,37 @@ Thought 1 已确认 OOD 缺口，Thought 2 已确认 future proxy 关联，Phase
 
 RQ5 的答案是：**证据仍不足；本文停止在一个有效且可审计的离线负结果。**
 
+### 6.6 RQ6：Camera 缺口更符合等变性问题，而非 geometry 完全不可读
+
+Thought4 formal v6 完成 64 个 base state、256 个配对渲染、12,544 条特征与
+全部 36 个干预 comparison。三个 Clean readability probe 均优于冻结 control：
+
+| Probe | Clean error | Mean control | Shuffle control | 相对 mean 改善 |
+| --- | ---: | ---: | ---: | ---: |
+| Video geometry translation | **0.032814 m** | 0.061369 m | 0.067243 m | 46.53% |
+| Action current geometry translation | **0.021851 m** | 0.061369 m | 0.077118 m | 64.39% |
+| Action future motion SE(3) composite | **0.105583** | 0.197027 | 0.225015 | 46.41% |
+
+因此，所测 Clean 表征并非缺少可线性读取的 geometry/motion。对 exact-state
+扰动，Video probe 的 Camera−Clean RMSE gap 跨 seed 均值为
+`+0.020273 m`，Lighting 为 `+0.011660 m`；Camera 的三个 seed 点估计均更大。
+在冻结的 rank-3 coordinate 上，Camera shift 为 `0.295093`
+（95% CI `[0.246436, 0.348635]`），Lighting 为 `0.148809`
+（95% CI `[0.128494, 0.165712]`）；paired Camera−Lighting difference 为
+`0.146284`（95% CI `[0.088519, 0.200310]`）。Robot-init 的冻结 distinct
+pattern 判据为 false，且不满足 exact-state，不能支持独立机制结论。
+
+subspace intervention 的 correct reconstruction 为 36/36 逐位恢复，correct
+相对 unhooked action L2 全为 0；shuffle 为 36/36 超过 replay floor。shuffle
+action L2 mean/min/max 为 `0.000768/0.000559/0.000913`，translation 与
+rotation difference mean 为 `0.001094/0.000410`，gripper difference 为 0。
+这证明 probe-defined geometry coordinates 对动作 tensor 有技术因果影响，但
+动作没有在环境中执行，不能推断任务价值。
+
+RQ6 的冻结答案是：**证据最符合 `camera_equivariance_gap`。** 推荐的下一方法
+为 `Geo-REPA + relative pose / camera-ray equivariance`；该推荐是待检验假设，
+不是方法效果或 OOD success 结果。
+
 ## 7. 讨论
 
 ### 7.1 为什么“敏感”不等于“有用”
@@ -632,6 +717,19 @@ train/development，而非 OOD；且其 future latent 没有对应 Thought 2 的
 所以本文不能给出“最优 K”，只能给出一个更前置的判断：在投入完整 K sweep
 之前，应先证明最小 K 的动作影响具有 held-out utility。当前配方没有做到。
 
+### 7.5 从 future Adapter 转向 camera-equivariant representation
+
+Thought4 没有推翻 Thought3 的负结果，而是把下一项研究从“继续增加 future
+去噪步数”收缩为“先修复 Camera 下的 geometry consistency”。Clean geometry
+可读、Camera gap 大于 Lighting、geometry subspace 又会影响动作，这三项组合
+使 camera-equivariant representation 成为比盲目扩 K 更直接的假设。
+
+不过，formal v6 只证明了表征 gap 与 action sensitivity。rank-3 subspace 只占
+actual feature energy 的约 0.104%，shuffle 导致的动作变化也没有经过闭环执行。
+因此下一阶段必须先在未使用 state/task 上验证 representation 与 SE(3) 指标，
+再预注册 matched Camera rollout；不能从本次 diagnosis 直接声称 Geo-REPA、
+relative pose 或 camera-ray conditioning 有效。
+
 ## 8. 局限性与有效性威胁
 
 ### 8.1 外部有效性
@@ -639,28 +737,34 @@ train/development，而非 OOD；且其 future latent 没有对应 Thought 2 的
 Thought 3 的效用实验只有一个 `libero_goal` task、一个训练 seed、28/4
 sample 与 K=1；不能推广到其他 task、suite、机器人平台、真机、K 或 Adapter。
 Fast-WAM release 训练覆盖四个 LIBERO suite，因此本文的 OOD 是环境 shift，
-不是严格 unseen task/object。
+不是严格 unseen task/object。Thought4 也只覆盖一个 task 的 64 个 base state；
+其层、rank 与 target 选择不能外推到其他任务或 backbone。
 
 ### 8.2 指标有效性
 
 Thought 2 的 VAE latent distance 与 motion-direction cosine 只反映局部视觉
 变化，不评估目标语义、接触物理、碰撞、物体身份或长时序恢复。自动 proxy
 不能替代 outcome-blind 人工 future 正确性标注。Phase 2 的 action objective
-也不是 rollout success。
+也不是 rollout success。Thought4 linear readability 只说明信息可被一个 probe
+读取，不证明原策略在自然执行中以同样方式使用该信息。
 
 ### 8.3 统计有效性
 
 Thought 1 的 row-bootstrap 描述本次变体集合，不应解释为对所有现实环境的
 总体置信区间。Thought 2 虽使用 task-cluster bootstrap，但分析计划未在正式
 指标生成前预冻结。Phase 1 的八条和 Phase 2 的四条样本仅用于技术/方向门禁，
-没有总体显著性资格。
+没有总体显著性资格。Thought4 的 Camera/Lighting 是 state-paired diagnosis；
+Robot-init 会改变初始状态，故其对比资格更弱。多个 layer/probe 数字不能事后
+改作确认性 endpoint。
 
 ### 8.4 因果有效性
 
 Thought 2 的 future 不反馈动作，故只能支持关联。Phase 1 对动作输出具有技术
 干预资格，但没有环境 rollout，不能识别 success 效应。Phase 2 是 matched
 训练对照，但只读 development action target，不读 OOD/outcome。本文没有一项
-实验可单独完成“future→动作→OOD success”的完整中介链。
+实验可单独完成“future→动作→OOD success”的完整中介链。同样，Thought4
+subspace intervention 只识别 hidden coordinate→action tensor，不识别
+geometry correction→Camera rollout success。
 
 ### 8.5 工程与可复现性
 
@@ -668,7 +772,10 @@ Thought 2 的 future 不反馈动作，故只能支持关联。Phase 1 对动作
 decoder 在 TorchCodec 不可用时回退到 PyAV。我们通过进程隔离、同次动作 hash、
 commit/SHA、deterministic seed、atomic artifact 和 checksum 降低风险，但不能
 保证跨硬件逐位复现。LIBERO-Plus 当前 pinned checkout 的代码/资产许可证边界
-也应在公开分发前向上游确认。
+也应在公开分发前向上游确认。Thought4 的 1,586-entry artifact manifest 已逐项
+验证；但 `execution_integrity.json` 的内嵌自哈希只覆盖初始 11 字段核心 payload，
+不覆盖随后追加的 runtime/smoke/probe 字段。完整文件仍由 manifest 的文件 SHA
+覆盖；该作用域缺陷被保留和披露，不原地修补冻结结果。
 
 ## 9. 结论
 
@@ -682,7 +789,10 @@ future–realized consistency proxy 变差且与失败相关，但这一观察�
 future error 的因果归因。再次，K=1 correct/null/shuffle 技术反事实证明
 future 内容确实改变动作。最后，预注册的 matched K=0/K=1 训练发现，这种
 动作敏感性没有转化为更好的 held-out action objective：K=1 比 K=0 高 3.624%，
-四条 development sample 全部方向更差。
+四条 development sample 全部方向更差。进一步的冻结机制诊断显示，Clean
+geometry/motion 可读，Camera 的 exact-state representation gap 大于 Lighting，
+且 rank-3 geometry subspace 对动作 tensor 有技术因果影响；由此将下一假设
+定位为 `camera_equivariance_gap`，但没有产生新方法或 success 结果。
 
 因此，本文最强且不过界的结论是：
 
@@ -692,13 +802,17 @@ future 内容确实改变动作。最后，预注册的 matched K=0/K=1 训练�
 future”。它支持一种更严格的研究范式：先验证鲁棒性缺口，再区分预测关联、
 动作依赖与任务收益；若最小 future 配方未通过预注册 held-out 门禁，应保留
 负结果并停止，而不是用更多 K、checkpoint 或 OOD outcome 搜索期望答案。
+机制诊断可以指导下一方法选择，但也必须在独立 held-out representation、SE(3)
+与 Camera rollout 上重新验证。
 
 ## 数据、代码与复现声明
 
 代码、配置、阶段协议、结果解释和自动作图脚本均位于本项目。机器权威结果保存在
 `outputs/`；论文数字来源与 SHA、重绘命令和实验入口见
 [复现文档](reproducibility.md)。论文图表不手工录入数字，由
-`scripts/build_paper_figures.py` 从冻结 JSON/JSONL 生成。
+`scripts/build_paper_figures.py` 从冻结 JSON/JSONL 生成；Thought4 的冻结数值另
+收录于 [Thought4 结果表](tables/thought4_diagnosis.csv)，并由正式工件 SHA
+与 manifest 追溯。
 
 ## 伦理与安全声明
 
@@ -756,6 +870,11 @@ arXiv:2301.04104, 2023.
 | K=1 改善或损害 OOD success | 未回答 | 未运行 matched rollout |
 | K=2/K=4 更优或无用 | 未回答 | 未训练/未 rollout |
 | Fast-WAM 在 OOD 中不需要 future | 未回答 | 需要多 task/seed/K 的在线因果对照 |
+| Clean geometry/motion 在所测表征中可读 | 支持 | 单 task；冻结 linear probe；不是策略自然使用证明 |
+| Camera representation gap 大于 Lighting | 支持 | exact-state paired panel；冻结 layer/probe |
+| rank-3 geometry subspace 影响动作 | 支持 | 12 test state×3 seed；离线 tensor intervention |
+| Robot-init 是独立同类机制 | 不支持 | 非 exact-state；distinct-pattern=false |
+| Geo-REPA / relative pose / camera rays 改善 OOD | 未回答 | 方法未训练、未 rollout |
 
 ## 附录 B：关键资源开销
 
@@ -767,6 +886,8 @@ arXiv:2301.04104, 2023.
 | Phase D cache K=1/2/4 | 127.54/186.62/362.99 ms | 执行 12.68 GiB | 离线 video-only，含 warm-up 异质性 |
 | Phase 1 correct−null | +258.95 ms（+6.17%） | 执行约 13.01 GiB | K=1 在线增量，n=8 |
 | Phase 2 training | 约 17.3 s/update | 13,277 MiB | 训练更新，不是推理 |
+| Thought4 smoke v8 | 10:55.90 total | 未作为部署显存 | 数值/干预门禁，不是科学结果 |
+| Thought4 formal v6 | 1:18:48 total | 单张 RTX 4090 | 冻结离线机制诊断，不是 rollout |
 
 ## 附录 C：工程失败与科学负结果
 

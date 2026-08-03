@@ -16,10 +16,12 @@ success 或 OOD 结果选择的。完整预注册见
 | smoke output | `outputs/thought4/phase4_geometry_action_smoke_v8/` |
 | smoke config fingerprint | `81d3885ccb5b58806c1a729e509c039f6e1cb33a34ff242f8fa16785796149d7` |
 | smoke planned cohort SHA | `a67ff85321dc684a80b853b58ab133905232a275e6d71255fd1c966b9a3d6c12` |
+| smoke status/result | COMPLETE；`b6741808...473f1` |
 | formal config | `configs/thought4/phase4_geometry_action_diagnosis_v6.yaml` |
 | formal output | `outputs/thought4/phase4_geometry_action_diagnosis_v6/` |
 | formal config fingerprint | `3b14a7d7fd09deda9253bb1cd9950d9c4b5bd0cdf9f124a4dfede22add5c24f6` |
 | formal planned cohort SHA | `9af7cf7c1933fb1e5574099361f6d7dcc7500727480ecb4bbf010089f28d8f04` |
+| formal status/classification | COMPLETE；`camera_equivariance_gap` |
 | subspace arithmetic | FP32 coordinates/residual，单次 BF16 output cast，bitwise correct |
 | label source | `simulator_action_replay_from_input_t` |
 | alignment policy | disclosure-only，仍使用 3 cm / 15° |
@@ -91,7 +93,7 @@ smoke v7 已于 2026-08-03 02:32:15–02:43:10 UTC 通过；formal v5 随后完�
 没有科学 classification，且旧编排未在 intervention 前落盘 probe results。当前
 不得 resume v5；只运行下述新身份。
 
-## 4. 运行 smoke v8
+## 4. Smoke v8 已完成与复现入口
 
 先确认代码已提交、worktree clean、卡空闲：
 
@@ -100,7 +102,8 @@ git status --short
 nvidia-smi
 ```
 
-`git status --short` 必须没有输出。然后执行：
+`git status --short` 必须没有输出。v8 已完成；以下命令只用于全新 namespace 的
+严格复现，不应对 completed 目录重复执行：
 
 ```bash
 CONFIRM_THOUGHT4_PHASE4_SMOKE=YES \
@@ -116,8 +119,7 @@ MUJOCO_EGL_DEVICE_ID=2
 Fast-WAM device=cuda:0
 ```
 
-v7 实测 10m55s。v8 多一次 reconstructed-cache Action inference，预计约 12–17
-分钟；这是运行预算，不是论文 latency。
+v8 实测 10m55.90s；这是运行总时长，不是论文 policy latency。
 
 查看：
 
@@ -147,9 +149,9 @@ smoke v8 只取 2 个 base state，覆盖四条件，验证：
 `bitwise_equal_after_output_cast=true` 和 subspace contract SHA 有效。只编辑
 `smoke_result.json` 或只设置 formal 确认变量不能绕过。
 
-## 5. 运行 formal v6
+## 5. Formal v6 已完成与复现入口
 
-smoke v8 通过后，不改代码、配置或文档；同一 project commit 直接执行：
+实际运行在 smoke v8 通过后保持同一 commit，使用：
 
 ```bash
 CONFIRM_THOUGHT4_PHASE4_FORMAL=YES \
@@ -157,8 +159,8 @@ THOUGHT4_GPU_ID=2 \
 bash scripts/run_thought4_phase4_diagnosis.sh
 ```
 
-预计单卡 4090 为 2–6 小时，正式 ETA 应在 smoke v8 后根据真实计时更新。不能为了
-缩短时间改变 64 states、五层、probe seeds、threshold 或 20-step action schedule。
+实测总时长为 1h18m48.05s。不能为了复现而改变 64 states、五层、probe seeds、
+threshold 或 20-step action schedule；当前 runner 会拒绝覆盖 completed v6。
 
 主要输出：
 
@@ -182,15 +184,16 @@ outputs/thought4/phase4_geometry_action_diagnosis_v6/
 ```
 
 formal 不启动 policy rollout，不读取 success/OOD，也不实现新训练方法。
+正式分类与完整数字见 [formal v6 正式结果](formal_v6_results.md)。
 
 ## 6. Resume 与历史 namespace
 
 v1–v8 smoke、v1–v6 formal 均使用独立 namespace。历史失败/中断/通过工件不得
 删除、覆盖、拼接到当前结果或改写为 PASS。
 
-formal v5 是冻结的工程失败证据，明确禁止 `--resume`。formal v6 只在其自身
-namespace 内、同 commit 且 checksum-identical 的非科学进程中断时允许 resume；
-不得把 v5 的 `probe_inputs.pt` 或 feature shard 复制到 v6。
+formal v5 是冻结的工程失败证据，明确禁止 `--resume`。formal v6 已 complete，
+同样不可 resume、覆盖或追加；不得把 v5/v6 的 `probe_inputs.pt` 或 feature shard
+复制到未来 namespace。
 
 只有代码 commit、配置、pre-validation identity 均未变化，且日志明确是非科学性
 进程中断时，才可在当前 runner 的内部 CLI 后加 `--resume`。已有 feature shard 和

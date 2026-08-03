@@ -1,11 +1,11 @@
 # Thought4 Phase 4：Geometry–Action Gap 代码与数据审计
 
-状态：`AUDIT COMPLETE / IMPLEMENTED / SMOKE V3+V6 PASSED / FORMAL V4 ALIGNMENT ENGINEERING FAILURE / SIMULATOR-REPLAY SMOKE V7+FORMAL V5 PRE-REGISTERED`
+状态：`AUDIT COMPLETE / IMPLEMENTED / FP32 SMOKE V8 PASSED / FORMAL V6 COMPLETE / CAMERA_EQUIVARIANCE_GAP`
 
 审计日期：2026-07-31
 
-simulator-replay v5 补充审计：2026-08-03（发生在 formal v4 alignment 失败后，
-不覆盖原审计时间线）。
+simulator-replay v5 与 FP32 formal v6 补充审计：2026-08-03；它们发生在各自
+失败后，不覆盖原审计时间线。
 
 本审计发生在 Thought4 实现之前。范围仅包括代码、配置、已有工件和本地数据
 schema 的只读检查；没有加载 Fast-WAM checkpoint，没有运行 GPU，没有生成
@@ -31,7 +31,8 @@ Phase 4-A/B/C 可以在不修改 `third_party/FastWAM` 的前提下实现，但�
 formal v4 后对 64 个冻结状态的只读审计进一步显示 prefix-to-parquet EEF 对齐存在
 8/64 尾部失败。因此 simulator-replay v5 从模型实际输入状态 `t` 生成 action-motion
 标签，并把 parquet 对齐降为完整 QC 披露；这不改变 formal 科学 cohort，也不读取
-future RGB/success/OOD。formal 科学结果仍依赖新的 simulator/model smoke v7 通过。
+future RGB/success/OOD。该链路随后通过 smoke v7；FP32 smoke v8 与 formal v6
+也已完成，冻结诊断分类为 `camera_equivariance_gap`。
 
 ## 1. Video DiT block 数量和命名
 
@@ -369,9 +370,13 @@ inference tensor 没有 `_version` 而停止；未生成 feature/probe/intervent
 alignment hard gate 前停止；完整审计为 56/64 pass、8/64 fail。新 v5 协议保留
 全部 state 并从实际 input `t` simulator replay 生成 motion target；smoke v7 已
 通过。formal v5 完成 render/feature/probe 计算后，在第一次 BF16 subspace correct
-reconstruction 停止，且旧编排未先保存 probe JSON。当前预注册 FP32/single-cast/
-bitwise correct smoke v8 与全新 formal v6，并在 intervention 前提交四个 probe
-工件。任何历史工件或旧 smoke 都不能代替新 formal gate。
+reconstruction 停止，且旧编排未先保存 probe JSON。随后 FP32/single-cast/
+bitwise correct smoke v8 通过；全新 formal v6 在 intervention 前提交四个 probe
+工件，并完成 36/36 correct/shuffle comparison。64-state 分类为
+`camera_equivariance_gap`。结果后只读审计验证 artifact manifest 的 1,586 个文件
+0 mismatch；`execution_integrity` 内部 SHA 仅覆盖核心字段的 scope 缺陷已在
+[正式结果](formal_v6_results.md)披露。任何历史工件或旧 smoke 都不能代替该
+正式证据链。
 
 最短执行顺序：
 

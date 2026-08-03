@@ -4,12 +4,12 @@
 
 ## 1. 当前事实快照
 
-截至 2026-07-30：
+截至 2026-08-03：
 
 | 项目 | 状态 | 可用证据 |
 | --- | --- | --- |
 | 配置、planner、adapter、分片、resume、聚合 | 已实现 | `src/`、`configs/`、`tests/` |
-| 自动化测试 | 已通过 | `pytest -q`：386 passed、5 warnings；覆盖阶段一/二回归与 Thought3 配置、cache、Adapter、resume、泄漏、任意 positive-flow grid、E9 audit 与 K=1 online CF 编排 |
+| 自动化测试 | 已通过 | 2026-08-03 `pytest -q`：443 passed、5 warnings；覆盖 Thought1–4、cache/Adapter、resume、泄漏、反事实、FP32 reconstruction 与 formal 编排 |
 | Conda 环境与激活入口 | 已配置 | `scripts/create_env.sh`、`scripts/activate_env.sh` |
 | checkpoint/stats | 已下载并人工校验 | checkpoint SHA-256 `1000437c...a49579`；stats SHA-256 `30f81ad7...68638` |
 | FastWAM 公共运行时模型 | 已下载并逐文件校验 | `scripts/download_fastwam_runtime_models.sh`；T5、VAE、tokenizer 共约 11.9 GiB |
@@ -36,6 +36,9 @@
 | 阶段三 Gate E.8 A0 flow variance | COMPLETED READ-ONLY DIAGNOSTIC | 1,536/1,536 forward、0 backward/optimizer/write；step-200 pooled loss 改善 3.728%，但 full/双 block 稳定性为 4/8、4/8、5/8；分类 `mixed_or_inconclusive` |
 | 阶段三 Gate E.9 + Phase 0 audit | ENGINEERING VALID / SCIENTIFIC FAILED | 四轨 6,400 train + 2,048 held-out objectives；CPU-only audit 27/27 checks、父 77 文件 0 write；normalized paired `8.274%<10%`，E9b locked |
 | 阶段三 Phase 1 K=1 online CF | VALID ENGINEERING SMOKE / BRANCH A | 单卡 8 sample；B0/null 精确 parity；correct-null、correct-shuffle 与 action hash 均 `8/8`；62/62 工件 SHA 通过；只支持 future-content action sensitivity |
+| 阶段三 Phase 2 matched training | VALID OFFLINE NEGATIVE | 双卡各 200×28 objectives；12/12 hard checks；A0 `+1.845%`、A1 `−1.712%`，A1 比 A0 高 `3.624%` 且 4/4 sample 更差 |
+| Thought4 FP32 smoke v8 | SMOKE 已通过 | 真实 `[1,98,3072]` BF16 capture；FP32 reconstruction 后 hidden SHA 逐位恢复、action L2=0；backbone SHA 不变 |
+| Thought4 formal v6 | FORMAL DIAGNOSTIC 完成 | 64 base states、256 paired samples、12,544 features、36 interventions；分类 `camera_equivariance_gap`；1,586 工件 manifest 全量只读复核 |
 
 ## 2. 可以对外说明的工程亮点
 
@@ -59,6 +62,8 @@
 | 标签盲化媒体审阅 | 将 condition/outcome/metric/source mapping 放入独立 `0600` private key；公开 packet 使用 opaque alias 和逐媒体 SHA-256；盲态导入区分 missing/uncertain/decisive 并计算 pairwise κ | `diagnostics/blind_review*.py`、静态 HTML/CSV/JSON | 7 个真实 probe 的 28 个媒体全部解码，public sensitive key/token 泄漏为 0；agreement 工具由合成双 reviewer 标签验证，真人标签仍为 0 |
 | Outcome-blind 正式抽样 | 只从阶段一 job manifest 分层哈希选样，记录 skipped-only cell，并强制 Clean episode-0 anchor；formal runner 拒绝未冻结草案 | `diagnostics/diagnostic_cohort.py`、`require_frozen_cohort` | 五类 732-job exact-ratification 与运行完成；阶段一 outcome 已出现后不允许追溯升级 |
 | 层级化正式分析与审计 | probe→episode→task 聚合、suite-stratified task bootstrap、首 probe sensitivity、outcome mismatch 排除、BH-FDR、媒体/trace 全量审计 | `diagnostics/formal_analysis.py`、`formal_analysis_v1/` | 40 task、10,000 bootstrap；4,040 media 0 decode error；175 tests passed |
+| FP32 geometry-subspace 干预 | 真实 BF16 capture 先升 FP32 做 basis/projection/reconstruction，只在 replacement 前一次 cast；correct 必须逐位恢复 | `thought4/geometry_intervention.py`、smoke v8 | hidden SHA 相同、correct action L2=0；不靠放宽 BF16 tolerance |
+| Probe-first 正式诊断 | 在 intervention 前原子提交全部 probe；dev-only 选层，test/OOD 不反向参与；correct/shuffle 与 replay floor 分离 | `thought4/phase4.py`、formal v6 | 256 paired samples、12,544 features；36/36 correct bitwise、36/36 shuffle 超 floor；backbone SHA 不变 |
 
 ## 3. 难点、阻碍、方案与剩余风险
 
@@ -538,6 +543,31 @@
   比 A0 高 `3.624%` 且 4/4 development sample 更差。按预注册规则登记有效
   离线负结果并锁定 Phase 3，而不是改 LR、weight、checkpoint 或 K 寻找正值。
 
+### 3.34 用 exact-state probe 与数值可逆干预定位 Camera 缺口
+
+- 问题：Camera OOD 成功率最低不能直接说明是 geometry 不可读、Action interface
+  丢失信息，还是相机变化下缺少等变性；BF16 subspace reconstruction 本身也可能
+  制造微小动作差异。
+- 数值门禁：在真实 `[1,98,3072]` BF16 hidden 上先升 FP32 完成 basis、投影与
+  reconstruction，只在 replacement 前做一次 BF16 cast；smoke v8 要求 correct
+  hidden SHA 逐位恢复且 action L2=0，不用放宽 tolerance 绕过问题。
+- 设计：64 个 base state 按 40/12/12 划分，生成 Clean/Camera/Lighting/
+  Robot-init 共 256 个 paired sample；先原子提交跨三 seed 的 Video/Action probe，
+  再对 dev-only 选择的 `mot.video_kv_cache.15.v` rank-3 subspace 做
+  12 test state×3 action seed 干预。
+- 结果：Clean Video/Action geometry error 为 `0.032814/0.021851 m`，均优于
+  mean/shuffle control；Camera−Clean Video gap 为 `+0.020273 m`，高于 Lighting
+  的 `+0.011660 m`；rank-3 Camera−Lighting difference 为 `0.146284`
+  （95% CI `[0.088519,0.200310]`）。
+- 技术因果：correct 36/36 逐位恢复，shuffle 36/36 超 replay floor，action L2
+  mean `0.000768`；未执行动作、未读取 success、backbone SHA 前后相同。
+- 冻结结论：分类为 `camera_equivariance_gap`，下一方法只推荐
+  `Geo-REPA + relative pose / camera-ray equivariance`。这不是该方法已有效的
+  证据；Robot-init 因非 exact-state 且 distinct-pattern=false 也不能单独归因。
+- 审计备注：formal v6 的 1,586-entry manifest 全部逐文件通过；
+  `execution_integrity.json` 的自哈希只覆盖初始核心 payload，完整文件由 manifest
+  SHA 覆盖。冻结输出保留原样，不追溯修补。
+
 ## 4. 简历表达素材
 
 ### 当前即可使用的版本
@@ -557,6 +587,10 @@
   training objectives、8 个可恢复 checkpoint 和多层 SHA 审计；发现 future
   内容虽改变动作但未改善 held-out objective，并以冻结停止规则阻止
   outcome-driven 调参及无依据的 OOD 扩展。
+- 为 Camera OOD 设计冻结 geometry–action diagnosis，在 64 个 base state 上生成
+  256 个 paired sample、捕获 12,544 条 feature；用真实 BF16→FP32→BF16
+  bitwise correct control 排除数值伪差，并以 36/36 shuffle action intervention
+  将下一方法假设定位为 `camera_equivariance_gap`。
 - 将 Clean 多 seed 与 LIBERO-Plus 预生成 task-instance 协议显式分离，通过配置门禁阻止每变体重复采样造成的数量级计算浪费。
 - 建立相同 checkpoint/配对 seed 的鲁棒性评测与统计链路，覆盖成功率下降、bootstrap CI、失败分类和跨策略配方一致性约束。
 - 在 3 张 GPU 上完成 7,571 个真实 rollout 和 2,399,314 个 action step，
@@ -654,6 +688,13 @@
 > correct-null/correct-shuffle 的 normalized action RMS 差异均超过冻结 floor；
 > K=1 paired 在线开销均值为 258.95 ms，并完成 62/62 tensor/provenance SHA
 > 审计。该表述只代表动作内容敏感性，不代表 OOD 成功率提升。
+
+> 在冻结 Fast-WAM 主干的 Camera geometry–action diagnosis 中，对 64 个 base
+> state 构造 256 个 paired sample 并审计 12,544 条 feature；测得 Video
+> Camera−Clean geometry gap 为 0.020273 m，高于 Lighting 的 0.011660 m，
+> probe-defined rank-3 shuffle 在 36/36 次离线干预中使 action 超 replay floor，
+> correct control 36/36 逐位恢复。该结果支持 `camera_equivariance_gap` 的方法
+> 选择，不代表 Geo-REPA 或 Camera rollout 已提升。
 
 在人工标注完成前，不要追加“归纳出 K 类失败模式”。可以写“保存并审计
 3,563 个失败视频”，但“reviewed/labelled”分母目前仍为 0。

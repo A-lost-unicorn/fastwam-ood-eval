@@ -12,6 +12,7 @@
 | [thought2/](thought2/) | 不改动作的离线 future shadow diagnostics | OOD 一致性代理变差且与失败相关，非因果 |
 | [thought3/](thought3/) | Future-to-Action Adapter、技术反事实与 matched 训练 | future 改变动作；K=1 未改善 held-out objective |
 | [thought4/](thought4/) | 冻结几何表征—动作接口诊断 | formal v6 完成：支持 `camera_equivariance_gap`；下一分支为 Geo-REPA + camera equivariance |
+| [thought5/](thought5/) | Camera-equivariant geometry 定向干预与机制闭环协议 | Audit/CPU contract 完成；真实 GPU 实验 **NOT RUN** |
 | [shared/](shared/) | 环境、架构、总控、实验台账和通用协议 | 跨阶段工程与结论边界 |
 
 ## 论文主线
@@ -30,6 +31,8 @@ Thought 3 Phase 2：K=1 held-out 效用负结果
 Thought 4：定位 Video geometry / Action interface / camera equivariance gap
        ↓
 诊断结论：Camera shift 对几何表征破坏大于 Lighting；尚未证明修复能提高 success
+       ↓
+Thought 5：Geo-REPA + relative pose/rays 定向干预（当前 GPU 结果 NOT RUN）
 ```
 
 论文级数字、证据强度和不可写结论见

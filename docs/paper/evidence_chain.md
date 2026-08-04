@@ -3,7 +3,8 @@
 更新日期：2026-08-03
 适用范围：Fast-WAM 官方 `libero_uncond_2cam224` checkpoint、标准 LIBERO、
 LIBERO-Plus、本项目冻结的 K=1 Future-to-Action Adapter 配方，以及 Thought4
-冻结的 geometry–action diagnosis；不包含 Geo-REPA 或任何新方法效果。
+冻结的 geometry–action diagnosis，以及 Thought5 的方法/协议实现；不包含
+任何 Geo-REPA 真实效果，因为 GPU smoke、pilot、formal 均未运行。
 
 ![Thought1 到 Thought3 的证据阶梯](figures/figure5_evidence_chain.svg)
 
@@ -48,7 +49,7 @@ success 的总体因果效应。
 | C12 | Camera shift 具有超出 Lighting 的表征缺口 | exact-state paired Camera/Lighting；冻结层与 probe | Video Camera−Clean +0.020273 m，Lighting +0.011660 m；rank-3 Camera−Lighting 0.146284，95% CI [0.088519, 0.200310] | 配对表征诊断 | **支持** |
 | C13 | probe-defined geometry subspace 对动作有技术因果影响 | 12 test state × 3 action seed；correct/shuffle intervention | correct 36/36 逐位恢复；shuffle 36/36 超 replay floor；action L2 mean 0.000768 | 技术因果干预 | **支持** |
 | C14 | Robot-init 具有独立于 Camera 的同类缺口 | Robot-init 不是 exact-state control，冻结 distinct-pattern 判据 | `robot_init_pattern_distinct=false` | 探索诊断 | **不支持** |
-| C15 | Geo-REPA / relative pose / camera-ray equivariance 改善 OOD success | 方法尚未实现或 rollout | 无结果 | 方法效用 | **未回答** |
+| C15 | Geo-REPA / relative pose / camera-ray equivariance 改善 OOD success | 方法与冻结协议已实现；真实训练/rollout 未运行 | 无结果 | 方法效用 | **未回答** |
 
 “支持”只覆盖表中对应设计，不向其他 task、机器人平台、训练 seed、Adapter
 结构或 K 外推。
@@ -242,6 +243,7 @@ geometry subspace：
 | Thought 3 Phase 2 | 完整 matched A0/A1 单配方训练 | 双 GPU 独立轨、固定 step-200、12 项 hard check | 离线负结果 |
 | Thought 4 smoke v8 | 真实 BF16 capture 的 FP32 subspace arithmetic | correct 必须逐位恢复；不靠放宽 tolerance | 数值/干预门禁 |
 | Thought 4 formal v6 | exact-state paired probes、probe-first commit、rank-3 intervention | simulator replay 对齐、1,586 工件 manifest、自哈希作用域审计 | 正式离线机制诊断 |
+| Thought 5 audit/CPU v2 | layer-15 Geo-REPA、ray/pose injection、B0–G4、matched future probe 与三层判定器 | task-order 映射、历史 cohort 排除、train/dev/formal probe 隔离、完整对象 SHA、无 GT-depth 泄漏 | 方法/协议与 mock contract；效果 NOT RUN |
 
 Gate E 的完整协议、失败与恢复记录见
 [Gate E 索引](../thought3/gate_e/)。它们的论文价值主要是说明研究流程如何避免：

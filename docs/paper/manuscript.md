@@ -777,6 +777,28 @@ commit/SHA、deterministic seed、atomic artifact 和 checksum 降低风险，�
 不覆盖随后追加的 runtime/smoke/probe 字段。完整文件仍由 manifest 的文件 SHA
 覆盖；该作用域缺陷被保留和披露，不原地修补冻结结果。
 
+### 8.6 Thought5：已实现但尚未运行的定向干预
+
+Thought4 的冻结分类只解锁了一个独立后续分支：Fast-WAM-GeoEq。该分支在
+action-consumed `mot.video_kv_cache.15.v` 对应的 Video layer-15 K/V projection
+安装 rank-8 LoRA，以 simulator geometry 构造训练期 Geo-REPA target，并把
+relative camera pose 与 per-token rays 作为轻量 residual conditioning 注入同一
+K/V-producing hidden。Action DiT 保持冻结，GeoProjector 在推理时移除，GT
+depth 不进入策略输入。
+
+Future geometry 的评测不复用这个训练头。所有 backbone 都使用相同的 layer-15
+future-token signed projection（3072→128）与 linear-ridge probe；probe 仅在
+training cohort 拟合，development 冻结正则，formal 只读，以避免“G3 的 decoder
+被训练而 B1 的 decoder 未训练”这一混淆。
+
+Phase 5 预注册 B0、matched B1、G1、G2、G3 与 shuffled G4，并以互斥
+train/development/formal cohort 依次检验：Camera representation gap 是否至少
+缩小 25%，K=1 correct future 是否相对 null/shuffle 获得 held-out utility，以及
+Camera rollout success 是否提高且 Clean 不劣。当前只有代码审计与 CPU/mock
+contract 通过，所有真实 GPU 结果均为 **NOT RUN**。因此本稿不报告方法收益，
+也不改变本文已有的负结果和 `camera_equivariance_gap` 诊断结论。完整预注册见
+[Thought5 协议](../thought5/protocol.md)。
+
 ## 9. 结论
 
 本文围绕“Fast-WAM 在 OOD 环境中真的不需要未来想象吗？”建立了一条由弱到强

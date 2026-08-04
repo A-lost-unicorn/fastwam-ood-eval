@@ -41,6 +41,7 @@ Thought4 进一步将下一方法假设定位为 `camera_equivariance_gap`，但
 | 阶段二 B：action-conditioned future consistency | 严格门禁、schema、runner、测试已实现 | CPU/mock 与门禁测试通过 | **阻塞**。官方 release 为 `action_conditioned=false`，且没有可信匹配 checkpoint |
 | 阶段三：Future-to-Action Adapter | Phase 0 审计完成；Phase 1 分支 A；Phase 2 完整双卡训练完成 | Phase 1 correct-null/shuffle/action-hash 均 `8/8`；Phase 2 A0 reduction `+1.845%`、A1 `−1.712%`，A1 比 A0 高 `3.624%` 且 4/4 dev sample 更差 | **有效离线负结果，路线停止**：future 内容会改变动作，但冻结 K=1 Adapter 未形成 held-out utility；Phase 3/OOD/A2/A4 锁定 |
 | Thought4：Geometry–Action Gap | FP32 smoke v8 与 64-state formal v6 完成；1,586 工件只读审计 | 256 paired samples、12,544 features；Camera gap 0.020273 m > Lighting 0.011660 m；rank-3 shuffle 36/36 超过 replay floor | **FORMAL DIAGNOSTIC 完成**：`camera_equivariance_gap`；只解锁 Geo-REPA + relative pose / camera-ray equivariance，尚无方法/rollout 效果 |
+| Thought5：Camera-Equivariant Geometry Alignment | v2 审计、方法模块、matched future probe、协议、CPU/mock dry-run 与 runner 门禁已实现 | Audit SHA `a880bbd9...f959`；14/14 CPU contract；真实 smoke/pilot/formal 均 `NOT RUN` | **无科学结果**：H1/H2/H3 与机制分类未定；v1 scaffold 已废止，不得写成 OOD 改善 |
 
 因此，“阶段一已经完成”的准确说法是：**阶段一工程、正式全量计算、聚合与
 完整性审计均已完成；失败机制人工 taxonomy 尚未完成，但不阻塞主成功率结论。**
@@ -93,6 +94,7 @@ outputs/thought2_shadow_*            # 阶段二 B
 outputs/thought2/five_category_formal_v1/ # 阶段二五类正式 raw + 独立派生分析
 outputs/thought3/...                 # 阶段三训练、cache、评测
 outputs/thought4/...                 # 冻结 geometry/action probes 与 formal diagnosis
+outputs/thought5/...                 # 独立 GeoEq 审计、占位、训练与机制验证工件
 ```
 
 阶段二 future diagnostics 只读阶段一 `experiment_manifest.json` 和
@@ -242,6 +244,11 @@ OOD 一致性下降假设”，不能进入论文结论表。
   [thought4_protocol.md](../thought4/protocol.md)、
   [thought4_fp32_preregistration.md](../thought4/fp32_subspace_v6_preregistration.md)、
   [thought4_formal_v6_results.md](../thought4/formal_v6_results.md)
+- Thought5 审计、协议、方法和运行手册：
+  [thought5_index.md](../thought5/README.md)、
+  [thought5_method.md](../thought5/audit_and_method.md)、
+  [thought5_protocol.md](../thought5/protocol.md)、
+  [thought5_runbook.md](../thought5/runbook.md)
 - 阶段三加速路线、Phase 2/3 草案与硬停止规则：
   [thought3_accelerated_roadmap.md](../thought3/foundations/accelerated_roadmap.md)
 - 阶段三数据/训练/评测：[thought3_data_protocol.md](../thought3/foundations/data_protocol.md)、[thought3_training.md](../thought3/foundations/training.md)、[thought3_evaluation.md](../thought3/foundations/evaluation.md)

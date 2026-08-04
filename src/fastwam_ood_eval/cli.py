@@ -554,6 +554,36 @@ def build_parser() -> argparse.ArgumentParser:
             "--device",
             help="Must match the frozen logical device in the config",
         )
+    for name, help_text in (
+        ("thought5-audit", "Run the read-only Phase 5 architecture/data audit"),
+        ("thought5-dry-run", "Run Phase 5 CPU/mock contract validation"),
+        ("thought5-smoke", "Run the confirmed one-GPU real Phase 5 smoke"),
+        ("thought5-pilot", "Run the confirmed two-GPU Phase 5 pilot"),
+        ("thought5-formal", "Run the separately frozen four-GPU Phase 5 formal"),
+    ):
+        command = subparsers.add_parser(name, help=help_text)
+        command.add_argument("--config", required=True, type=Path)
+        command.add_argument(
+            "--set",
+            action="append",
+            default=[],
+            metavar="KEY=VALUE",
+            help="Present for consistency; Thought5 forbids CLI overrides",
+        )
+        command.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Validate protocol only; never load the model, simulator, or GPU",
+        )
+        command.add_argument(
+            "--resume",
+            action="store_true",
+            help="Resume only checksum-valid, non-complete Thought5 artifacts",
+        )
+        command.add_argument(
+            "--device",
+            help="Logical runtime device; physical cards are mapped by the runner",
+        )
     return parser
 
 
@@ -1083,6 +1113,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.command.startswith("thought5-"):
+            # Keep torch, MuJoCo, and Fast-WAM behind the confirmed real branch.
+            from fastwam_ood_eval.thought5.cli import dispatch
+
+            return dispatch(args)
         if args.command.startswith("thought4-"):
             # Keep Torch, MuJoCo and Fast-WAM imports behind the real execution
             # branch.  Thought4 dry-run remains CPU/read-only.

@@ -2060,7 +2060,7 @@ def run_pilot(cfg: Thought5Config, *, resume: bool = False) -> dict[str, Any]:
     if cfg.experiment.stage != "pilot":
         raise Phase5PanelError("pilot runner received a non-pilot config")
     smoke = Path(
-        "outputs/thought5/phase5_camera_equivariant_geo_repa_smoke_v2/smoke_result.json"
+        "outputs/thought5/phase5_camera_equivariant_geo_repa_smoke_v3/smoke_result.json"
     )
     if not smoke.is_file():
         raise Phase5PanelError("pilot remains locked until real smoke completes")

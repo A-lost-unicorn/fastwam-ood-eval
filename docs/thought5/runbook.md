@@ -39,7 +39,13 @@ hook、gradient、loss 分量、adapter-only checkpoint、frozen SHA、推理头
 zero-LoRA 官方动作逐位一致、ray/pose inference、无 future RGB/depth 泄漏、
 延迟和峰值显存，不形成科学结论。首次真实运行前没有可信 ETA；按既有模型加载
 与小步训练 telemetry，建议预留 20–40 分钟，并以 log 实际进度为准。日志位于
-`outputs/thought5/phase5_camera_equivariant_geo_repa_smoke_v2/logs/run.log`。
+`outputs/thought5/phase5_camera_equivariant_geo_repa_smoke_v3/logs/run.log`。
+
+2026-08-04 的 smoke v2 是一次无效技术运行：B1 完成 2 step 后，G3 在训练专用
+FP32 pose auxiliary head 接收 BF16 注入表征时触发 dtype error。它没有生成
+`smoke_result.json`、没有解锁 pilot，也不构成科学结果。v2 目录只读保留；v3
+仅修复 FP32 head 的输入 dtype 边界，样本 identity、seed、模型、损失和门槛均
+保持不变。
 若中断且工件校验无误：
 
 ```bash
@@ -96,3 +102,5 @@ dry-run 数字。
 - partial output：先读 `run_status.json` 和 log；只有 checksum-valid 才传 `--resume`。
 - complete output：新协议必须使用新版本目录，禁止覆盖。
 - v1 scaffold：只读保留；v2 修复了 Phase 5-B matched probe，禁止 resume v1。
+- smoke v2：只读保留的 dtype 失败运行；修复后只能运行 smoke v3，禁止跨 commit
+  resume v2。

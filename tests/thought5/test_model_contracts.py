@@ -10,6 +10,7 @@ from fastwam_ood_eval.thought5.checkpointing import (
 from fastwam_ood_eval.thought5.geo_equiv_model import GeoEqAttachment
 from fastwam_ood_eval.thought5.lora_targets import make_lora_linear
 from fastwam_ood_eval.thought5.pipeline import _mock_model
+from fastwam_ood_eval.thought5.ray_pose_encoder import RayPoseEncoder
 
 
 def test_zero_initialized_lora_preserves_baseline_bitwise() -> None:
@@ -60,6 +61,29 @@ def test_ray_pose_injection_repeats_in_frame_major_future_tokens() -> None:
     assert torch.equal(injected[:, :98], injected[:, 98:196])
     assert torch.equal(injected[:, :98], injected[:, 196:])
     attachment.close()
+
+
+def test_fp32_pose_aux_accepts_bfloat16_injected_encoding_and_backpropagates() -> None:
+    encoder = RayPoseEncoder(model_dim=16, hidden_dim=8, pose_dim=12)
+    encoded = torch.randn(
+        2,
+        7,
+        16,
+        dtype=torch.bfloat16,
+        requires_grad=True,
+    )
+
+    prediction = encoder.predict_pose(encoded)
+    prediction.square().mean().backward()
+
+    assert prediction.dtype == torch.float32
+    assert encoded.grad is not None
+    assert encoded.grad.dtype == torch.bfloat16
+    assert bool(torch.isfinite(encoded.grad).all())
+    assert all(
+        parameter.grad is not None and bool(torch.isfinite(parameter.grad).all())
+        for parameter in encoder.pose_aux.parameters()
+    )
 
 
 def test_adapter_only_checkpoint_roundtrip_and_frozen_sha(tmp_path) -> None:

@@ -33,7 +33,7 @@ for gpu_id in "${first_gpu}" "${second_gpu}"; do
   fi
 done
 
-smoke_status="outputs/thought5/phase5_camera_equivariant_geo_repa_smoke_v2/run_status.json"
+smoke_status="outputs/thought5/phase5_camera_equivariant_geo_repa_smoke_v3/run_status.json"
 if [[ ! -f "${smoke_status}" ]] || ! grep -Eq '"status"[[:space:]]*:[[:space:]]*"complete"' "${smoke_status}"; then
   echo "Thought5 pilot remains locked until the real smoke completes" >&2
   exit 2

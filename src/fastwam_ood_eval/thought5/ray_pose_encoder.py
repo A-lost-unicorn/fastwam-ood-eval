@@ -55,6 +55,17 @@ class RayPoseEncoder:
             def predict_pose(self, encoded: Any) -> Any:
                 if encoded.ndim != 3:
                     raise ValueError("encoded ray/pose tensor must be rank 3")
-                return self.pose_aux(encoded.mean(dim=1))
+                # The residual injected into Fast-WAM must match the BF16
+                # backbone, while the small training-only auxiliary head is
+                # deliberately kept in FP32.  Cast before pooling so both the
+                # reduction and LayerNorm/Linear run at the head's precision.
+                # ``Tensor.to`` preserves autograd, so gradients still reach
+                # the injected encoding and RayPoseEncoder.
+                reference = next(self.pose_aux.parameters())
+                pooled = encoded.to(
+                    device=reference.device,
+                    dtype=reference.dtype,
+                ).mean(dim=1)
+                return self.pose_aux(pooled)
 
         return _RayPoseEncoder()

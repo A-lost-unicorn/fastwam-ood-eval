@@ -1,14 +1,15 @@
 # Thought5：Camera-Equivariant Geometry Alignment
 
-更新日期：2026-08-03
+更新日期：2026-08-04
 
 Thought5 是独立于 Thought1–4 的机制干预阶段。它不重新解释或覆盖既有
 正式结果，而是针对 Thought4 formal v6 唯一解锁的
 `camera_equivariance_gap` 分支，实现 **Fast-WAM-GeoEq**：训练期
 Geo-REPA 几何表征对齐，加推理期 relative-pose/camera-ray conditioning。
 
-当前状态：代码审计与 CPU/mock contract dry-run 已完成；真实 GPU smoke、
-pilot、formal、future utility 和闭环 rollout 均为 **NOT RUN**。因此 H1/H2/H3
+当前状态：代码审计与 CPU/mock contract dry-run 已完成；真实 GPU smoke v2
+在 B1 后因 BF16→FP32 auxiliary-head dtype 边界失败，属于无效技术运行；修复后的
+smoke v3、pilot、formal、future utility 和闭环 rollout 均为 **NOT RUN**。因此 H1/H2/H3
 以及最终机制分类尚未产生，不得把本目录中的方法设计写成效果结论。
 当前可执行协议为 v2；v1 在任何真实 GPU 运行前因 Phase 5-B evaluator 公平性
 复核而废止，仅保留 `NOT RUN` scaffold。

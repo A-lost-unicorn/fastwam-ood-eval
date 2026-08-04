@@ -91,8 +91,10 @@ simulator depth。
 - CPU/mock dry-run：14 项 contract 检查全部通过，1.140 s；mock 参数数
   1,335,320；RayPoseEncoder CPU 单次观测 1.579 ms。后两项仅为本机技术
   telemetry，不能替代 GPU P50/P95。
-- 全仓回归：497 tests 全通过（包含 54 项 Thought5 测试）。
-- GPU smoke/pilot/formal：**NOT RUN**。
+- 全仓回归：498 tests 全通过（包含 55 项 Thought5 测试）。
+- GPU smoke v2：B1 完成 2 step 后在 G3 的 FP32 pose auxiliary head 输入边界
+  发生 BF16 dtype error；运行无效、无科学结论，未解锁 pilot。修复后的 smoke v3、
+  pilot、formal：**NOT RUN**。
 
 v2 权威标识：audit SHA `a880bbd9de9ad36dd1670b341a2bb17fc92a1428558e0b16d17e80f06c1bf959`；
 formal config fingerprint `87d11a6b1fdfde08793ff21f0a364686ea781d3f1f129c81853d3d0bd6ef77ca`；

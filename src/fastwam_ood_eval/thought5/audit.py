@@ -127,11 +127,15 @@ def collect_audit(cfg: Thought5Config) -> dict[str, Any]:
             "measured_thought3_adapter_train_peak_mib": 13277.43994140625,
             "measured_thought3_update_seconds": 17.34,
             "measured_thought4_v6_single_gpu_hours": 1.313,
+            "measured_phase5_smoke_v3_training_peak_mib": 25216.0068359375,
             "phase5_training_peak_estimate_mib": [18000, 24000],
-            "estimate_status": "NOT MEASURED; smoke must replace estimate",
-            "four_gpu_plan": (
-                "independent matched tracks per GPU: B1/G1/G2/G3; G4 pilot or "
-                "a separate reduced-budget slot; no multi-process model replica"
+            "estimate_status": (
+                "smoke v3 measured; pilot/formal throughput remains NOT MEASURED"
+            ),
+            "gpu_execution_plan": (
+                "three-GPU primary schedule with independent single-GPU workers: "
+                "pilot B1/G3/G4 in one wave; formal B1/G1/G2 then G3/B0; "
+                "four-GPU formal remains a compatible execution-only schedule"
             ),
         },
         "forbidden": {
@@ -234,17 +238,19 @@ dataset contains 433 episodes / 52,895 frames across ten tasks. The normalized
 task name, rather than `task_index + 1`, is used to map LIBERO-Plus variants;
 the dataset and upstream benchmark orders differ.
 
-## 6. Memory, time, and four-GPU plan
+## 6. Memory, time, and three-GPU plan
 
 - Historical Fast-WAM load peak: 23,679.5 MiB.
 - Historical Adapter training peak: 13,277.4 MiB; about 17.34 s/update in the
   Phase-2 full run.
 - Thought4 formal v6: about 1.31 h on one GPU.
-- Phase 5 activation/checkpointing estimate: 18–24 GiB per track. This is
-  **NOT MEASURED** and must be replaced by the one-GPU smoke result.
-- Four 4090s run independent matched tracks, not four replicas of one process:
-  GPU0 B1, GPU1 G1, GPU2 G2, GPU3 G3; G4 is a reduced pilot/control slot.
-  The first trustworthy ETA is produced by smoke/pilot throughput.
+- Phase 5 smoke v3 training peak: 25,216.0 MiB. Pilot/formal per-worker peak
+  and throughput remain **NOT MEASURED** until their first valid run; no GPU
+  may be shared with another model process.
+- Three 4090s run independent single-GPU workers, not three replicas of one
+  distributed process. Pilot maps GPU0/1/2 to B1/G3/G4. Formal runs
+  B1/G1/G2 first, then G3/B0; four GPUs remain an execution-only compatible
+  schedule. Exact waves and ETA are frozen in the three-GPU preregistration.
 
 ## 7. Planned modification surface
 

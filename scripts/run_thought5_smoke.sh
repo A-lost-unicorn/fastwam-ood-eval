@@ -20,7 +20,7 @@ if [[ ! "${gpu_ids}" =~ ^[0-9]+$ ]]; then
   exit 2
 fi
 
-status_path="${project_root}/outputs/thought5/phase5_camera_equivariant_geo_repa_smoke_v3/run_status.json"
+status_path="${project_root}/outputs/thought5/phase5_camera_equivariant_geo_repa_smoke_v4/run_status.json"
 if [[ -f "${status_path}" ]] && grep -Eq '"status"[[:space:]]*:[[:space:]]*"complete"' "${status_path}"; then
   echo "Refusing to mutate completed Thought5 smoke output" >&2
   exit 2
@@ -41,7 +41,7 @@ export CUBLAS_WORKSPACE_CONFIG=":4096:8"
 export HF_DATASETS_CACHE="${THOUGHT5_HF_DATASETS_CACHE:-/tmp/thought5_hf_cache}"
 export PYTHONPATH="${project_root}/src:${project_root}/third_party/FastWAM:${project_root}/third_party/FastWAM/experiments/libero${PYTHONPATH:+:${PYTHONPATH}}"
 
-output_root="${project_root}/outputs/thought5/phase5_camera_equivariant_geo_repa_smoke_v3"
+output_root="${project_root}/outputs/thought5/phase5_camera_equivariant_geo_repa_smoke_v4"
 mkdir -p "${output_root}/logs"
 log_path="${output_root}/logs/run.log"
 
@@ -49,7 +49,7 @@ set +e
 "${project_root}/.conda/envs/fastwam-ood/bin/python" \
   -m fastwam_ood_eval.cli \
   thought5-smoke \
-  --config configs/thought5/phase5_smoke_v3.yaml \
+  --config configs/thought5/phase5_smoke_v4.yaml \
   --device cuda:0 \
   "$@" 2>&1 | tee -a "${log_path}"
 status="${PIPESTATUS[0]}"

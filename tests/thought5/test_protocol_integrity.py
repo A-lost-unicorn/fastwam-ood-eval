@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from copy import deepcopy
 from dataclasses import replace
 
 import pytest
@@ -26,6 +27,7 @@ from fastwam_ood_eval.thought5.panel_runtime import (
     Phase5PanelError,
     _parallel_waves,
     _pilot_direction_and_freeze,
+    _validated_execution_schedule,
     parallel_schedule,
 )
 from fastwam_ood_eval.thought5.schemas import (
@@ -162,6 +164,13 @@ def test_parallel_gpu_schedule_is_preregistered() -> None:
         (("B1", "1"), ("G3", "2")),
         (("G4", "1"),),
     )
+    assert parallel_schedule("pilot", ("0", "1", "2")) == (
+        (("B1", "0"), ("G3", "1"), ("G4", "2")),
+    )
+    assert parallel_schedule("formal", ("0", "1", "2")) == (
+        (("B1", "0"), ("G1", "1"), ("G2", "2")),
+        (("G3", "0"), ("B0", "1")),
+    )
     assert parallel_schedule("formal", ("0", "1", "2", "3"))[0] == (
         ("B1", "0"),
         ("G1", "1"),
@@ -173,6 +182,54 @@ def test_parallel_gpu_schedule_is_preregistered() -> None:
         (("G1", "0"), ("G2", "1")),
         (("G3", "0"),),
     )
+    with pytest.raises(Phase5PanelError, match="two or three"):
+        parallel_schedule("pilot", ("0",))
+    with pytest.raises(Phase5PanelError, match="three or four"):
+        parallel_schedule("formal", ("0", "1"))
+
+
+def test_three_gpu_namespaces_preserve_every_scientific_config_field() -> None:
+    pairs = (
+        (
+            "configs/thought5/phase5_smoke_v3.yaml",
+            "configs/thought5/phase5_smoke_v4.yaml",
+        ),
+        (
+            "configs/thought5/phase5_pilot_v2.yaml",
+            "configs/thought5/phase5_pilot_v3.yaml",
+        ),
+    )
+    for old_path, new_path in pairs:
+        old = deepcopy(dict(load_thought5_config(old_path).raw))
+        new = deepcopy(dict(load_thought5_config(new_path).raw))
+        for payload in (old, new):
+            payload["experiment"] = dict(payload["experiment"])
+            payload["experiment"].pop("name")
+            payload["experiment"].pop("output_dir")
+        assert old == new
+
+
+def test_execution_schedule_checksum_is_fail_closed(tmp_path) -> None:
+    cfg = load_thought5_config("configs/thought5/phase5_pilot_v3.yaml")
+    cfg = replace(cfg, experiment=replace(cfg.experiment, output_dir=tmp_path))
+    schedule = {
+        "schema_version": "thought5.phase5.execution_schedule.v1",
+        "status": "frozen",
+        "execution_only": True,
+        "stage": "pilot",
+        "config_fingerprint": cfg.fingerprint,
+        "physical_gpu_ids": ["0", "1", "2"],
+    }
+    schedule["schedule_sha256"] = object_sha256(schedule)
+    path = write_json_once(tmp_path / "execution_schedule.json", schedule)
+    assert _validated_execution_schedule(cfg)["schedule_sha256"] == schedule[
+        "schedule_sha256"
+    ]
+
+    schedule["physical_gpu_ids"] = ["2", "1", "0"]
+    path.write_text(json.dumps(schedule), encoding="utf-8")
+    with pytest.raises(Phase5PanelError, match="schedule is invalid"):
+        _validated_execution_schedule(cfg)
 
 
 def test_rollout_semantics_are_frozen_in_config() -> None:
@@ -186,7 +243,7 @@ def test_rollout_semantics_are_frozen_in_config() -> None:
 
 
 def test_training_only_pilot_cannot_unlock_formal(tmp_path) -> None:
-    cfg = load_thought5_config("configs/thought5/phase5_pilot_v2.yaml")
+    cfg = load_thought5_config("configs/thought5/phase5_pilot_v3.yaml")
     cfg = replace(
         cfg,
         experiment=replace(cfg.experiment, output_dir=tmp_path),

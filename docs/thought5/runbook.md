@@ -38,14 +38,15 @@ bash scripts/run_thought5_smoke.sh
 hook、gradient、loss 分量、adapter-only checkpoint、frozen SHA、推理头移除、
 zero-LoRA 官方动作逐位一致、ray/pose inference、无 future RGB/depth 泄漏、
 延迟和峰值显存，不形成科学结论。首次真实运行前没有可信 ETA；按既有模型加载
-与小步训练 telemetry，建议预留 20–40 分钟，并以 log 实际进度为准。日志位于
-`outputs/thought5/phase5_camera_equivariant_geo_repa_smoke_v3/logs/run.log`。
+与已完成 smoke v3 的 630.780 s telemetry，smoke v4 预留 10–15 分钟。日志位于
+`outputs/thought5/phase5_camera_equivariant_geo_repa_smoke_v4/logs/run.log`。
 
 2026-08-04 的 smoke v2 是一次无效技术运行：B1 完成 2 step 后，G3 在训练专用
 FP32 pose auxiliary head 接收 BF16 注入表征时触发 dtype error。它没有生成
-`smoke_result.json`、没有解锁 pilot，也不构成科学结果。v2 目录只读保留；v3
-仅修复 FP32 head 的输入 dtype 边界，样本 identity、seed、模型、损失和门槛均
-保持不变。
+`smoke_result.json`、没有解锁 pilot，也不构成科学结果。v2 目录只读保留。
+smoke v3 已在旧的双/四卡执行 commit 上完整通过；三卡调度属于新 commit，因此
+只允许全新运行 smoke v4。v4 与 v3 的样本 identity、seed、模型、损失和门槛
+逐字段相同。
 若中断且工件校验无误：
 
 ```bash
@@ -54,35 +55,42 @@ THOUGHT5_GPU_IDS=0 \
 bash scripts/run_thought5_smoke.sh --resume
 ```
 
-## 3. 双卡 pilot
+## 3. 2/3 卡 pilot
 
 只有 smoke 的 `run_status.json` 为 complete 后运行：
 
 ```bash
 CONFIRM_THOUGHT5_PILOT=YES \
-THOUGHT5_GPU_IDS=0,1 \
+THOUGHT5_GPU_IDS=0,1,2 \
 bash scripts/run_thought5_pilot.sh
 ```
 
 pilot 使用单 task 的互斥 8/4/4 episode，比较 B1/G3/G4，并只根据 development
 方向以及完整 representation/future-geometry/future-utility/rollout panel 决定
-是否冻结 formal recipe。两卡先并行 B1/G3，再运行 G4；后续 utility 与 rollout
-也按双卡 wave 调度。pilot success 只能标为 PILOT，不能进入论文正式主表。
+是否冻结 formal recipe。三卡同时运行 B1/G3/G4；后续 utility 与 rollout 也
+按同一三卡 wave 调度。两卡兼容模式仍是先 B1/G3、再 G4，不得删除 G4。
+pilot success 只能标为 PILOT，不能进入论文正式主表。
 若 G3 无方向性改善、G4 同等有效或 Clean objective 明显损害，停止，不生成
-formal unlock。该阶段预计是小时级，首轮 throughput 会写入结果，当前不伪造 ETA。
+formal unlock。三卡预估总耗时 2.5–4.5 小时，细分与推导见
+[三卡执行调度预注册](three_gpu_execution_preregistration.md)。日志位于
+`outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v3/logs/run.log`。
 
-## 4. 四卡 formal
+旧 pilot v2 仅进入 task-0 render 约 6 秒后被人工中断，`status=error`；没有训练
+或科学结果，必须只读保留，不能传 `--resume` 给 pilot v3。
+
+## 4. 3/4 卡 formal
 
 只有 pilot 已生成且校验通过
 `formal_protocol_frozen.json` 才可运行：
 
 ```bash
 CONFIRM_THOUGHT5_FORMAL=YES \
-THOUGHT5_GPU_IDS=0,1,2,3 \
+THOUGHT5_GPU_IDS=0,1,2 \
 bash scripts/run_thought5_formal.sh
 ```
 
-四张卡对应独立 matched track B1/G1/G2/G3；B0 只读官方 checkpoint。formal
+三卡第一波运行 B1/G1/G2，第二波运行 G3/B0；四卡兼容路径第一波运行
+B1/G1/G2/G3，第二波运行 B0。B0 始终只读官方 checkpoint。formal
 必须一次性执行冻结的 representation、future geometry、future utility 和 paired
 rollout panel，随后才生成机制分类与 report。未产生完整 H1/H2/H3 工件时，
 finalizer 必须保持 `NOT RUN` 或 error，不能写 complete。
@@ -91,8 +99,8 @@ finalizer 必须保持 `NOT RUN` 或 error，不能写 complete。
 `outputs/thought5/phase5_camera_equivariant_geo_repa_v2/`。每个训练、future-
 adapter、representation、future-geometry 与 rollout worker 都先写自己的原子工件；
 最后才写 mechanism evidence、15 问 report、execution integrity 与 artifact
-manifest。formal 是多小时任务，必须根据 pilot 实测吞吐再估算，不能沿用 CPU
-dry-run 数字。
+manifest。当前三卡容量规划为约 28–45 小时；pilot 完成后必须用实际 worker
+`elapsed_s` 和 episode 长度重新计算，但不得据此减少样本、step 或 variant。
 
 ## 常见门禁
 
@@ -102,5 +110,6 @@ dry-run 数字。
 - partial output：先读 `run_status.json` 和 log；只有 checksum-valid 才传 `--resume`。
 - complete output：新协议必须使用新版本目录，禁止覆盖。
 - v1 scaffold：只读保留；v2 修复了 Phase 5-B matched probe，禁止 resume v1。
-- smoke v2：只读保留的 dtype 失败运行；修复后只能运行 smoke v3，禁止跨 commit
-  resume v2。
+- smoke v2：只读保留的 dtype 失败运行，禁止 resume。
+- smoke v3：旧执行 commit 的完整技术结果；三卡 commit 必须全新运行 smoke v4。
+- pilot v2：只读保留的人工中断运行；三卡只写 pilot v3，禁止跨 namespace resume。

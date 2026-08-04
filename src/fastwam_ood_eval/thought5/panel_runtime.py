@@ -78,20 +78,37 @@ def _progress(stage: str, **values: Any) -> None:
     )
 
 
-def parallel_schedule(stage: str, physical_gpu_ids: Sequence[str]) -> tuple[tuple[tuple[str, str], ...], ...]:
+def parallel_schedule(
+    stage: str, physical_gpu_ids: Sequence[str]
+) -> tuple[tuple[tuple[str, str], ...], ...]:
     """Return immutable process waves as ``(variant, physical_gpu)`` pairs."""
 
     ids = tuple(str(value) for value in physical_gpu_ids)
     if stage == "pilot":
-        if len(ids) != 2:
-            raise Phase5PanelError("pilot requires exactly two physical GPUs")
-        return ((('B1', ids[0]), ('G3', ids[1])), (('G4', ids[0]),))
+        if len(ids) not in {2, 3}:
+            raise Phase5PanelError("pilot requires two or three physical GPUs")
+        if len(ids) == 2:
+            return (
+                (("B1", ids[0]), ("G3", ids[1])),
+                (("G4", ids[0]),),
+            )
+        return ((("B1", ids[0]), ("G3", ids[1]), ("G4", ids[2])),)
     if stage == "formal":
-        if len(ids) != 4:
-            raise Phase5PanelError("formal requires exactly four physical GPUs")
+        if len(ids) not in {3, 4}:
+            raise Phase5PanelError("formal requires three or four physical GPUs")
+        if len(ids) == 3:
+            return (
+                (("B1", ids[0]), ("G1", ids[1]), ("G2", ids[2])),
+                (("G3", ids[0]), ("B0", ids[1])),
+            )
         return (
-            (('B1', ids[0]), ('G1', ids[1]), ('G2', ids[2]), ('G3', ids[3])),
-            (('B0', ids[0]),),
+            (
+                ("B1", ids[0]),
+                ("G1", ids[1]),
+                ("G2", ids[2]),
+                ("G3", ids[3]),
+            ),
+            (("B0", ids[0]),),
         )
     raise Phase5PanelError(f"unsupported panel stage: {stage}")
 
@@ -1168,7 +1185,7 @@ def _spawn_wave(
 def _config_path_for_stage(stage: str) -> Path:
     return Path(
         {
-            "pilot": "configs/thought5/phase5_pilot_v2.yaml",
+            "pilot": "configs/thought5/phase5_pilot_v3.yaml",
             "formal": "configs/thought5/phase5_formal_v2.yaml",
         }[stage]
     )
@@ -1375,6 +1392,25 @@ def _complete_result(path: Path, *, label: str) -> dict[str, Any]:
     return payload
 
 
+def _validated_execution_schedule(cfg: Thought5Config) -> dict[str, Any]:
+    path = cfg.experiment.output_dir / "execution_schedule.json"
+    if not path.is_file():
+        raise Phase5PanelError("frozen execution schedule is absent")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    stored = payload.get("schedule_sha256")
+    unsigned = dict(payload)
+    unsigned.pop("schedule_sha256", None)
+    if (
+        payload.get("status") != "frozen"
+        or payload.get("execution_only") is not True
+        or payload.get("config_fingerprint") != cfg.fingerprint
+        or payload.get("stage") != cfg.experiment.stage
+        or stored != object_sha256(unsigned)
+    ):
+        raise Phase5PanelError("frozen execution schedule is invalid")
+    return payload
+
+
 def _selected_development_score(track: Mapping[str, Any]) -> float:
     selected = int(track["selected_step"])
     matches = [
@@ -1447,6 +1483,7 @@ def _pilot_direction_and_freeze(
     }
     write_status_transition(cfg.experiment.output_dir / "pilot_direction.json", result)
     if direction:
+        pilot_schedule = _validated_execution_schedule(cfg)
         formal_cfg_path = Path("configs/thought5/phase5_formal_v2.yaml")
         from fastwam_ood_eval.thought5.config import load_thought5_config
 
@@ -1491,6 +1528,12 @@ def _pilot_direction_and_freeze(
                     "rollout_results.json",
                 )
             },
+            "pilot_execution_schedule_sha256": pilot_schedule[
+                "schedule_sha256"
+            ],
+            "pilot_execution_schedule_file_sha256": file_sha256(
+                root / "execution_schedule.json"
+            ),
         }
         freeze["freeze_sha256"] = object_sha256(freeze)
         write_status_transition(
@@ -1499,10 +1542,34 @@ def _pilot_direction_and_freeze(
     return result
 
 
+def _validate_frozen_pilot_schedule(freeze: Mapping[str, Any]) -> dict[str, Any]:
+    root = Path(
+        "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v3"
+    )
+    path = root / "execution_schedule.json"
+    if (
+        not path.is_file()
+        or file_sha256(path)
+        != freeze.get("pilot_execution_schedule_file_sha256")
+    ):
+        raise Phase5PanelError("pilot execution schedule changed before formal")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    stored = payload.get("schedule_sha256")
+    unsigned = dict(payload)
+    unsigned.pop("schedule_sha256", None)
+    if (
+        stored != freeze.get("pilot_execution_schedule_sha256")
+        or stored != object_sha256(unsigned)
+    ):
+        raise Phase5PanelError("pilot execution schedule seal is invalid")
+    return payload
+
+
 def _pilot_specificity_for_formal(freeze: Mapping[str, Any]) -> bool:
     root = Path(
-        "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v2"
+        "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v3"
     )
+    _validate_frozen_pilot_schedule(freeze)
     values = []
     for name in (
         "representation_results.json",
@@ -1895,6 +1962,7 @@ def _finalize_formal(
         ),
     )
     cohort = json.loads((root / "cohort_manifest.json").read_text(encoding="utf-8"))
+    execution_schedule = _validated_execution_schedule(cfg)
     checkpoint_hashes = {
         variant: file_sha256(Path(track["checkpoint"]) / "manifest.json")
         for variant, track in tracks.items()
@@ -1917,6 +1985,9 @@ def _finalize_formal(
             "dataset_stats_sha256": cfg.backbone.dataset_stats_sha256,
             "fastwam_commit": cfg.backbone.fastwam_commit,
             "formal_freeze_sha256": str(freeze["freeze_sha256"]),
+            "execution_schedule_sha256": execution_schedule[
+                "schedule_sha256"
+            ],
             "project_commit": clean_project_commit(),
         },
         status="complete",
@@ -1933,6 +2004,7 @@ def _finalize_formal(
         "H1": evidence.h1,
         "H2": evidence.h2,
         "H3": evidence.h3,
+        "execution_schedule_sha256": execution_schedule["schedule_sha256"],
     }
     write_status_transition(root / "run_status.json", final)
     names = sorted(
@@ -1980,6 +2052,33 @@ def _run_panel(cfg: Thought5Config, *, resume: bool) -> dict[str, Any]:
             raise Phase5PanelError("partial panel belongs to another project commit")
         if prior.get("status") != "NOT RUN" and not resume:
             raise Phase5PanelError("partial panel exists; inspect and pass --resume")
+    utility_variants = tuple(
+        variant
+        for variant in ("B1", "G3", "G4")
+        if variant in cfg.training.variants
+    )
+    schedule = {
+        "schema_version": "thought5.phase5.execution_schedule.v1",
+        "status": "frozen",
+        "execution_only": True,
+        "stage": cfg.experiment.stage,
+        "config_fingerprint": cfg.fingerprint,
+        "project_commit": project_commit,
+        "physical_gpu_ids": list(physical),
+        "worker_contract": "one independent process and model per physical GPU",
+        "distributed_training": False,
+        "track_waves": parallel_schedule(cfg.experiment.stage, physical),
+        "future_calibration_waves": ((("B1", physical[0]),),),
+        "future_utility_waves": _parallel_waves(utility_variants, physical),
+        "rollout_waves": _parallel_waves(cfg.training.variants, physical),
+    }
+    schedule["schedule_sha256"] = object_sha256(schedule)
+    write_json_once(
+        output / "execution_schedule.json",
+        schedule,
+        allow_identical=True,
+    )
+    _validated_execution_schedule(cfg)
     write_status_transition(
         status_path,
         {
@@ -1989,6 +2088,7 @@ def _run_panel(cfg: Thought5Config, *, resume: bool) -> dict[str, Any]:
             "config_fingerprint": cfg.fingerprint,
             "project_commit": project_commit,
             "scientific_result": False,
+            "execution_schedule_sha256": schedule["schedule_sha256"],
         },
     )
     try:
@@ -2003,6 +2103,7 @@ def _run_panel(cfg: Thought5Config, *, resume: bool) -> dict[str, Any]:
             "project_commit": project_commit,
             "matched_parameter_budget": True,
             "render_cache_sha256": cache["render_cache_sha256"],
+            "execution_schedule_sha256": schedule["schedule_sha256"],
             "tracks": tracks,
         }
         write_status_transition(output / "training_results.json", training)
@@ -2030,12 +2131,13 @@ def _run_panel(cfg: Thought5Config, *, resume: bool) -> dict[str, Any]:
                 "project_commit": project_commit,
                 "scientific_result": False,
                 "formal_unlocked": direction["formal_unlocked"],
+                "execution_schedule_sha256": schedule["schedule_sha256"],
                 "note": "single-task directional pilot; not a formal result",
             }
             write_status_transition(status_path, final)
             return final
         freeze_path = Path(
-            "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v2/"
+            "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v3/"
             "formal_protocol_frozen.json"
         )
         freeze = json.loads(freeze_path.read_text(encoding="utf-8"))
@@ -2051,6 +2153,7 @@ def _run_panel(cfg: Thought5Config, *, resume: bool) -> dict[str, Any]:
                 "project_commit": project_commit,
                 "error": f"{type(exc).__name__}: {exc}",
                 "scientific_result": False,
+                "execution_schedule_sha256": schedule["schedule_sha256"],
             },
         )
         raise
@@ -2060,7 +2163,7 @@ def run_pilot(cfg: Thought5Config, *, resume: bool = False) -> dict[str, Any]:
     if cfg.experiment.stage != "pilot":
         raise Phase5PanelError("pilot runner received a non-pilot config")
     smoke = Path(
-        "outputs/thought5/phase5_camera_equivariant_geo_repa_smoke_v3/smoke_result.json"
+        "outputs/thought5/phase5_camera_equivariant_geo_repa_smoke_v4/smoke_result.json"
     )
     if not smoke.is_file():
         raise Phase5PanelError("pilot remains locked until real smoke completes")
@@ -2076,7 +2179,7 @@ def run_formal(cfg: Thought5Config, *, resume: bool = False) -> dict[str, Any]:
     if cfg.experiment.stage != "formal":
         raise Phase5PanelError("formal runner received a non-formal config")
     freeze = Path(
-        "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v2/"
+        "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v3/"
         "formal_protocol_frozen.json"
     )
     if not freeze.is_file():
@@ -2091,6 +2194,7 @@ def run_formal(cfg: Thought5Config, *, resume: bool = False) -> dict[str, Any]:
         raise Phase5PanelError("formal config differs from the pilot-frozen candidate")
     if payload.get("project_commit") != clean_project_commit():
         raise Phase5PanelError("formal code commit differs from the pilot freeze")
+    _validate_frozen_pilot_schedule(payload)
     manifest_path = cfg.experiment.output_dir / "cohort_manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if payload.get("formal_cohort_manifest_sha256") != manifest.get(

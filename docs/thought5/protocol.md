@@ -115,6 +115,9 @@ H1 失败、G4 与 G3 同等有效、或 B1 能解释全部提升时，必须登
 - formal 前冻结 config、cohort、lambda、training steps、checkpoint rule、统计方法。
 - 真实 smoke 记录 clean project commit；pilot 必须与 smoke 同 commit，formal
   必须与 pilot freeze 同 commit；跨 commit 的 partial output 禁止 resume。
+- 物理卡数只允许采用[三卡执行调度预注册](three_gpu_execution_preregistration.md)
+  中的固定 2/3 卡 pilot 与 3/4 卡 formal 波次；卡数不得改变 variant、seed、
+  浮点图、训练量或统计规则。
 - 只允许一次 hook/坐标 debug、一次 development-only lambda/stability 调整、一次 pilot recipe。
 - formal 不得中途看 success 换 checkpoint 或提前停止。
 - H1 formal 失败后，不继续堆 geometry module 追正结果。

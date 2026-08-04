@@ -1,0 +1,85 @@
+schema_version: thought5.phase5.config.v1
+experiment:
+  name: phase5_camera_equivariant_geo_repa_smoke_v4
+  stage: smoke
+  output_dir: outputs/thought5/phase5_camera_equivariant_geo_repa_smoke_v4
+  seed: 5507
+  protocol_frozen: true
+runtime: {backend: fastwam, device: "cuda:0", dtype: bfloat16, action_denoise_steps: 20}
+backbone:
+  checkpoint_path: checkpoints/fastwam_release/libero_uncond_2cam224.pt
+  checkpoint_sha256: 1000437cfcf55c000094f79a2600634c502bcb5b492476b94bf8509883a49579
+  dataset_stats_path: checkpoints/fastwam_release/libero_uncond_2cam224_dataset_stats.json
+  dataset_stats_sha256: 30f81ad7d5076e97323e3328bce003e01a04cb21327b5bacd21bb72846768638
+  fastwam_commit: 45d8e1458921d83f8ad6cf9ce993d371208dabd0
+  frozen_parameter_sha256: ac0dd59de78495dc8ed5c5601e24951b78f3fd6ad40843d76b83106eccceb4f8
+  selected_feature: mot.video_kv_cache.15.v
+  injection_module: video_expert.blocks.15.self_attn.v
+  hidden_dim: 3072
+  token_height: 7
+  token_width: 14
+method:
+  lora_targets: [video_expert.blocks.15.self_attn.k, video_expert.blocks.15.self_attn.v]
+  lora_rank: 8
+  lora_alpha: 8.0
+  lora_dropout: 0.0
+  geo_projector_hidden_dim: 256
+  ray_pose_hidden_dim: 128
+  train_action_dit: false
+  use_gt_depth_at_inference: false
+cohort:
+  suite: libero_goal
+  dataset_root: data/libero_mujoco3.3.2/libero_goal_no_noops_lerobot
+  dataset_revision: 117413dc0ca99c7cd64036c4eaa4a316c537d692
+  classification_path: third_party/LIBERO-plus/libero/libero/benchmark/task_classification.json
+  train_tasks: [0]
+  development_tasks: [0]
+  formal_tasks: [0]
+  train_episodes_per_task: 2
+  development_episodes_per_task: 1
+  formal_episodes_per_task: 1
+  frames_per_episode: 1
+  horizon: 32
+  conditions: [clean, camera, lighting, robot_init]
+  exact_state_conditions: [clean, camera, lighting]
+  target_object_by_task: {0: wooden_cabinet_1}
+  split_seed: 5507
+  # Keep v3/v2 identities; v4 only validates the preregistered 3-GPU commit.
+  seed_namespace: thought5-smoke-v2
+  thought3_split_manifest: outputs/thought3/cache/phase_d_libero_goal_task0_v1/split_manifest.json
+  thought4_formal_manifest: outputs/thought4/phase4_geometry_action_diagnosis_v6/cohort_manifest.json
+training:
+  variants: [B1, G3]
+  max_steps: 5
+  batch_size: 1
+  gradient_accumulation: 1
+  optimizer: AdamW
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  checkpoint_rule: fixed_final_step_no_rollout_selection
+  lambda_by_variant:
+    B1: {lambda_repa: 0.0, lambda_equiv: 0.0, lambda_pose_aux: 0.0}
+    G3: {lambda_repa: 0.1, lambda_equiv: 0.1, lambda_pose_aux: 0.01}
+  shuffled_geometry_seed: 5547
+evaluation:
+  bootstrap_replicates: 2000
+  bootstrap_seed: 5517
+  task_bootstrap_seed: 5527
+  h1_min_gap_reduction: 0.25
+  clean_noninferiority_margin: 0.05
+  g4_equivalence_fraction: 0.8
+  fixed_video_layer: 15
+  action_seeds: [5537, 5538, 5539]
+  future_k: 1
+  future_probe_model: linear_ridge
+  future_probe_projection_dim: 128
+  future_probe_projection_seed: 5597
+  future_probe_ridge_alphas: [0.0001, 0.01, 1.0, 100.0]
+  thought3_adapter_steps: 200
+  thought3_adapter_lr: 0.0003
+  thought3_adapter_seed: 3407
+  rollout_max_steps: 400
+  rollout_wait_steps: 30
+  rollout_control_horizon: 10
+  rollout_image_size: [256, 256]
+  rollout_save_failure_videos: false

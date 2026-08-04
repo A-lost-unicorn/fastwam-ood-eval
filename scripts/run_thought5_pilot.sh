@@ -15,16 +15,17 @@ if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
 fi
 
 gpu_ids="${THOUGHT5_GPU_IDS:-}"
-if [[ ! "${gpu_ids}" =~ ^[0-9]+,[0-9]+$ ]]; then
-  echo "THOUGHT5_GPU_IDS must contain exactly two comma-separated physical IDs" >&2
+if [[ ! "${gpu_ids}" =~ ^[0-9]+,[0-9]+(,[0-9]+)?$ ]]; then
+  echo "THOUGHT5_GPU_IDS must contain two or three comma-separated physical IDs" >&2
   exit 2
 fi
-IFS=',' read -r first_gpu second_gpu <<< "${gpu_ids}"
-if [[ "${first_gpu}" == "${second_gpu}" ]]; then
-  echo "Thought5 pilot requires two distinct GPUs" >&2
+IFS=',' read -r -a gpu_array <<< "${gpu_ids}"
+if [[ "$(printf '%s\n' "${gpu_array[@]}" | sort -u | wc -l)" -ne "${#gpu_array[@]}" ]]; then
+  echo "Thought5 pilot requires distinct GPUs" >&2
   exit 2
 fi
-for gpu_id in "${first_gpu}" "${second_gpu}"; do
+first_gpu="${gpu_array[0]}"
+for gpu_id in "${gpu_array[@]}"; do
   used_mib="$(nvidia-smi --id="${gpu_id}" --query-gpu=memory.used --format=csv,noheader,nounits)"
   used_mib="${used_mib//[[:space:]]/}"
   if [[ ! "${used_mib}" =~ ^[0-9]+$ ]] || (( used_mib > 1024 )); then
@@ -33,7 +34,7 @@ for gpu_id in "${first_gpu}" "${second_gpu}"; do
   fi
 done
 
-smoke_status="outputs/thought5/phase5_camera_equivariant_geo_repa_smoke_v3/run_status.json"
+smoke_status="outputs/thought5/phase5_camera_equivariant_geo_repa_smoke_v4/run_status.json"
 if [[ ! -f "${smoke_status}" ]] || ! grep -Eq '"status"[[:space:]]*:[[:space:]]*"complete"' "${smoke_status}"; then
   echo "Thought5 pilot remains locked until the real smoke completes" >&2
   exit 2
@@ -47,11 +48,11 @@ export CUBLAS_WORKSPACE_CONFIG=":4096:8"
 export HF_DATASETS_CACHE="${THOUGHT5_HF_DATASETS_CACHE:-/tmp/thought5_hf_cache}"
 export PYTHONPATH="${project_root}/src:${project_root}/third_party/FastWAM:${project_root}/third_party/FastWAM/experiments/libero${PYTHONPATH:+:${PYTHONPATH}}"
 
-output_root="${project_root}/outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v2"
+output_root="${project_root}/outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v3"
 mkdir -p "${output_root}/logs"
 "${project_root}/.conda/envs/fastwam-ood/bin/python" \
   -m fastwam_ood_eval.cli \
   thought5-pilot \
-  --config configs/thought5/phase5_pilot_v2.yaml \
+  --config configs/thought5/phase5_pilot_v3.yaml \
   --device cuda:0 \
   "$@" 2>&1 | tee -a "${output_root}/logs/run.log"

@@ -15,17 +15,26 @@ if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
 fi
 
 gpu_ids="${THOUGHT5_GPU_IDS:-}"
-if [[ ! "${gpu_ids}" =~ ^[0-9]+,[0-9]+,[0-9]+,[0-9]+$ ]]; then
-  echo "THOUGHT5_GPU_IDS must contain exactly four comma-separated physical IDs" >&2
+if [[ ! "${gpu_ids}" =~ ^[0-9]+,[0-9]+,[0-9]+(,[0-9]+)?$ ]]; then
+  echo "THOUGHT5_GPU_IDS must contain three or four comma-separated physical IDs" >&2
   exit 2
 fi
-IFS=',' read -r gpu0 gpu1 gpu2 gpu3 <<< "${gpu_ids}"
-if [[ "$(printf '%s\n' "${gpu0}" "${gpu1}" "${gpu2}" "${gpu3}" | sort -u | wc -l)" -ne 4 ]]; then
-  echo "Thought5 formal requires four distinct GPUs" >&2
+IFS=',' read -r -a gpu_array <<< "${gpu_ids}"
+if [[ "$(printf '%s\n' "${gpu_array[@]}" | sort -u | wc -l)" -ne "${#gpu_array[@]}" ]]; then
+  echo "Thought5 formal requires distinct GPUs" >&2
   exit 2
 fi
+gpu0="${gpu_array[0]}"
+for gpu_id in "${gpu_array[@]}"; do
+  used_mib="$(nvidia-smi --id="${gpu_id}" --query-gpu=memory.used --format=csv,noheader,nounits)"
+  used_mib="${used_mib//[[:space:]]/}"
+  if [[ ! "${used_mib}" =~ ^[0-9]+$ ]] || (( used_mib > 1024 )); then
+    echo "GPU ${gpu_id} is not idle (${used_mib} MiB used)" >&2
+    exit 2
+  fi
+done
 
-freeze_path="outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v2/formal_protocol_frozen.json"
+freeze_path="outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v3/formal_protocol_frozen.json"
 if [[ ! -f "${freeze_path}" ]] || ! grep -Eq '"status"[[:space:]]*:[[:space:]]*"frozen"' "${freeze_path}"; then
   echo "Formal remains locked: pilot has not sealed formal_protocol_frozen.json" >&2
   exit 2

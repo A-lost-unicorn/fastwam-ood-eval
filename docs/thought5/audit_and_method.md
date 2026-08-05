@@ -99,11 +99,17 @@ simulator depth。
   梯度均有限且非零，推理未读取 future RGB/GT depth。
 - GPU smoke v4：三卡调度 commit 上完整通过，耗时 712.323 s，
   `pilot_unlocked=true`；仍只是技术门禁。
+- GPU smoke v5：launcher hotfix commit 上完整通过，耗时 882.708 s，
+  `pilot_unlocked=true`；结果文件 SHA-256 为
+  `99e309dbc4599b7c5ac02686f9ab86bf2c7504af52a6f891004c0534226a95af`。
 - pilot v2：仅 render 启动约 6 秒后 `KeyboardInterrupt`，无训练或结果。
 - pilot v3：完成 16 个 base state/64 个 condition sample 的 render cache 后，
   B1/G3/G4 fresh worker 均因缺少 LIBERO import path 在权重加载前退出；无训练、
-  checkpoint 或科学结果。launcher hotfix 的 smoke v5、pilot v4、formal：
-  **NOT RUN**。
+  checkpoint 或科学结果。
+- pilot v4：有效完成，约 2 小时 29 分钟；五项方向 Gate 全部为 false，
+  `formal_unlocked=false`。关键模式是 Camera gap 缩小 20.94% 但低于门槛且 G4
+  更强；G3 将 future utility 从 B1 的 −0.01565 改善到 −0.00523，但仍差于 null；
+  B1/G3 paired rollout 完全持平。formal v2：**NOT RUN 且保持锁定**。
 
 v2 权威标识：audit SHA `a880bbd9de9ad36dd1670b341a2bb17fc92a1428558e0b16d17e80f06c1bf959`；
 formal config fingerprint `87d11a6b1fdfde08793ff21f0a364686ea781d3f1f129c81853d3d0bd6ef77ca`；
@@ -112,3 +118,4 @@ cohort semantic SHA `d17a967aa04fa3ceb6447e150361dbab8110adde120bb875aab4e609410
 旧 v1 只含未运行 scaffold，保留且不得 resume；三卡执行边界和新 namespace
 见[预注册](three_gpu_execution_preregistration.md)，不改变 v2 科学协议；pilot v3
 失败审计和纯启动修复边界见[hotfix 预注册](worker_launcher_hotfix_preregistration.md)。
+Pilot 的数值、工件 SHA 和论文边界见[结果登记](pilot_v4_results.md)。

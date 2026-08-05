@@ -9,22 +9,24 @@
 | Thought3 Phase 1 | correct-null/shuffle 均 8/8 超 replay floor | future 内容对动作技术敏感 |
 | Thought3 Phase 2 | A1 比 A0 held-out loss 高 3.624%，4/4 更差 | K=1 sensitivity 未转化为 utility |
 | Thought4 formal v6 | Camera gap 0.020273 m > Lighting 0.011660 m；shuffle 36/36 改变动作 | action-consumed geometry 存在 Camera Equivariance Gap |
-| Thought5 | Audit/CPU contract、GPU smoke v3/v4 完成；pilot v3 为 launcher 失败，科学实验 NOT RUN | 真实训练图可执行，尚无效果结论 |
+| Thought5 Pilot v4 | Camera gap 缩小 20.94%；G3 future utility −0.00523；Camera success B1=G3=25% | 当前 G3 recipe 未通过扩展到 formal 的方向门禁 |
 
 核心叙事是 Failure → Representation → Intervention → Utility，而不是因为外部
 方法使用 depth/pose 就堆模块。
 
 ## 正式结果占位
 
-以下内容只能从 sealed JSON 自动回填。当前全部为 **NOT RUN**。
+Pilot v4 已产生单 task 方向证据，但 formal v2 仍为 **NOT RUN**。Pilot 数字只用于
+停止/推进决策，不进入正式多任务主表；完整登记见
+[Pilot v4 结果](pilot_v4_results.md)。
 
 | 问题 | 权威工件 | 当前答案 |
 | --- | --- | --- |
-| H1 Camera gap 是否缩小 ≥25% | `representation_results.json` | NOT RUN |
-| future geometry 是否改善 | `future_geometry_results.json` | NOT RUN |
-| H2 correct future 是否有 held-out utility | `future_utility_results.json` | NOT RUN |
-| H3 Camera success 是否提高 | `rollout_results.json` | NOT RUN |
-| 最终机制分类 | `mechanism_classification.json` | NOT RUN |
+| H1 Camera gap 是否缩小 ≥25% | `representation_results.json` | Pilot：20.94%，方向 false；Formal NOT RUN |
+| future geometry 是否改善 | `future_geometry_results.json` | Pilot：主 RMSE +0.000043，方向 false |
+| H2 correct future 是否有 held-out utility | `future_utility_results.json` | Pilot：−0.005231，方向 false |
+| H3 Camera success 是否提高 | `rollout_results.json` | Pilot：B1=G3=1/4，方向 false |
+| 最终机制分类 | `mechanism_classification.json` | Formal NOT RUN；当前 recipe 停止 |
 
 Phase 5-B 的 geometry 数字必须来自 v2 matched frozen probe（train fit、development
 选 alpha、formal 只读），不能直接比较 G3 训练过的 GeoProjector 与 B1 inactive

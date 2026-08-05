@@ -82,7 +82,14 @@ state/64 个 condition sample 的缓存后，B1/G3/G4 均在导入 LIBERO 时退
 pilot v4。pilot v4 启动时应先出现 `panel_worker_import_preflight_complete`，再开始
 render。
 
+2026-08-05 的 pilot v4 已有效完成，但 `formal_unlocked=false`。五项方向 Gate
+全部为 false，且没有生成 `formal_protocol_frozen.json`。该 namespace 现为只读；
+不得重复运行或 `--resume`，结果见 [Pilot v4 登记](pilot_v4_results.md)。
+
 ## 4. 3/4 卡 formal
+
+**当前禁止执行本节命令。** Pilot v4 未解锁 formal，所需 freeze 文件不存在。
+以下命令仅保留为未来新 Pilot 正向通过后的协议参考。
 
 只有 pilot 已生成且校验通过
 `formal_protocol_frozen.json` 才可运行：
@@ -118,3 +125,4 @@ manifest。当前三卡容量规划为约 28–45 小时；pilot 完成后必须
 - smoke v3/smoke v4：只读保留的完整技术结果；launcher hotfix commit 必须全新运行 smoke v5。
 - pilot v2：只读保留的人工中断运行。
 - pilot v3：只读保留的 worker import 失败运行；只写 pilot v4，禁止跨 namespace/commit resume。
+- pilot v4：有效负方向 Gate，formal 未解锁；只读保留，禁止重跑或绕过 freeze。

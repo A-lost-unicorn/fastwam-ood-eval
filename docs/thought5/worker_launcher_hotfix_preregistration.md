@@ -82,3 +82,13 @@ formal v2 freeze
 smoke v5 依据 v4 实测 11.87 分钟，预留 12–15 分钟。pilot v4 因新 commit/new
 namespace 会重新渲染约 13 分钟，总 wall-clock 仍预留 2.5–4.5 小时。formal v2
 仍估计 28–45 小时，而且只有 pilot v4 正式解锁后才能运行。
+
+## 5. 2026-08-05 执行后附录
+
+smoke v5 与 pilot v4 均在预注册 commit
+`c7ab21537e0a46ed1455812b2a6741628cec6db6` 上完整执行。fresh-process import
+preflight 返回 0，原 launcher 故障未复现。smoke v5 完整通过；pilot v4 的所有
+worker 和 collector 也均为 complete。
+
+Pilot 的方向门禁最终为负，`formal_unlocked=false`；这是结果 Gate，而不是
+launcher error。完整数值和停止决定见 [Pilot v4 结果登记](pilot_v4_results.md)。

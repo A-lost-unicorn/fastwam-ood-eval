@@ -38,15 +38,16 @@ bash scripts/run_thought5_smoke.sh
 hook、gradient、loss 分量、adapter-only checkpoint、frozen SHA、推理头移除、
 zero-LoRA 官方动作逐位一致、ray/pose inference、无 future RGB/depth 泄漏、
 延迟和峰值显存，不形成科学结论。首次真实运行前没有可信 ETA；按既有模型加载
-与已完成 smoke v3 的 630.780 s telemetry，smoke v4 预留 10–15 分钟。日志位于
-`outputs/thought5/phase5_camera_equivariant_geo_repa_smoke_v4/logs/run.log`。
+与已完成 smoke v4 的 712.323 s telemetry，smoke v5 预留 12–15 分钟。日志位于
+`outputs/thought5/phase5_camera_equivariant_geo_repa_smoke_v5/logs/run.log`。
 
 2026-08-04 的 smoke v2 是一次无效技术运行：B1 完成 2 step 后，G3 在训练专用
 FP32 pose auxiliary head 接收 BF16 注入表征时触发 dtype error。它没有生成
 `smoke_result.json`、没有解锁 pilot，也不构成科学结果。v2 目录只读保留。
-smoke v3 已在旧的双/四卡执行 commit 上完整通过；三卡调度属于新 commit，因此
-只允许全新运行 smoke v4。v4 与 v3 的样本 identity、seed、模型、损失和门槛
-逐字段相同。
+smoke v3 已在旧的双/四卡执行 commit 上完整通过，三卡调度 commit 的 smoke v4
+也已完整通过。pilot v3 随后暴露了只影响 fresh worker 的 LIBERO import launcher
+缺陷；修复属于新 commit，因此只允许全新运行 smoke v5。v5 与 v4 的样本
+identity、seed、模型、损失和门槛逐字段相同。
 若中断且工件校验无误：
 
 ```bash
@@ -73,10 +74,13 @@ pilot success 只能标为 PILOT，不能进入论文正式主表。
 若 G3 无方向性改善、G4 同等有效或 Clean objective 明显损害，停止，不生成
 formal unlock。三卡预估总耗时 2.5–4.5 小时，细分与推导见
 [三卡执行调度预注册](three_gpu_execution_preregistration.md)。日志位于
-`outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v3/logs/run.log`。
+`outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/logs/run.log`。
 
-旧 pilot v2 仅进入 task-0 render 约 6 秒后被人工中断，`status=error`；没有训练
-或科学结果，必须只读保留，不能传 `--resume` 给 pilot v3。
+旧 pilot v2 仅进入 task-0 render 约 6 秒后被人工中断。pilot v3 完成 16 个 base
+state/64 个 condition sample 的缓存后，B1/G3/G4 均在导入 LIBERO 时退出；两者
+均为 `status=error`，没有训练或科学结果，必须只读保留，不能传 `--resume` 给
+pilot v4。pilot v4 启动时应先出现 `panel_worker_import_preflight_complete`，再开始
+render。
 
 ## 4. 3/4 卡 formal
 
@@ -111,5 +115,6 @@ manifest。当前三卡容量规划为约 28–45 小时；pilot 完成后必须
 - complete output：新协议必须使用新版本目录，禁止覆盖。
 - v1 scaffold：只读保留；v2 修复了 Phase 5-B matched probe，禁止 resume v1。
 - smoke v2：只读保留的 dtype 失败运行，禁止 resume。
-- smoke v3：旧执行 commit 的完整技术结果；三卡 commit 必须全新运行 smoke v4。
-- pilot v2：只读保留的人工中断运行；三卡只写 pilot v3，禁止跨 namespace resume。
+- smoke v3/smoke v4：只读保留的完整技术结果；launcher hotfix commit 必须全新运行 smoke v5。
+- pilot v2：只读保留的人工中断运行。
+- pilot v3：只读保留的 worker import 失败运行；只写 pilot v4，禁止跨 namespace/commit resume。

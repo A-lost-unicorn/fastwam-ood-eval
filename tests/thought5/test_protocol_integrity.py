@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from copy import deepcopy
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -25,6 +27,8 @@ from fastwam_ood_eval.thought5.paired_geometry_data import (
 )
 from fastwam_ood_eval.thought5.panel_runtime import (
     Phase5PanelError,
+    _validate_worker_import_preflight,
+    _worker_environment,
     _parallel_waves,
     _pilot_direction_and_freeze,
     _validated_execution_schedule,
@@ -198,6 +202,14 @@ def test_three_gpu_namespaces_preserve_every_scientific_config_field() -> None:
             "configs/thought5/phase5_pilot_v2.yaml",
             "configs/thought5/phase5_pilot_v3.yaml",
         ),
+        (
+            "configs/thought5/phase5_smoke_v4.yaml",
+            "configs/thought5/phase5_smoke_v5.yaml",
+        ),
+        (
+            "configs/thought5/phase5_pilot_v3.yaml",
+            "configs/thought5/phase5_pilot_v4.yaml",
+        ),
     )
     for old_path, new_path in pairs:
         old = deepcopy(dict(load_thought5_config(old_path).raw))
@@ -207,6 +219,36 @@ def test_three_gpu_namespaces_preserve_every_scientific_config_field() -> None:
             payload["experiment"].pop("name")
             payload["experiment"].pop("output_dir")
         assert old == new
+
+
+def test_fresh_worker_imports_libero_without_parent_sys_path_side_effects(
+    tmp_path, monkeypatch
+) -> None:
+    from fastwam_ood_eval.envs.libero_adapter import configure_libero_package
+
+    config_path = str((tmp_path / "worker_libero").resolve())
+    monkeypatch.setenv("LIBERO_CONFIG_PATH", config_path)
+    configured = configure_libero_package(
+        Path("third_party/LIBERO-plus"), tmp_path / "worker_libero"
+    )
+    config_path = str(configured["config_dir"])
+    environment = _worker_environment(
+        physical_gpu="0",
+        project_commit="a" * 40,
+        libero_config_path=config_path,
+        base_environment={"PYTHONPATH": "/tmp/sentinel"},
+    )
+    entries = environment["PYTHONPATH"].split(os.pathsep)
+    assert str((Path.cwd() / "third_party/LIBERO-plus").resolve()) in entries
+    assert "/tmp/sentinel" in entries
+    assert environment["LIBERO_CONFIG_PATH"] == config_path
+
+    result = _validate_worker_import_preflight(
+        physical_gpu="0",
+        project_commit="a" * 40,
+        libero_config_path=config_path,
+    )
+    assert result["returncode"] == 0
 
 
 def test_execution_schedule_checksum_is_fail_closed(tmp_path) -> None:
@@ -243,7 +285,7 @@ def test_rollout_semantics_are_frozen_in_config() -> None:
 
 
 def test_training_only_pilot_cannot_unlock_formal(tmp_path) -> None:
-    cfg = load_thought5_config("configs/thought5/phase5_pilot_v3.yaml")
+    cfg = load_thought5_config("configs/thought5/phase5_pilot_v4.yaml")
     cfg = replace(
         cfg,
         experiment=replace(cfg.experiment, output_dir=tmp_path),

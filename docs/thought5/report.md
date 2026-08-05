@@ -9,7 +9,7 @@
 | Thought3 Phase 1 | correct-null/shuffle 均 8/8 超 replay floor | future 内容对动作技术敏感 |
 | Thought3 Phase 2 | A1 比 A0 held-out loss 高 3.624%，4/4 更差 | K=1 sensitivity 未转化为 utility |
 | Thought4 formal v6 | Camera gap 0.020273 m > Lighting 0.011660 m；shuffle 36/36 改变动作 | action-consumed geometry 存在 Camera Equivariance Gap |
-| Thought5 | Audit/CPU contract、GPU smoke v3 完成；科学实验 NOT RUN | 真实训练图可执行，尚无效果结论 |
+| Thought5 | Audit/CPU contract、GPU smoke v3/v4 完成；pilot v3 为 launcher 失败，科学实验 NOT RUN | 真实训练图可执行，尚无效果结论 |
 
 核心叙事是 Failure → Representation → Intervention → Utility，而不是因为外部
 方法使用 depth/pose 就堆模块。

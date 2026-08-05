@@ -112,3 +112,14 @@ identity 线性折算为 4.94 秒/update，按 formal 144 个 identity 折算为
    完全一致。
 6. 中断只允许在相同 commit、相同 namespace、checksum-valid 工件上使用
    `--resume`；旧 smoke v3/pilot v2 不得 resume 到本协议。
+
+## 6. 2026-08-05 执行后附录
+
+本文件顶部的“未运行”描述是 2026-08-04 预注册时点的真实状态，保留不回写。
+随后 smoke v4 完整通过；pilot v3 完成 render 后，B1/G3/G4 fresh worker 均因
+`ModuleNotFoundError: No module named 'libero'` 在权重加载前退出。该结果只定位到
+launcher 环境缺陷，不检验任何科学假设。
+
+修复边界、工件 SHA、配置等价性和新 smoke v5 → pilot v4 门禁见
+[子进程 LIBERO 启动修复预注册](worker_launcher_hotfix_preregistration.md)。原三卡
+波次、科学变量和 ETA 不变。

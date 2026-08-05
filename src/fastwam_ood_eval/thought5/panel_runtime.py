@@ -60,6 +60,14 @@ class Phase5PanelError(RuntimeError):
     pass
 
 
+WORKER_PYTHONPATH_ENTRIES = (
+    "src",
+    "third_party/FastWAM",
+    "third_party/FastWAM/experiments/libero",
+    "third_party/LIBERO-plus",
+)
+
+
 def _progress(stage: str, **values: Any) -> None:
     from datetime import datetime, timezone
 
@@ -1120,6 +1128,93 @@ def run_rollout_worker(
         gc.collect()
 
 
+def _worker_environment(
+    *,
+    physical_gpu: str,
+    project_commit: str,
+    libero_config_path: str,
+    variant: str | None = None,
+    mode: str | None = None,
+    base_environment: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """Build a self-contained child environment without parent import side effects."""
+
+    environment = dict(os.environ if base_environment is None else base_environment)
+    project_root = Path.cwd().resolve()
+    required = [
+        str((project_root / relative).resolve())
+        for relative in WORKER_PYTHONPATH_ENTRIES
+    ]
+    inherited = [
+        value
+        for value in environment.get("PYTHONPATH", "").split(os.pathsep)
+        if value
+    ]
+    pythonpath: list[str] = []
+    for value in (*required, *inherited):
+        if value not in pythonpath:
+            pythonpath.append(value)
+    environment.update(
+        {
+            "CUDA_VISIBLE_DEVICES": str(physical_gpu),
+            "MUJOCO_EGL_DEVICE_ID": str(physical_gpu),
+            "LIBERO_CONFIG_PATH": libero_config_path,
+            "THOUGHT5_PROJECT_COMMIT": project_commit,
+            "PYTHONPATH": os.pathsep.join(pythonpath),
+        }
+    )
+    environment.pop("THOUGHT5_PANEL_WORKER_VARIANT", None)
+    environment.pop("THOUGHT5_PANEL_WORKER_MODE", None)
+    if variant is not None:
+        if mode is None:
+            raise Phase5PanelError("worker mode is required with a variant")
+        environment["THOUGHT5_PANEL_WORKER_VARIANT"] = variant
+        environment["THOUGHT5_PANEL_WORKER_MODE"] = mode
+    return environment
+
+
+def _validate_worker_import_preflight(
+    *, physical_gpu: str, project_commit: str, libero_config_path: str
+) -> dict[str, Any]:
+    """Exercise the exact LIBERO import contract in a fresh child process."""
+
+    environment = _worker_environment(
+        physical_gpu=physical_gpu,
+        project_commit=project_commit,
+        libero_config_path=libero_config_path,
+    )
+    command = [
+        sys.executable,
+        "-c",
+        (
+            "from libero.libero import get_libero_path; "
+            "from experiments.libero import libero_utils"
+        ),
+    ]
+    completed = subprocess.run(
+        command,
+        cwd=Path.cwd(),
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    if completed.returncode:
+        detail = (completed.stderr or completed.stdout or "no child output")[-2000:]
+        raise Phase5PanelError(
+            "worker import preflight failed before rendering: " + detail.strip()
+        )
+    return {
+        "python": sys.executable,
+        "libero_plus_root": str(
+            (Path.cwd().resolve() / "third_party/LIBERO-plus").resolve()
+        ),
+        "libero_config_path": libero_config_path,
+        "returncode": completed.returncode,
+    }
+
+
 def _spawn_wave(
     cfg: Thought5Config,
     wave: Sequence[tuple[str, str]],
@@ -1135,15 +1230,18 @@ def _spawn_wave(
     log_root.mkdir(parents=True, exist_ok=True)
     for variant, physical_gpu in wave:
         log = (log_root / f"{mode}_{variant.lower()}.log").open("a", encoding="utf-8")
-        environment = dict(os.environ)
-        environment.update(
-            {
-                "CUDA_VISIBLE_DEVICES": physical_gpu,
-                "MUJOCO_EGL_DEVICE_ID": physical_gpu,
-                "THOUGHT5_PANEL_WORKER_VARIANT": variant,
-                "THOUGHT5_PANEL_WORKER_MODE": mode,
-                "THOUGHT5_PROJECT_COMMIT": project_commit,
-            }
+        environment = _worker_environment(
+            physical_gpu=physical_gpu,
+            project_commit=project_commit,
+            libero_config_path=str(
+                (
+                    cfg.experiment.output_dir
+                    / "runtime"
+                    / "worker_libero"
+                ).resolve()
+            ),
+            variant=variant,
+            mode=mode,
         )
         command = [
             sys.executable,
@@ -1185,7 +1283,7 @@ def _spawn_wave(
 def _config_path_for_stage(stage: str) -> Path:
     return Path(
         {
-            "pilot": "configs/thought5/phase5_pilot_v3.yaml",
+            "pilot": "configs/thought5/phase5_pilot_v4.yaml",
             "formal": "configs/thought5/phase5_formal_v2.yaml",
         }[stage]
     )
@@ -1544,7 +1642,7 @@ def _pilot_direction_and_freeze(
 
 def _validate_frozen_pilot_schedule(freeze: Mapping[str, Any]) -> dict[str, Any]:
     root = Path(
-        "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v3"
+        "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4"
     )
     path = root / "execution_schedule.json"
     if (
@@ -1567,7 +1665,7 @@ def _validate_frozen_pilot_schedule(freeze: Mapping[str, Any]) -> dict[str, Any]
 
 def _pilot_specificity_for_formal(freeze: Mapping[str, Any]) -> bool:
     root = Path(
-        "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v3"
+        "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4"
     )
     _validate_frozen_pilot_schedule(freeze)
     values = []
@@ -2057,6 +2155,13 @@ def _run_panel(cfg: Thought5Config, *, resume: bool) -> dict[str, Any]:
         for variant in ("B1", "G3", "G4")
         if variant in cfg.training.variants
     )
+    from fastwam_ood_eval.envs.libero_adapter import configure_libero_package
+
+    worker_libero = configure_libero_package(
+        Path("third_party/LIBERO-plus"),
+        output / "runtime" / "worker_libero",
+    )
+    worker_libero_config_path = str(worker_libero["config_dir"])
     schedule = {
         "schema_version": "thought5.phase5.execution_schedule.v1",
         "status": "frozen",
@@ -2066,6 +2171,11 @@ def _run_panel(cfg: Thought5Config, *, resume: bool) -> dict[str, Any]:
         "project_commit": project_commit,
         "physical_gpu_ids": list(physical),
         "worker_contract": "one independent process and model per physical GPU",
+        "worker_pythonpath_entries": list(WORKER_PYTHONPATH_ENTRIES),
+        "worker_libero_config_path": worker_libero_config_path,
+        "worker_import_preflight": (
+            "fresh subprocess imports libero.libero and FastWAM libero_utils"
+        ),
         "distributed_training": False,
         "track_waves": parallel_schedule(cfg.experiment.stage, physical),
         "future_calibration_waves": ((("B1", physical[0]),),),
@@ -2092,6 +2202,12 @@ def _run_panel(cfg: Thought5Config, *, resume: bool) -> dict[str, Any]:
         },
     )
     try:
+        preflight = _validate_worker_import_preflight(
+            physical_gpu=physical[0],
+            project_commit=project_commit,
+            libero_config_path=worker_libero_config_path,
+        )
+        _progress("panel_worker_import_preflight_complete", **preflight)
         cache = prepare_render_cache(cfg, resume=resume)
         for wave in parallel_schedule(cfg.experiment.stage, physical):
             _spawn_wave(cfg, wave, resume=resume)
@@ -2137,7 +2253,7 @@ def _run_panel(cfg: Thought5Config, *, resume: bool) -> dict[str, Any]:
             write_status_transition(status_path, final)
             return final
         freeze_path = Path(
-            "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v3/"
+            "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/"
             "formal_protocol_frozen.json"
         )
         freeze = json.loads(freeze_path.read_text(encoding="utf-8"))
@@ -2163,7 +2279,7 @@ def run_pilot(cfg: Thought5Config, *, resume: bool = False) -> dict[str, Any]:
     if cfg.experiment.stage != "pilot":
         raise Phase5PanelError("pilot runner received a non-pilot config")
     smoke = Path(
-        "outputs/thought5/phase5_camera_equivariant_geo_repa_smoke_v4/smoke_result.json"
+        "outputs/thought5/phase5_camera_equivariant_geo_repa_smoke_v5/smoke_result.json"
     )
     if not smoke.is_file():
         raise Phase5PanelError("pilot remains locked until real smoke completes")
@@ -2179,7 +2295,7 @@ def run_formal(cfg: Thought5Config, *, resume: bool = False) -> dict[str, Any]:
     if cfg.experiment.stage != "formal":
         raise Phase5PanelError("formal runner received a non-formal config")
     freeze = Path(
-        "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v3/"
+        "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/"
         "formal_protocol_frozen.json"
     )
     if not freeze.is_file():

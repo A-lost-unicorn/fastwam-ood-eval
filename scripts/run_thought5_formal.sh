@@ -34,7 +34,7 @@ for gpu_id in "${gpu_array[@]}"; do
   fi
 done
 
-freeze_path="outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v3/formal_protocol_frozen.json"
+freeze_path="outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/formal_protocol_frozen.json"
 if [[ ! -f "${freeze_path}" ]] || ! grep -Eq '"status"[[:space:]]*:[[:space:]]*"frozen"' "${freeze_path}"; then
   echo "Formal remains locked: pilot has not sealed formal_protocol_frozen.json" >&2
   exit 2
@@ -52,7 +52,7 @@ export MUJOCO_EGL_DEVICE_ID="${gpu0}"
 export TOKENIZERS_PARALLELISM=false
 export CUBLAS_WORKSPACE_CONFIG=":4096:8"
 export HF_DATASETS_CACHE="${THOUGHT5_HF_DATASETS_CACHE:-/tmp/thought5_hf_cache}"
-export PYTHONPATH="${project_root}/src:${project_root}/third_party/FastWAM:${project_root}/third_party/FastWAM/experiments/libero${PYTHONPATH:+:${PYTHONPATH}}"
+export PYTHONPATH="${project_root}/src:${project_root}/third_party/FastWAM:${project_root}/third_party/FastWAM/experiments/libero:${project_root}/third_party/LIBERO-plus${PYTHONPATH:+:${PYTHONPATH}}"
 
 output_root="${project_root}/outputs/thought5/phase5_camera_equivariant_geo_repa_v2"
 mkdir -p "${output_root}/logs"

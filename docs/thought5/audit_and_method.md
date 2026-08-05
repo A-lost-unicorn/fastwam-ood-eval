@@ -91,18 +91,24 @@ simulator depth。
 - CPU/mock dry-run：14 项 contract 检查全部通过，1.140 s；mock 参数数
   1,335,320；RayPoseEncoder CPU 单次观测 1.579 ms。后两项仅为本机技术
   telemetry，不能替代 GPU P50/P95。
-- 全仓回归：500 tests 全通过（包含 57 项 Thought5 测试）。
+- launcher hotfix 候选全仓回归：501 tests 全通过（包含 58 项 Thought5 测试）。
 - GPU smoke v2：B1 完成 2 step 后在 G3 的 FP32 pose auxiliary head 输入边界
   发生 BF16 dtype error；运行无效、无科学结论。
 - GPU smoke v3：完整通过，B1/G3 各 2 step，总耗时 630.780 s，训练峰值
   25,216.0 MiB；冻结主干 SHA 前后一致，G3 LoRA/GeoProjector/RayPoseEncoder
   梯度均有限且非零，推理未读取 future RGB/GT depth。
-- pilot v2：仅 render 启动约 6 秒后 `KeyboardInterrupt`，无训练或结果；三卡
-  smoke v4、pilot v3、formal：**NOT RUN**。
+- GPU smoke v4：三卡调度 commit 上完整通过，耗时 712.323 s，
+  `pilot_unlocked=true`；仍只是技术门禁。
+- pilot v2：仅 render 启动约 6 秒后 `KeyboardInterrupt`，无训练或结果。
+- pilot v3：完成 16 个 base state/64 个 condition sample 的 render cache 后，
+  B1/G3/G4 fresh worker 均因缺少 LIBERO import path 在权重加载前退出；无训练、
+  checkpoint 或科学结果。launcher hotfix 的 smoke v5、pilot v4、formal：
+  **NOT RUN**。
 
 v2 权威标识：audit SHA `a880bbd9de9ad36dd1670b341a2bb17fc92a1428558e0b16d17e80f06c1bf959`；
 formal config fingerprint `87d11a6b1fdfde08793ff21f0a364686ea781d3f1f129c81853d3d0bd6ef77ca`；
 candidate protocol SHA `5be775e8b6dc62a77c517c5a6686aec1c139659e70911a7fa66e034df3f9fa58`；
 cohort semantic SHA `d17a967aa04fa3ceb6447e150361dbab8110adde120bb875aab4e6094106f6c3`。
 旧 v1 只含未运行 scaffold，保留且不得 resume；三卡执行边界和新 namespace
-见[预注册](three_gpu_execution_preregistration.md)，不改变 v2 科学协议。
+见[预注册](three_gpu_execution_preregistration.md)，不改变 v2 科学协议；pilot v3
+失败审计和纯启动修复边界见[hotfix 预注册](worker_launcher_hotfix_preregistration.md)。

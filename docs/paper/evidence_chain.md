@@ -1,10 +1,10 @@
 # 论文证据链：从 OOD 缺口、Future Utility 负结果到相机等变性诊断
 
-更新日期：2026-08-03
+更新日期：2026-08-05
 适用范围：Fast-WAM 官方 `libero_uncond_2cam224` checkpoint、标准 LIBERO、
 LIBERO-Plus、本项目冻结的 K=1 Future-to-Action Adapter 配方，以及 Thought4
-冻结的 geometry–action diagnosis，以及 Thought5 的方法/协议实现；不包含
-任何 Geo-REPA 真实效果，因为 GPU smoke、pilot、formal 均未运行。
+冻结的 geometry–action diagnosis，以及 Thought5 的方法、单 task Pilot v4 和
+只读失败分解；Thought5 formal 多任务效果仍未运行。
 
 ![Thought1 到 Thought3 的证据阶梯](figures/figure5_evidence_chain.svg)
 
@@ -23,7 +23,9 @@ LIBERO-Plus、本项目冻结的 K=1 Future-to-Action Adapter 配方，以及 Th
 改善”。第五层进一步发现 Clean geometry 在 Video/Action 表征中可读、Camera
 扰动造成的 exact-state gap 显著大于 Lighting，且一个冻结的 rank-3 geometry
 subspace 干预会改变动作，因此将下一方法假设定位为 `camera_equivariance_gap`。
-论文最稳健的主结论仍是：
+Thought5 又验证了一个更具体的机制配方：G3 将 Camera representation gap 缩小
+20.94%，但未达到 25% 门槛，absolute future utility 仍为负且 Camera rollout
+未改善。因此论文最稳健的主结论仍是：
 
 > Future sensitivity is not future utility：future 内容能够改变动作，但这一
 > 技术敏感性没有自动转化为 held-out 控制收益。
@@ -49,7 +51,8 @@ success 的总体因果效应。
 | C12 | Camera shift 具有超出 Lighting 的表征缺口 | exact-state paired Camera/Lighting；冻结层与 probe | Video Camera−Clean +0.020273 m，Lighting +0.011660 m；rank-3 Camera−Lighting 0.146284，95% CI [0.088519, 0.200310] | 配对表征诊断 | **支持** |
 | C13 | probe-defined geometry subspace 对动作有技术因果影响 | 12 test state × 3 action seed；correct/shuffle intervention | correct 36/36 逐位恢复；shuffle 36/36 超 replay floor；action L2 mean 0.000768 | 技术因果干预 | **支持** |
 | C14 | Robot-init 具有独立于 Camera 的同类缺口 | Robot-init 不是 exact-state control，冻结 distinct-pattern 判据 | `robot_init_pattern_distinct=false` | 探索诊断 | **不支持** |
-| C15 | Geo-REPA / relative pose / camera-ray equivariance 改善 OOD success | 方法与冻结协议已实现；真实训练/rollout 未运行 | 无结果 | 方法效用 | **未回答** |
+| C15 | Geo-REPA / relative pose / camera-ray equivariance 改善 OOD success | 单 task B1/G3/G4 matched Pilot；4 episode/condition rollout | G3 Camera gap 缩小 20.94%<25%；absolute future utility −0.005231；Camera success B1=G3=1/4 | 方向性 Pilot | **当前配方不支持；formal 锁定** |
+| C16 | Pilot 伤害能否定位到 condition/flow regime；RayPose 能否被单独识别 | 既有工件 post-hoc 只读分解；0 新 forward/outcome | G3 Clean −0.015268、Camera +0.004807；低 sigma 伤害；gate/grad/injection 非零但无 gate-zero ablation | 探索机制诊断 | **condition/noise 关联支持；RayPose 独立因果不可识别** |
 
 “支持”只覆盖表中对应设计，不向其他 task、机器人平台、训练 seed、Adapter
 结构或 K 外推。
@@ -173,7 +176,7 @@ K=1 improves OOD rollout success                     未测试
 按预注册停止规则，Phase 3 rollout、A2/A4 和事后 checkpoint/LR/K 选择均未启动。
 这使负结果得以保留，也阻止用 OOD outcome 反向调参。
 
-## 5. Thought 1 → Thought 4 的完整链条
+## 5. Thought 1 → Thought 5 的完整链条
 
 | 阶段 | 输入是否改动 | 动作是否改动 | outcome 是否读取 | 获得的最强结论 |
 | --- | --- | --- | --- | --- |
@@ -182,6 +185,8 @@ K=1 improves OOD rollout success                     未测试
 | Thought 3 Phase 1 | correct/null/shuffle future | 是，固定其余随机量 | 否 | future 内容对动作有技术因果影响 |
 | Thought 3 Phase 2 | A0/K0 与 A1/K1 训练输入 | 是，matched 训练 | 只读 action target；不读 success/OOD | K=1 未改善本配方 held-out objective |
 | Thought 4 formal v6 | exact-state Camera/Lighting 与冻结 geometry subspace | 仅干预离线 action tensor | 否 | 缺口定位为 camera equivariance；尚无新方法效用 |
+| Thought 5 Pilot v4 | B1/G3/G4 matched 训练、future counterfactual 与四 condition rollout | 是；G3/G4 训练并在线执行 | 是，但只作单 task 方向 Gate | 当前 G3 recipe 未把弱表征变化转成 positive utility 或 success；formal 停止 |
+| Thought 5 只读分解 | 不新增输入；只读 Pilot 工件 | 否 | 不新增 outcome | 伤害集中 Clean/低 sigma；RayPose 路径非零但独立因果未识别 |
 
 该链条逐步排除了三个常见逻辑跳跃：
 
@@ -228,7 +233,32 @@ geometry subspace：
 推荐 `Geo-REPA + relative pose / camera-ray equivariance`，不能写成该方法
 已经改善 representation、action 或 rollout success。
 
-## 7. 从 0 到 1 的实施过程
+## 7. Thought5：定向干预、负 Gate 与失败定位
+
+[Thought5 Pilot v4 结果](../thought5/pilot_v4_results.md)在单一
+`libero_goal` task 上 matched 比较 B1、G3 与 shuffled-target G4：
+
+| Endpoint | B1 | G3 | G4 | Pilot 判定 |
+| --- | ---: | ---: | ---: | --- |
+| Camera representation gap | 0.002246 | 0.001776 | 0.001666 | G3 缩小 20.94%<25%，且 G4 更小 |
+| Camera future geometry RMSE | 0.341277 | 0.341320 | 0.341331 | 主指标无改善 |
+| Correct future utility | −0.015649 | −0.005231 | −0.011302 | G3 缓解伤害但仍为负 |
+| Camera rollout success | 1/4 | 1/4 | 0/4 | G3 对 B1 无提升 |
+
+所有 worker/collector 均 complete，但 training、representation、future geometry、
+future utility 和 rollout 五项方向 Gate 全 false，因此 `formal_unlocked=false`。
+这是有效停止结果，不是运行失败，也不是对 Geo-REPA 或 future 的多任务总体否证。
+
+[只读失败分解](../thought5/pilot_v4_readonly_failure_analysis.md)进一步发现 G3
+future utility 在 Clean 为 −0.015268、Camera 为 +0.004807；22/32 个无序 flow
+seed-slot 的均值为负，低 effective sigma 的伤害最强。RayPose 的 final gate、
+记录梯度和重建 injection 均非零，说明路径实际执行，但没有 gate-zero ablation，
+不能识别其独立动作贡献。G3/G4 训练与 video feature-delta 高度同向，且 G4 只
+shuffle Geo-REPA correspondence、仍保留正确 equivariance/pose，因此 G4 更小的
+gap 更支持共享 conditioning/auxiliary-loss/regularization 解释，而非正确逐样本
+Geo-REPA correspondence 已被证明有效。
+
+## 8. 从 0 到 1 的实施过程
 
 | 时间/里程碑 | 从无到有的能力 | 关键卡点与处理 | 证据资格 |
 | --- | --- | --- | --- |
@@ -243,7 +273,8 @@ geometry subspace：
 | Thought 3 Phase 2 | 完整 matched A0/A1 单配方训练 | 双 GPU 独立轨、固定 step-200、12 项 hard check | 离线负结果 |
 | Thought 4 smoke v8 | 真实 BF16 capture 的 FP32 subspace arithmetic | correct 必须逐位恢复；不靠放宽 tolerance | 数值/干预门禁 |
 | Thought 4 formal v6 | exact-state paired probes、probe-first commit、rank-3 intervention | simulator replay 对齐、1,586 工件 manifest、自哈希作用域审计 | 正式离线机制诊断 |
-| Thought 5 audit/CPU v2 | layer-15 Geo-REPA、ray/pose injection、B0–G4、matched future probe 与三层判定器 | task-order 映射、历史 cohort 排除、train/dev/formal probe 隔离、完整对象 SHA、无 GT-depth 泄漏 | 方法/协议与 mock contract；效果 NOT RUN |
+| Thought 5 audit→Pilot v4 | layer-15 Geo-REPA、ray/pose injection、B0–G4、matched future probe 与三层判定器 | dtype、worker import、三卡调度、single-task stop gate | smoke + 有效方向 Pilot；formal 未解锁 |
+| Thought 5 只读失败分解 | condition/flow/action、gate/LoRA/trajectory、G3/G4 feature delta | 严格区分 utility、final-action sensitivity 与 inference denoise step | post-hoc 探索诊断；不改 Pilot |
 
 Gate E 的完整协议、失败与恢复记录见
 [Gate E 索引](../thought3/gate_e/)。它们的论文价值主要是说明研究流程如何避免：
@@ -253,7 +284,7 @@ Gate E 的完整协议、失败与恢复记录见
 - 根据 development 结果挑 step、LR 或门槛；
 - 在离线方向为负时仍打开 OOD rollout 并据此调参。
 
-## 8. 论文可写、必须限定与不可写
+## 9. 论文可写、必须限定与不可写
 
 ### 可写
 
@@ -268,6 +299,10 @@ Gate E 的完整协议、失败与恢复记录见
   Lighting，且 probe-defined rank-3 geometry subspace 会改变动作 tensor。
 - Thought4 的冻结分类为 `camera_equivariance_gap`，它是方法选择依据而不是
   新方法效果。
+- Thought5 单 task Pilot 中，G3 缩小了负 future utility，但没有使其转正，也没有
+  提高 Camera rollout success；当前 recipe 按 Gate 停止。
+- 只读分解显示 G3 的伤害集中在 Clean 与低 effective sigma；RayPose 有非零
+  gate/gradient/injection，但独立因果贡献尚未识别。
 
 ### 必须同时限定
 
@@ -279,6 +314,8 @@ Gate E 的完整协议、失败与恢复记录见
 - Phase 2 没有读取 OOD、rollout success 或真实 future RGB。
 - Thought4 只做冻结 probe 与离线 action intervention；36/36 不是 episode
   success，Robot-init 也不是 exact-state control。
+- Thought5 是单 task、4 episode/condition 的方向性 Pilot，不是 H1/H2/H3 的正式
+  多任务否证；condition/sigma 分解是 post-hoc 探索分析。
 - `execution_integrity.json` 的自哈希只覆盖写入时的 11 字段核心 payload；后续
   追加字段由 1,586-entry artifact manifest 的逐文件 SHA 覆盖。该作用域缺陷已
   披露，冻结结果不原地修补。
@@ -290,18 +327,21 @@ Gate E 的完整协议、失败与恢复记录见
 - K=1 会降低或提升 OOD 成功率；
 - K=2/K=4 无用；
 - Fast-WAM、所有 WAM 或所有 OOD 场景都不需要未来想象；
-- Geo-REPA、relative pose 或 camera-ray equivariance 已经有效；
+- Geo-REPA、relative pose 或 camera-ray equivariance 已经有效或普遍无效；
+- G4 更小的 gap 证明了“只是普通正则化”，或 RayPose 单独导致动作变化；
+- 某个 inference denoising step 或 action 尾段导致了 utility 伤害；
 - rank-3 action tensor 变化会提高 Camera OOD success；
 - 仿真结论等价于真机或跨平台结论。
 
-## 9. 当前论文结论与下一项独立研究
+## 10. 当前论文结论与下一项独立研究
 
 当前论文可以作为一篇**审计与负结果论文**完成：它回答“现有证据是否足以支持
 future utility”，答案是否定的，并展示为什么需要将关联、动作依赖与任务效用
 拆开。
 
 若未来重启 future utility 路线，不应回用当前四条 development sample 调参。
-若沿 Thought4 开启新方法，应把 `Geo-REPA + relative pose / camera-ray
-equivariance` 作为全新预注册实验：先在未使用 state/task 上验证 held-out
-representation 与 SE(3) 指标，再运行 matched Camera rollout。两条新研究均
-不能事后改变本文 K=1 负结果或 formal v6 诊断的登记。
+Thought5 已实际检验该方向的最小 G3 配方并触发停止。若另起新配方，应使用新
+预注册与未使用 cohort，优先检验 condition-aware/low-sigma mitigation，并用
+gate-zero 或 G1/G2 matched 对照区分 RayPose、Geo-REPA correspondence 与共享
+正则化；不能回用本 Pilot 调阈值后冒充确认性结果。任何新研究均不能事后改变
+本文 K=1 负结果、Thought4 formal v6 或 Thought5 Pilot v4 的冻结登记。

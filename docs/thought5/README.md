@@ -23,6 +23,7 @@ formal v2 保持 **NOT RUN**。这是一项有效的 Pilot 停止结论，但不
 - [三卡执行调度预注册](three_gpu_execution_preregistration.md)：等价性、固定波次和 ETA。
 - [子进程启动修复预注册](worker_launcher_hotfix_preregistration.md)：pilot v3 失败审计、修复边界和新 namespace。
 - [Pilot v4 结果登记](pilot_v4_results.md)：五项 Gate、关键数值、论文边界和停止决定。
+- [Pilot v4 只读失败分解](pilot_v4_readonly_failure_analysis.md)：condition/flow/action、RayPose/LoRA 及 G3/G4 机制诊断；不改变负 Gate。
 - [运行手册](runbook.md)：audit、单卡 smoke、2/3 卡 pilot、3/4 卡 formal。
 - [论文证据链与结果模板](report.md)：Thought1→5 叙事、15 个最终问题及可写/不可写结论。
 

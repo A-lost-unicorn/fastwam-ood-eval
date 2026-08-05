@@ -18,7 +18,9 @@
 
 Pilot v4 已产生单 task 方向证据，但 formal v2 仍为 **NOT RUN**。Pilot 数字只用于
 停止/推进决策，不进入正式多任务主表；完整登记见
-[Pilot v4 结果](pilot_v4_results.md)。
+[Pilot v4 结果](pilot_v4_results.md)。后续现有工件的
+[只读失败分解](pilot_v4_readonly_failure_analysis.md)只用于定位下一条假设，
+不改变五项负 Gate。
 
 | 问题 | 权威工件 | 当前答案 |
 | --- | --- | --- |

@@ -777,7 +777,7 @@ commit/SHA、deterministic seed、atomic artifact 和 checksum 降低风险，�
 不覆盖随后追加的 runtime/smoke/probe 字段。完整文件仍由 manifest 的文件 SHA
 覆盖；该作用域缺陷被保留和披露，不原地修补冻结结果。
 
-### 8.6 Thought5：已实现但尚未运行的定向干预
+### 8.6 Thought5：单 task 定向干预与停止结果
 
 Thought4 的冻结分类只解锁了一个独立后续分支：Fast-WAM-GeoEq。该分支在
 action-consumed `mot.video_kv_cache.15.v` 对应的 Video layer-15 K/V projection
@@ -794,10 +794,28 @@ training cohort 拟合，development 冻结正则，formal 只读，以避免“
 Phase 5 预注册 B0、matched B1、G1、G2、G3 与 shuffled G4，并以互斥
 train/development/formal cohort 依次检验：Camera representation gap 是否至少
 缩小 25%，K=1 correct future 是否相对 null/shuffle 获得 held-out utility，以及
-Camera rollout success 是否提高且 Clean 不劣。当前只有代码审计与 CPU/mock
-contract 通过，所有真实 GPU 结果均为 **NOT RUN**。因此本稿不报告方法收益，
-也不改变本文已有的负结果和 `camera_equivariance_gap` 诊断结论。完整预注册见
-[Thought5 协议](../thought5/protocol.md)。
+Camera rollout success 是否提高且 Clean 不劣。完成 audit、CPU/mock 与真实 smoke
+后，我们在一个 `libero_goal` task 上以三张 4090 matched 运行 B1/G3/G4 Pilot v4
+（8 train、4 development、4 pilot-test episode）。
+
+G3 的 Camera representation gap 从 B1 的 0.002246 降至 0.001776，缩小
+20.94%，低于预注册的 25% 门槛；G4 为 0.001666，反而更小。主 future Camera
+geometry RMSE 从 0.341277 变为 0.341320，没有改善。G3 的 correct-future utility
+相对 B1 从 −0.015649 缓解为 −0.005231，但 absolute utility 仍为负；Camera
+rollout success 则为 B1=G3=1/4。training、representation、future geometry、
+future utility 与 rollout 五项方向 Gate 均为 false，故 `formal_unlocked=false`，
+当前 G3 recipe 按协议停止。这是有效的单 task 方向性负 Gate，不是 H1/H2/H3 的
+正式多任务否证。
+
+随后仅用已有工件做 post-hoc 只读失败分解。G3 utility 在 Clean 为 −0.015268，
+Camera 为 +0.004807；伤害集中于低 effective-sigma flow objective。RayPoseEncoder
+的 gate、记录梯度和重建 residual injection 均非零，但没有 gate-zero ablation，
+无法识别其独立因果贡献。G3/G4 的训练轨迹、参数与 video feature-delta 高度同向；
+又因 G4 只 shuffle Geo-REPA correspondence 而保留正确 equivariance/pose loss，
+现有结果不能把 G3 的表征变化归因于正确逐样本几何学习。完整预注册、Pilot 登记和
+只读边界分别见 [Thought5 协议](../thought5/protocol.md)、
+[Pilot v4 结果](../thought5/pilot_v4_results.md)与
+[失败分解](../thought5/pilot_v4_readonly_failure_analysis.md)。
 
 ## 9. 结论
 
@@ -814,7 +832,9 @@ future 内容确实改变动作。最后，预注册的 matched K=0/K=1 训练�
 四条 development sample 全部方向更差。进一步的冻结机制诊断显示，Clean
 geometry/motion 可读，Camera 的 exact-state representation gap 大于 Lighting，
 且 rank-3 geometry subspace 对动作 tensor 有技术因果影响；由此将下一假设
-定位为 `camera_equivariance_gap`，但没有产生新方法或 success 结果。
+定位为 `camera_equivariance_gap`。针对该缺口的 Thought5 G3 Pilot 虽产生弱且
+非特异的 representation 变化，却没有获得 positive future utility 或 Camera
+success，因而停止在 formal 之前。
 
 因此，本文最强且不过界的结论是：
 
@@ -825,7 +845,9 @@ future”。它支持一种更严格的研究范式：先验证鲁棒性缺口�
 动作依赖与任务收益；若最小 future 配方未通过预注册 held-out 门禁，应保留
 负结果并停止，而不是用更多 K、checkpoint 或 OOD outcome 搜索期望答案。
 机制诊断可以指导下一方法选择，但也必须在独立 held-out representation、SE(3)
-与 Camera rollout 上重新验证。
+与 Camera rollout 上重新验证。当前只读分解只把下一问题收窄到 condition-aware /
+low-noise mitigation 与 RayPose/regularization identification，不能用于放宽旧门槛
+或重启已停止的 G3 recipe。
 
 ## 数据、代码与复现声明
 

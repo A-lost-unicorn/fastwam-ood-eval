@@ -25,8 +25,10 @@
 五层结论不能互相替代。阶段一的失败不能证明未来有用；阶段二的一致性不能
 证明动作依赖未来；动作受 future 影响也不能证明任务收益。当前第四层在冻结
 K=1 配方上得到离线负结果，因此 OOD success 因果问题保持未回答。
-Thought4 进一步将下一方法假设定位为 `camera_equivariance_gap`，但仍没有产生
-任何新方法 success 结果。
+Thought4 进一步将下一方法假设定位为 `camera_equivariance_gap`。Thought5 随后
+完成单 task Pilot：G3 产生弱 representation 信号并缓解 future 伤害，但 absolute
+future utility 仍负、paired rollout 无收益，因此没有产生新方法 success 结果，
+formal 保持锁定。
 
 ## 2. 当前真实状态
 
@@ -41,7 +43,7 @@ Thought4 进一步将下一方法假设定位为 `camera_equivariance_gap`，但
 | 阶段二 B：action-conditioned future consistency | 严格门禁、schema、runner、测试已实现 | CPU/mock 与门禁测试通过 | **阻塞**。官方 release 为 `action_conditioned=false`，且没有可信匹配 checkpoint |
 | 阶段三：Future-to-Action Adapter | Phase 0 审计完成；Phase 1 分支 A；Phase 2 完整双卡训练完成 | Phase 1 correct-null/shuffle/action-hash 均 `8/8`；Phase 2 A0 reduction `+1.845%`、A1 `−1.712%`，A1 比 A0 高 `3.624%` 且 4/4 dev sample 更差 | **有效离线负结果，路线停止**：future 内容会改变动作，但冻结 K=1 Adapter 未形成 held-out utility；Phase 3/OOD/A2/A4 锁定 |
 | Thought4：Geometry–Action Gap | FP32 smoke v8 与 64-state formal v6 完成；1,586 工件只读审计 | 256 paired samples、12,544 features；Camera gap 0.020273 m > Lighting 0.011660 m；rank-3 shuffle 36/36 超过 replay floor | **FORMAL DIAGNOSTIC 完成**：`camera_equivariance_gap`；只解锁 Geo-REPA + relative pose / camera-ray equivariance，尚无方法/rollout 效果 |
-| Thought5：Camera-Equivariant Geometry Alignment | v2 审计、方法模块、matched future probe、协议、CPU/mock dry-run 与 runner 门禁已实现 | Audit SHA `a880bbd9...f959`；14/14 CPU contract；真实 smoke/pilot/formal 均 `NOT RUN` | **无科学结果**：H1/H2/H3 与机制分类未定；v1 scaffold 已废止，不得写成 OOD 改善 |
+| Thought5：Camera-Equivariant Geometry Alignment | v2 审计、CPU/mock、真实 smoke v3–v5、三卡 Pilot v4 和只读失败分解完成 | 单 task 8 train / 4 dev / 4 test；G3 Camera gap 缩小 20.94%<25%；future utility −0.005231；Camera success B1=G3=1/4 | **有效 PILOT 停止结果**：五项方向 Gate 全 false，formal 锁定；post-hoc 定位为 Clean/低 sigma 伤害，RayPose 独立贡献未识别 |
 
 因此，“阶段一已经完成”的准确说法是：**阶段一工程、正式全量计算、聚合与
 完整性审计均已完成；失败机制人工 taxonomy 尚未完成，但不阻塞主成功率结论。**

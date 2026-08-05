@@ -139,8 +139,8 @@ G3−B1 在四个条件上均为 0；Clean non-inferiority 通过，但 Camera i
 
 ## 5. 冻结的下一步
 
-当前 recipe 到此停止。下一步只允许先做现有工件的只读失败分解，例如按
-condition/flow slot 分解 utility、检查 RayPose gate/LoRA 变化与训练轨迹；这些
-诊断不能改变本 Pilot 判定。若要尝试 confidence-gated future fusion 或其他新
-recipe，必须建立新预注册、新 namespace 和未使用的独立 Pilot cohort，再决定
-是否创建新的 formal 候选。
+当前 recipe 到此停止。现有工件的 condition/flow/action、RayPose gate/LoRA 与
+训练轨迹[只读失败分解](pilot_v4_readonly_failure_analysis.md)已经完成；它将下一
+假设收窄到 Clean/低 sigma 伤害与 RayPose/共享正则化识别，但不改变本 Pilot 判定。
+若要尝试 condition-aware future fusion 或其他新 recipe，必须建立新预注册、新
+namespace 和未使用的独立 Pilot cohort，再决定是否创建新的 formal 候选。

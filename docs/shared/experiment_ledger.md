@@ -56,6 +56,9 @@
 | `P5-PROTOCOL-v1-SUPERSEDED` | 2026-08-03 | 5 / NOT RUN SCAFFOLD | 初版 audit/CPU scaffold；没有真实 GPU 工件 | 复核发现 Phase5-B 若直接比较 G3 trained GeoProjector 与 B1 inactive head，会混入 decoder-training 差异 | 在任何真实 smoke/pilot/formal 前废止；只读保留，不 resume，不形成科学结果 |
 | `P5-AUDIT-v2` | 2026-08-03 | 5 / READ-ONLY AUDIT | `phase5_audit_v2.yaml`；Thought3/4、Fast-WAM、LIBERO-Plus 与 12.04 GB release checkpoint | layer-15 V producer/consumer、98×3072 layout、labels、历史排除、matched future probe 和 4-GPU 方案通过；audit SHA `a880bbd9...f959` | 只解锁 v2 方法实现；无训练、probe、future utility 或 rollout 结果 |
 | `P5-CPU-CONTRACT-v2` | 2026-08-03 | 5 / TEST | `phase5_formal_v2.yaml` candidate；fingerprint `87d11a6b...77ca`；CPU/mock | 14/14 contract：LoRA bitwise baseline、294-token ray repetition、3072→128 deterministic probe projection、geometry loss、whitelist、full-object SHA 与 NOT-RUN artifact；1.140 s、1,335,320 mock trainable params | 工程 contract；真实 smoke/pilot/formal 全部 `NOT RUN` |
+| `P5-SMOKE-v5` | 2026-08-04 | 5 / VALID GPU SMOKE | 单卡真实 Fast-WAM；B1/G3/G4；2 base states；三卡调度实现后的新 namespace | 三条 2-step track、representation/future/utility/rollout 技术链完整，dtype 与 worker import 修复后 status complete | 只解锁单 task Pilot；不是科学结果，不解锁 formal |
+| `P5-PILOT-v4` | 2026-08-05 | 5 / VALID DIRECTIONAL PILOT | commit `c7ab2153`；三张 4090；单 `libero_goal` task；8 train / 4 dev / 4 pilot-test；B1/G3/G4 matched | Camera gap G3 缩小 20.94%<25%；G3 correct utility −0.005231；Camera success B1=G3=1/4；五项 collector direction 与 training direction 全 false；约 2 h 29 min | 有效单 task 负 Gate；`formal_unlocked=false`，当前 G3 recipe 停止；不是 H1/H2/H3 多任务否证 |
+| `P5-PILOT-v4-READONLY-FAILURE-v1` | 2026-08-05 | 5 / POST-HOC READ-ONLY DIAGNOSTIC | Pilot v4 的 25 项输入逐 SHA 验证；CPU-only；0 model/GPU/train/simulator/rollout | G3 utility Clean −0.015268、Camera +0.004807；22/32 flow-slot 均值负，伤害集中 sigma<0.5；RayPose gate/grad/injection 非零；G3/G4 轨迹高度相似 | 只定位新假设；不改变 Pilot、不得调旧阈值；RayPose 独立因果及 inference denoise-step 仍不可识别，formal 保持锁定 |
 
 ### `P1-FORMAL-v1` 机器证据
 

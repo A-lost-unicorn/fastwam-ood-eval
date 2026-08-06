@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Build the paper figures from frozen Thought1–Thought3 result artifacts.
+"""Build the paper figures from frozen Thought1–Thought5 result artifacts.
 
 The script is read-only with respect to ``outputs/``.  It writes deterministic
-SVG figures, two compact CSV tables, and a manifest under ``docs/paper/``.
+SVG figures, compact CSV tables, and a manifest under ``docs/paper/``.
 """
 
 from __future__ import annotations
@@ -38,6 +38,20 @@ SOURCES = {
     / "outputs/thought3/phase2_full_28_4_a0_a1_v1/tracks/a0/development_final_objectives.jsonl",
     "thought3_phase2_a1_samples": ROOT
     / "outputs/thought3/phase2_full_28_4_a0_a1_v1/tracks/a1/development_final_objectives.jsonl",
+    "thought4_evidence": ROOT
+    / "outputs/thought4/phase4_geometry_action_diagnosis_v6/diagnostic_evidence.json",
+    "thought5_direction": ROOT
+    / "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/pilot_direction.json",
+    "thought5_representation": ROOT
+    / "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/representation_results.json",
+    "thought5_future_geometry": ROOT
+    / "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/future_geometry_results.json",
+    "thought5_future_utility": ROOT
+    / "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/future_utility_results.json",
+    "thought5_rollout": ROOT
+    / "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/rollout_results.json",
+    "thought5_readonly": ROOT
+    / "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4_readonly_failure_v1/analysis_result.json",
 }
 
 COLORS = {
@@ -492,14 +506,30 @@ def figure_evidence_chain() -> dict[str, Any]:
             "grade": "Offline negative result · STOP",
             "color": COLORS["light_red"],
         },
+        {
+            "title": "Thought 4",
+            "question": "Where is the dominant\nCamera failure localized?",
+            "evidence": "64 states / 36 interventions",
+            "finding": "Camera gap > Lighting\n36/36 action effect",
+            "grade": "Frozen mechanism diagnosis",
+            "color": COLORS["light_orange"],
+        },
+        {
+            "title": "Thought 5",
+            "question": "Does targeted GeoEq\nrepair utility?",
+            "evidence": "3-GPU matched pilot; 8/4/4",
+            "finding": "Gap −20.94%; utility < 0\nNo Camera success gain",
+            "grade": "Directional pilot · STOP",
+            "color": COLORS["light_red"],
+        },
     ]
 
-    fig, ax = plt.subplots(figsize=(12.0, 4.7))
+    fig, ax = plt.subplots(figsize=(16.5, 4.9))
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.axis("off")
-    centers = [0.13, 0.38, 0.63, 0.88]
-    width = 0.205
+    centers = [0.085, 0.251, 0.417, 0.583, 0.749, 0.915]
+    width = 0.142
     height = 0.69
     for index, (stage, center) in enumerate(zip(stages, centers)):
         left = center - width / 2
@@ -513,23 +543,23 @@ def figure_evidence_chain() -> dict[str, Any]:
             linewidth=1.0,
         )
         ax.add_patch(patch)
-        ax.text(center, 0.79, stage["title"], ha="center", weight="bold", fontsize=10.5)
+        ax.text(center, 0.79, stage["title"], ha="center", weight="bold", fontsize=9.6)
         ax.text(
             center,
             0.65,
             stage["question"],
             ha="center",
             va="center",
-            fontsize=8.6,
+            fontsize=7.7,
             wrap=True,
         )
-        ax.text(center, 0.48, stage["evidence"], ha="center", fontsize=8.4)
+        ax.text(center, 0.48, stage["evidence"], ha="center", fontsize=7.5)
         ax.text(
             center,
             0.36,
             stage["finding"],
             ha="center",
-            fontsize=8.6,
+            fontsize=7.7,
             weight="bold",
         )
         ax.text(
@@ -537,7 +567,7 @@ def figure_evidence_chain() -> dict[str, Any]:
             0.23,
             stage["grade"],
             ha="center",
-            fontsize=7.9,
+            fontsize=7.0,
             color=COLORS["gray"],
         )
         if index < len(stages) - 1:
@@ -553,7 +583,7 @@ def figure_evidence_chain() -> dict[str, Any]:
     ax.text(
         0.5,
         0.06,
-        "Evidence ladder: robustness gap → association → action sensitivity → held-out utility",
+        "Evidence ladder: robustness → association → sensitivity → utility → localization → targeted intervention",
         ha="center",
         fontsize=10,
         color="#1F2937",
@@ -563,12 +593,171 @@ def figure_evidence_chain() -> dict[str, Any]:
     return {"stages": stages}
 
 
+def figure_thought5_pilot(
+    representation: dict[str, Any],
+    future_geometry: dict[str, Any],
+    rollout: dict[str, Any],
+    readonly: dict[str, Any],
+) -> dict[str, Any]:
+    variants = ["B1", "G3", "G4"]
+    gaps = [
+        representation["b1_camera_gap"],
+        representation["g3_camera_gap"],
+        representation["g4_camera_gap"],
+    ]
+    threshold = 0.75 * gaps[0]
+
+    condition_data = readonly["questions"]["condition_failure"]
+    clean_utility = [
+        condition_data[variant]["conditions"]["clean"]["mean_utility_a0_minus_a1"]
+        for variant in variants
+    ]
+    camera_utility = [
+        condition_data[variant]["conditions"]["camera"]["mean_utility_a0_minus_a1"]
+        for variant in variants
+    ]
+
+    conditions = ["clean", "camera", "lighting", "robot_init"]
+    condition_labels = ["Clean", "Camera", "Lighting", "Robot init."]
+    success = {
+        variant: [
+            rollout["summaries"][f"{variant}:{condition}"]["success_rate"]
+            for condition in conditions
+        ]
+        for variant in variants
+    }
+
+    fig, axes = plt.subplots(1, 3, figsize=(13.2, 4.1))
+
+    gap_bars = axes[0].bar(
+        variants,
+        gaps,
+        color=[COLORS["gray"], COLORS["blue"], COLORS["orange"]],
+    )
+    axes[0].axhline(
+        threshold,
+        color=COLORS["red"],
+        linestyle="--",
+        linewidth=1.0,
+        label="25% reduction threshold",
+    )
+    axes[0].set_ylabel("Camera representation gap ↓")
+    axes[0].set_title("Weak, non-specific representation change")
+    axes[0].legend(frameon=False, fontsize=7.5, loc="upper right")
+    axes[0].set_ylim(0, max(gaps) * 1.28)
+    for bar, value in zip(gap_bars, gaps):
+        axes[0].text(
+            bar.get_x() + bar.get_width() / 2,
+            value + max(gaps) * 0.035,
+            f"{value:.6f}",
+            ha="center",
+            fontsize=7.7,
+        )
+    axes[0].text(
+        0.5,
+        0.03,
+        "G3: −20.94%; G4: −25.82%",
+        transform=axes[0].transAxes,
+        ha="center",
+        fontsize=7.8,
+        color=COLORS["gray"],
+    )
+
+    x_positions = list(range(len(variants)))
+    width = 0.35
+    axes[1].bar(
+        [position - width / 2 for position in x_positions],
+        clean_utility,
+        width,
+        label="Clean",
+        color=COLORS["blue"],
+    )
+    axes[1].bar(
+        [position + width / 2 for position in x_positions],
+        camera_utility,
+        width,
+        label="Camera",
+        color=COLORS["orange"],
+    )
+    axes[1].axhline(0.0, color="#111827", linewidth=0.9)
+    axes[1].set_xticks(x_positions, variants)
+    axes[1].set_ylim(-0.027, 0.010)
+    axes[1].set_ylabel("Future utility: loss(null) − loss(correct)")
+    axes[1].set_title("Post-hoc harm localizes to Clean")
+    axes[1].legend(frameon=False, fontsize=8)
+    for index, values in enumerate(zip(clean_utility, camera_utility)):
+        for offset, value in zip((-width / 2, width / 2), values):
+            axes[1].text(
+                index + offset,
+                value + (0.0014 if value >= 0 else -0.0025),
+                f"{value:+.4f}",
+                ha="center",
+                va="bottom" if value >= 0 else "top",
+                fontsize=7.2,
+            )
+
+    rollout_x = list(range(len(conditions)))
+    rollout_width = 0.24
+    offsets = [-rollout_width, 0.0, rollout_width]
+    rollout_colors = [COLORS["gray"], COLORS["blue"], COLORS["orange"]]
+    for variant, offset, color in zip(variants, offsets, rollout_colors):
+        axes[2].bar(
+            [position + offset for position in rollout_x],
+            success[variant],
+            rollout_width,
+            label=variant,
+            color=color,
+        )
+    axes[2].set_xticks(rollout_x, condition_labels, rotation=18)
+    axes[2].set_ylim(0, 1.12)
+    axes[2].set_ylabel("Pilot success rate")
+    axes[2].set_title("No paired Camera success gain (n=4)")
+    axes[2].legend(frameon=False, fontsize=8, ncol=3)
+
+    camera_rmse = future_geometry["main_camera_error"]
+    fig.suptitle(
+        "Thought 5 directional pilot: representation movement does not become future or rollout utility",
+        y=1.02,
+        fontsize=11.5,
+    )
+    fig.text(
+        0.5,
+        -0.015,
+        (
+            "Primary Camera future-geometry RMSE: "
+            f"B1 {camera_rmse['B1']:.6f} → G3 {camera_rmse['G3']:.6f}; "
+            "formal remains locked"
+        ),
+        ha="center",
+        fontsize=8.2,
+        color=COLORS["gray"],
+    )
+    fig.tight_layout()
+    save_svg(fig, "figure6_thought5_pilot.svg")
+
+    return {
+        "camera_representation_gap": dict(zip(variants, gaps)),
+        "preregistered_g3_threshold": threshold,
+        "future_utility_by_condition": {
+            variant: {"Clean": clean, "Camera": camera}
+            for variant, clean, camera in zip(variants, clean_utility, camera_utility)
+        },
+        "pilot_success_rate": success,
+        "camera_future_geometry_rmse": camera_rmse,
+    }
+
+
 def write_tables(
     thought1_data: dict[str, Any],
     thought2_data: dict[str, Any],
     phase1_data: dict[str, Any],
     phase2_data: dict[str, Any],
     sample_rows: list[dict[str, Any]],
+    thought5_representation: dict[str, Any],
+    thought5_future_geometry: dict[str, Any],
+    thought5_future_utility: dict[str, Any],
+    thought5_rollout: dict[str, Any],
+    thought5_readonly: dict[str, Any],
 ) -> None:
     core_path = TABLE_DIR / "core_results.csv"
     with core_path.open("w", encoding="utf-8", newline="") as handle:
@@ -647,6 +836,129 @@ def write_tables(
         writer.writeheader()
         writer.writerows(sample_rows)
 
+    thought5_path = TABLE_DIR / "thought5_pilot_diagnostics.csv"
+    header = [
+        "section",
+        "variant",
+        "condition",
+        "metric",
+        "estimate",
+        "ci95_low",
+        "ci95_high",
+        "unit",
+        "evidence_role",
+    ]
+    rows: list[list[Any]] = []
+    for variant, value in zip(
+        ("B1", "G3", "G4"),
+        (
+            thought5_representation["b1_camera_gap"],
+            thought5_representation["g3_camera_gap"],
+            thought5_representation["g4_camera_gap"],
+        ),
+    ):
+        rows.append(
+            [
+                "representation",
+                variant,
+                "camera_minus_clean",
+                "camera_representation_gap",
+                value,
+                "",
+                "",
+                "probe_error",
+                "directional_pilot",
+            ]
+        )
+
+    for variant, value in thought5_future_geometry["main_camera_error"].items():
+        rows.append(
+            [
+                "future_geometry",
+                variant,
+                "camera",
+                "future_camera_geometry_rmse",
+                value,
+                "",
+                "",
+                "rmse",
+                "directional_pilot",
+            ]
+        )
+
+    condition_data = thought5_readonly["questions"]["condition_failure"]
+    for variant in ("B1", "G3", "G4"):
+        for condition in ("clean", "camera"):
+            row = condition_data[variant]["conditions"][condition]
+            interval = row["posthoc_episode_grouped_bootstrap"]
+            rows.append(
+                [
+                    "future_utility",
+                    variant,
+                    condition,
+                    "loss_null_minus_correct",
+                    row["mean_utility_a0_minus_a1"],
+                    interval["lower"],
+                    interval["upper"],
+                    "action_objective",
+                    "posthoc_readonly_exploratory",
+                ]
+            )
+
+    aggregate_interval = thought5_future_utility[
+        "g3_correct_minus_null_utility_grouped_bootstrap"
+    ]
+    rows.append(
+        [
+            "future_utility",
+            "G3",
+            "clean_and_camera",
+            "loss_null_minus_correct",
+            aggregate_interval["estimate"],
+            aggregate_interval["lower"],
+            aggregate_interval["upper"],
+            "action_objective",
+            "directional_pilot_primary",
+        ]
+    )
+
+    for key, summary in thought5_rollout["summaries"].items():
+        variant, condition = key.split(":", maxsplit=1)
+        rows.append(
+            [
+                "rollout",
+                variant,
+                condition,
+                "success_rate",
+                summary["success_rate"],
+                "",
+                "",
+                "proportion_n4",
+                "directional_pilot",
+            ]
+        )
+
+    raypose = thought5_readonly["questions"]["raypose_lora_training_use"]
+    for variant in ("G3", "G4"):
+        rows.append(
+            [
+                "mechanism",
+                variant,
+                "all",
+                "ray_pose_tanh_gate",
+                raypose["variants"][variant]["ray_pose_tanh_gate"],
+                "",
+                "",
+                "scalar",
+                "posthoc_readonly_exploratory",
+            ]
+        )
+
+    with thought5_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle, lineterminator="\n")
+        writer.writerow(header)
+        writer.writerows(rows)
+
 
 def main() -> None:
     FIGURE_DIR.mkdir(parents=True, exist_ok=True)
@@ -657,6 +969,11 @@ def main() -> None:
     thought2 = load_json(SOURCES["thought2"])
     phase1 = load_json(SOURCES["thought3_phase1"])
     phase2 = load_json(SOURCES["thought3_phase2"])
+    thought5_representation = load_json(SOURCES["thought5_representation"])
+    thought5_future_geometry = load_json(SOURCES["thought5_future_geometry"])
+    thought5_future_utility = load_json(SOURCES["thought5_future_utility"])
+    thought5_rollout = load_json(SOURCES["thought5_rollout"])
+    thought5_readonly = load_json(SOURCES["thought5_readonly"])
     sample_rows = aggregate_development_samples(
         load_jsonl(SOURCES["thought3_phase2_a0_samples"]),
         load_jsonl(SOURCES["thought3_phase2_a1_samples"]),
@@ -670,11 +987,28 @@ def main() -> None:
         ),
         "figure4_phase2_per_sample.svg": figure_phase2_samples(sample_rows),
         "figure5_evidence_chain.svg": figure_evidence_chain(),
+        "figure6_thought5_pilot.svg": figure_thought5_pilot(
+            thought5_representation,
+            thought5_future_geometry,
+            thought5_rollout,
+            thought5_readonly,
+        ),
     }
-    write_tables(thought1, thought2, phase1, phase2, sample_rows)
+    write_tables(
+        thought1,
+        thought2,
+        phase1,
+        phase2,
+        sample_rows,
+        thought5_representation,
+        thought5_future_geometry,
+        thought5_future_utility,
+        thought5_rollout,
+        thought5_readonly,
+    )
 
     manifest = {
-        "schema_version": "fastwam_ood.paper_figures.v1",
+        "schema_version": "fastwam_ood.paper_figures.v2",
         "generator": "scripts/build_paper_figures.py",
         "source_artifacts": {
             key: {

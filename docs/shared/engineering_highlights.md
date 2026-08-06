@@ -4,12 +4,12 @@
 
 ## 1. 当前事实快照
 
-截至 2026-08-03：
+截至 2026-08-06：
 
 | 项目 | 状态 | 可用证据 |
 | --- | --- | --- |
 | 配置、planner、adapter、分片、resume、聚合 | 已实现 | `src/`、`configs/`、`tests/` |
-| 自动化测试 | 已通过 | 2026-08-03 `pytest -q`：443 passed、5 warnings；覆盖 Thought1–4、cache/Adapter、resume、泄漏、反事实、FP32 reconstruction 与 formal 编排 |
+| 自动化测试 | 已通过 | 2026-08-06 `pytest -q`：504 passed、5 warnings；覆盖 Thought1–5、cache/Adapter、resume、泄漏、反事实、FP32 reconstruction、三卡 worker 与只读失败分解 |
 | Conda 环境与激活入口 | 已配置 | `scripts/create_env.sh`、`scripts/activate_env.sh` |
 | checkpoint/stats | 已下载并人工校验 | checkpoint SHA-256 `1000437c...a49579`；stats SHA-256 `30f81ad7...68638` |
 | FastWAM 公共运行时模型 | 已下载并逐文件校验 | `scripts/download_fastwam_runtime_models.sh`；T5、VAE、tokenizer 共约 11.9 GiB |
@@ -39,6 +39,8 @@
 | 阶段三 Phase 2 matched training | VALID OFFLINE NEGATIVE | 双卡各 200×28 objectives；12/12 hard checks；A0 `+1.845%`、A1 `−1.712%`，A1 比 A0 高 `3.624%` 且 4/4 sample 更差 |
 | Thought4 FP32 smoke v8 | SMOKE 已通过 | 真实 `[1,98,3072]` BF16 capture；FP32 reconstruction 后 hidden SHA 逐位恢复、action L2=0；backbone SHA 不变 |
 | Thought4 formal v6 | FORMAL DIAGNOSTIC 完成 | 64 base states、256 paired samples、12,544 features、36 interventions；分类 `camera_equivariance_gap`；1,586 工件 manifest 全量只读复核 |
+| Thought5 三卡 Pilot v4 | VALID DIRECTIONAL PILOT / STOP | 单 task 8 train / 4 dev / 4 test；G3 Camera gap 缩小 20.94%<25%，future utility −0.005231，Camera success B1=G3=1/4；五项方向 Gate 全 false |
+| Thought5 只读失败分解 | POST-HOC READ-ONLY 完成 | 25 项 source SHA 前后不变；定位 Clean/低 sigma 伤害；RayPose gate/grad/injection 非零，但独立因果未识别；formal 保持锁定 |
 
 ## 2. 可以对外说明的工程亮点
 
@@ -64,6 +66,8 @@
 | 层级化正式分析与审计 | probe→episode→task 聚合、suite-stratified task bootstrap、首 probe sensitivity、outcome mismatch 排除、BH-FDR、媒体/trace 全量审计 | `diagnostics/formal_analysis.py`、`formal_analysis_v1/` | 40 task、10,000 bootstrap；4,040 media 0 decode error；175 tests passed |
 | FP32 geometry-subspace 干预 | 真实 BF16 capture 先升 FP32 做 basis/projection/reconstruction，只在 replacement 前一次 cast；correct 必须逐位恢复 | `thought4/geometry_intervention.py`、smoke v8 | hidden SHA 相同、correct action L2=0；不靠放宽 BF16 tolerance |
 | Probe-first 正式诊断 | 在 intervention 前原子提交全部 probe；dev-only 选层，test/OOD 不反向参与；correct/shuffle 与 replay floor 分离 | `thought4/phase4.py`、formal v6 | 256 paired samples、12,544 features；36/36 correct bitwise、36/36 shuffle 超 floor；backbone SHA 不变 |
+| 三卡异构 panel 调度 | B1/G3/G4 各占一张物理卡，同波执行 track/utility/rollout；worker 使用隔离的 LIBERO config 与逻辑 `cuda:0` | `thought5/panel.py`、`run_thought5_pilot.sh`、execution schedule | 三卡 Pilot 约 2h29m 完成；0 worker failure；调度只改变 wall-clock，不改变逐 variant seed/结果 |
+| 只读失败分解 | 对 25 个冻结 source 逐 SHA 验证，只解析现有 objective/action/training 工件，不加载模型、GPU、仿真或新 outcome | `thought5/readonly_failure_analysis.py`、独立 sibling namespace | condition/flow/action/RayPose/G3-G4 四问落盘；源 SHA 前后相同，原负 Gate 不变 |
 
 ## 3. 难点、阻碍、方案与剩余风险
 
@@ -536,7 +540,8 @@
   root 混用。修复统一覆盖 calibration/track/checkpoint，并拒绝 outside-root
   工件；原 rows 与 weight SHA 保留，只允许原目录 resume。
 - 验证：config/schema/CLI/runner、两卡 launcher、四 stage no-torch dry-run、
-  63 项相关测试和 397 项全量测试通过；原目录恢复后 A0/A1 各完成 200×28
+  当时 63 项相关测试和 397 项全量测试通过；当前全量回归已扩展为 504 项。
+  原目录恢复后 A0/A1 各完成 200×28
   objectives，12/12 hard checks、32/32 manifest descriptor、8/8 checkpoint
   provenance 通过。
 - 结果：A0 development loss 改善 `1.845%`，A1 恶化 `1.712%`；A1 final
@@ -567,6 +572,32 @@
 - 审计备注：formal v6 的 1,586-entry manifest 全部逐文件通过；
   `execution_integrity.json` 的自哈希只覆盖初始核心 payload，完整文件由 manifest
   SHA 覆盖。冻结输出保留原样，不追溯修补。
+
+### 3.35 三卡 Pilot 的进程环境、dtype 与调度必须相互独立
+
+- 问题：Thought5 的 B1/G3/G4 需要同波占用三张 4090；子进程若继承错误的
+  `PYTHONPATH`/LIBERO 配置会三轨同时 import 失败，pose auxiliary 的 FP32 tensor
+  又会与 BF16 K/V projection 发生 dtype 冲突。
+- 方案：主进程先运行 worker import preflight；每个 worker 生成隔离
+  `LIBERO_CONFIG_PATH`，只暴露一张物理 GPU 并在进程内使用逻辑 `cuda:0`；所有
+  RayPose/geometry 输入在进入目标 projection 前显式匹配 activation dtype/device。
+- 调度约束：两卡/三卡变化只允许改变 variant wave，不改变 cohort、seed、update、
+  checkpoint 或 Gate；execution schedule 单独冻结 SHA。
+- 结果：单 task Pilot v4 的 track、representation、future geometry、utility 和
+  rollout worker 全部完成，总墙钟约 2h29m，峰值显存 24,508.1 MiB；五项方向
+  Gate 为负是科学停止结果，不是 worker 或 dtype 异常。
+
+### 3.36 负 Gate 后只读定位，而不是继续消耗 formal 预算
+
+- 问题：Pilot 同时出现 G3 Camera gap 弱改善、G4 更小、aggregate future utility
+  为负；若直接挑 endpoint 或继续跑预计 28–45 小时 formal，会把 Pilot 变成调参集。
+- 方案：冻结当前 G3 recipe，只对已有 25 项工件做 CPU-only 分解；逐条件重算
+  A0−A1 utility、按 effective sigma 聚合 flow objective、检查 action-horizon
+  sensitivity、RayPose gate/grad/injection 与 G3/G4 参数/轨迹同向性。
+- 结果：G3 Clean utility `−0.015268`、Camera `+0.004807`；sigma<0.5 的 utility
+  约 `−0.0495/−0.0405`；RayPose 路径执行非零但缺少 gate-zero 因果对照；G3/G4
+  total trajectory correlation `0.999986`。因此只生成 condition-aware/low-noise
+  与 RayPose identification 新假设，原 `formal_unlocked=false` 不变。
 
 ## 4. 简历表达素材
 

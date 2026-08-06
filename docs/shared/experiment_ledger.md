@@ -1,6 +1,6 @@
 # 实验、卡点与结论台账
 
-更新日期：2026-08-03
+更新日期：2026-08-06
 
 本台账只记录可追溯事实。机器工件是权威来源，本文是便于论文、周报、简历和面试使用的索引。
 
@@ -59,6 +59,7 @@
 | `P5-SMOKE-v5` | 2026-08-04 | 5 / VALID GPU SMOKE | 单卡真实 Fast-WAM；B1/G3/G4；2 base states；三卡调度实现后的新 namespace | 三条 2-step track、representation/future/utility/rollout 技术链完整，dtype 与 worker import 修复后 status complete | 只解锁单 task Pilot；不是科学结果，不解锁 formal |
 | `P5-PILOT-v4` | 2026-08-05 | 5 / VALID DIRECTIONAL PILOT | commit `c7ab2153`；三张 4090；单 `libero_goal` task；8 train / 4 dev / 4 pilot-test；B1/G3/G4 matched | Camera gap G3 缩小 20.94%<25%；G3 correct utility −0.005231；Camera success B1=G3=1/4；五项 collector direction 与 training direction 全 false；约 2 h 29 min | 有效单 task 负 Gate；`formal_unlocked=false`，当前 G3 recipe 停止；不是 H1/H2/H3 多任务否证 |
 | `P5-PILOT-v4-READONLY-FAILURE-v1` | 2026-08-05 | 5 / POST-HOC READ-ONLY DIAGNOSTIC | Pilot v4 的 25 项输入逐 SHA 验证；CPU-only；0 model/GPU/train/simulator/rollout | G3 utility Clean −0.015268、Camera +0.004807；22/32 flow-slot 均值负，伤害集中 sigma<0.5；RayPose gate/grad/injection 非零；G3/G4 轨迹高度相似 | 只定位新假设；不改变 Pilot、不得调旧阈值；RayPose 独立因果及 inference denoise-step 仍不可识别，formal 保持锁定 |
+| `DOC-SNAPSHOT-20260806` | 2026-08-06 | SHARED / DOCUMENTATION AUDIT | Thought1–5 权威工件、论文作图脚本、简历 Markdown/Word | 六张论文 SVG、Thought5 派生 CSV、简历 1-page/11-page DOCX；全量 `504 passed, 5 warnings`；作图二次运行 SHA 完全一致 | 只冻结时间线、数据、逻辑链和对外口径；不新增或改变任何科学结果、Gate、阈值或 formal unlock |
 
 ### `P1-FORMAL-v1` 机器证据
 

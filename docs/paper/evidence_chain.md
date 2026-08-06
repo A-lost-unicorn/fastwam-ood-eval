@@ -1,16 +1,16 @@
-# 论文证据链：从 OOD 缺口、Future Utility 负结果到相机等变性诊断
+# 论文证据链：从 OOD 缺口、Future Utility 负结果到相机等变性干预
 
-更新日期：2026-08-05
+更新日期：2026-08-06
 适用范围：Fast-WAM 官方 `libero_uncond_2cam224` checkpoint、标准 LIBERO、
 LIBERO-Plus、本项目冻结的 K=1 Future-to-Action Adapter 配方，以及 Thought4
 冻结的 geometry–action diagnosis，以及 Thought5 的方法、单 task Pilot v4 和
 只读失败分解；Thought5 formal 多任务效果仍未运行。
 
-![Thought1 到 Thought3 的证据阶梯](figures/figure5_evidence_chain.svg)
+![Thought1 到 Thought5 的证据阶梯](figures/figure5_evidence_chain.svg)
 
 ## 1. 总结
 
-整条研究路线不是一次模型对比，而是五层逐级收紧的问题：
+整条研究路线不是一次模型对比，而是六层逐级收紧的问题：
 
 1. **行为事实**：Fast-WAM 在环境 OOD 下是否掉点？
 2. **观察关联**：模型生成的 shadow future 在 OOD 下是否更不一致，并与失败相关？
@@ -18,12 +18,14 @@ LIBERO-Plus、本项目冻结的 K=1 Future-to-Action Adapter 配方，以及 Th
 4. **任务效用**：让动作读取 K=1 future 后，是否真的改善 held-out 目标或 OOD success？
 5. **缺口定位**：Camera OOD 的主要问题更接近 geometry unreadability、
    action interface gap，还是 camera equivariance gap？
+6. **针对性干预**：按机制诊断设计的 GeoEq 配方，能否同时改善表征、future
+   utility 与 Camera rollout success？
 
 前三层分别得到“是、是、是”；第四层在当前冻结配方上的离线答案是“没有观察到
 改善”。第五层进一步发现 Clean geometry 在 Video/Action 表征中可读、Camera
 扰动造成的 exact-state gap 显著大于 Lighting，且一个冻结的 rank-3 geometry
 subspace 干预会改变动作，因此将下一方法假设定位为 `camera_equivariance_gap`。
-Thought5 又验证了一个更具体的机制配方：G3 将 Camera representation gap 缩小
+第六层的 Thought5 又验证了一个更具体的机制配方：G3 将 Camera representation gap 缩小
 20.94%，但未达到 25% 门槛，absolute future utility 仍为负且 Camera rollout
 未改善。因此论文最稳健的主结论仍是：
 
@@ -244,6 +246,8 @@ geometry subspace：
 | Camera future geometry RMSE | 0.341277 | 0.341320 | 0.341331 | 主指标无改善 |
 | Correct future utility | −0.015649 | −0.005231 | −0.011302 | G3 缓解伤害但仍为负 |
 | Camera rollout success | 1/4 | 1/4 | 0/4 | G3 对 B1 无提升 |
+
+![Thought5 单任务 Pilot 与只读 condition 分解](figures/figure6_thought5_pilot.svg)
 
 所有 worker/collector 均 complete，但 training、representation、future geometry、
 future utility 和 rollout 五项方向 Gate 全 false，因此 `formal_unlocked=false`。

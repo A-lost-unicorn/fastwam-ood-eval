@@ -5,7 +5,7 @@
 **作者：** 待填写  
 **单位：** 待填写  
 **联系邮箱：** 待填写  
-**稿件状态：** 完整研究草稿，证据冻结于 2026-08-03
+**稿件状态：** 完整研究草稿，证据冻结于 2026-08-06
 
 ---
 
@@ -14,9 +14,9 @@
 世界动作模型可以在生成机器人动作的同时建模视觉未来，但测试时是否必须显式
 想象未来，尤其在环境分布外（out-of-distribution, OOD）条件下，仍缺少分层且
 可识别的实证分析。本文以官方 Fast-WAM `libero_uncond_2cam224` checkpoint
-为对象，构建从行为评测、离线一致性、技术反事实、轻量 Adapter 效用到机制
-定位的五层
-证据链。首先，在冻结权重、动作接口和基础任务后，我们完成 800 个标准 LIBERO
+为对象，构建从行为评测、离线一致性、技术反事实、轻量 Adapter 效用、机制
+定位到针对性方法干预的六层证据链。首先，在冻结权重、动作接口和基础任务后，
+我们完成 800 个标准 LIBERO
 与 6,771 个 runnable LIBERO-Plus rollout。成功率从 97.25% 降至 47.70%，
 绝对下降 49.55 个百分点；相机视角扰动最严重，成功率仅 15.13%。其次，在
 732 个 episode、1,010 个不反馈控制的 shadow future probe 上，OOD 相对
@@ -34,8 +34,12 @@ K=0 的 held-out action objective 改善 1.845%，K=1 则恶化 1.712%；K=1
 exact-state paired diagnosis 中发现 Video Camera−Clean geometry error gap
 为 0.020273 m，高于 Lighting 的 0.011660 m；probe-defined rank-3 geometry
 subspace 的 shuffle 在 36/36 次离线干预中使动作超过 replay floor，而 correct
-control 逐位恢复。冻结分类为 `camera_equivariance_gap`，但尚未训练或评测
-Geo-REPA 等新方法。
+control 逐位恢复。冻结分类为 `camera_equivariance_gap`。基于该诊断，我们又
+预注册并三卡运行单任务 Fast-WAM-GeoEq Pilot：G3 使 Camera representation
+gap 缩小 20.94%，未达到 25% 门槛，主 future geometry RMSE 未改善，correct
+future utility 仍为 −0.005231，Camera success 与基线同为 1/4。五项方向门禁
+均为 false，故停止当前配方并锁定正式多任务实验。只读失败分解进一步将伤害
+定位于 Clean/低 effective-sigma objective，但不能独立识别 RayPose 的因果贡献。
 结果表明，**future 内容能影响动作并不意味着 future 对控制有用**。本文既不
 证明 Fast-WAM 在 OOD 中普遍不需要未来，也不证明未来无效；它给出一个可复现的
 负结果与方法学结论：future prediction、future-conditioned action sensitivity
@@ -49,11 +53,11 @@ Geo-REPA 等新方法。
 World action models can jointly model visual futures and robot actions, yet it
 remains unclear whether explicit test-time future imagination is necessary,
 particularly under out-of-distribution (OOD) environment shifts. We present a
-five-level evidence audit of the released Fast-WAM
+six-level evidence audit of the released Fast-WAM
 `libero_uncond_2cam224` checkpoint, separating behavioral robustness,
 observational future consistency, technical action sensitivity, downstream
-utility, and mechanism localization. First, with model weights, action
-interfaces, and base tasks frozen,
+utility, mechanism localization, and targeted intervention. First, with model
+weights, action interfaces, and base tasks frozen,
 we execute 800 standard LIBERO and 6,771 runnable LIBERO-Plus rollouts.
 Success drops from 97.25% to 47.70%, an absolute decrease of 49.55 percentage
 points; camera perturbations are most severe at 15.13% success. Second, across
@@ -77,7 +81,14 @@ Video Camera-minus-Clean geometry-error gap is 0.020273 m, compared with
 0.011660 m for Lighting. Shuffling a probe-defined rank-3 geometry subspace
 changes actions above the replay floor in 36/36 offline interventions, while
 the correct reconstruction is bitwise exact. This yields the frozen diagnosis
-`camera_equivariance_gap`, not evidence that a proposed remedy already works.
+`camera_equivariance_gap`. We then preregister and run a three-GPU, single-task
+Fast-WAM-GeoEq pilot. G3 reduces the Camera representation gap by 20.94%, below
+the 25% gate; the primary future-geometry RMSE does not improve, correct-future
+utility remains negative at −0.005231, and Camera success is unchanged at 1/4.
+All five directional gates are false, so the recipe is stopped before formal
+multitask evaluation. A post-hoc read-only decomposition localizes damage to
+Clean/low-effective-sigma objectives but cannot isolate the causal contribution
+of RayPose.
 Our central finding is that **future sensitivity is not future utility**.
 The study does not establish that future imagination is universally
 unnecessary; instead, it provides a reproducible negative result and an
@@ -120,7 +131,8 @@ Fast-WAM 在标准 LIBERO [2] 与 LIBERO-Plus [3] 环境扰动之间的真实性
 Future-to-Action Adapter，通过输入反事实确认 future 是否进入动作，最后使用
 matched K=0/K=1 训练检查这种依赖能否转化为 held-out action objective 收益，
 并用冻结的 geometry–action probe 与离线 subspace intervention 定位最严重的
-Camera 缺口属于哪一类机制。
+Camera 缺口属于哪一类机制；最后预注册针对该机制的 GeoEq Pilot，检验表征变化
+是否能进一步转化为 future utility 与 paired rollout success。
 
 本文的主要贡献如下：
 
@@ -140,10 +152,15 @@ Camera 缺口属于哪一类机制。
 6. **Camera 缺口的冻结机制诊断。** 通过 exact-state Camera/Lighting 对照、
    跨 seed linear probe、FP32 subspace arithmetic 与 correct/shuffle 动作干预，
    将下一方法假设定位为 camera equivariance，而不把离线动作变化写成成功率。
+7. **针对性方法的负向 Pilot 与失败分解。** 三卡 matched B1/G3/G4 Pilot 未通过
+   representation、future geometry、future utility 或 rollout 方向门禁；我们停止
+   正式多任务实验，并用不改写源工件的只读分析将下一假设收窄到条件/噪声依赖与
+   RayPose/共享正则化识别。
 
 本文的结论不是“未来无用”，而是一个更窄也更可靠的命题：在所测 Fast-WAM
 checkpoint 与轻量 K=1 Adapter 配方下，future 的动作敏感性没有转化为
-held-out 离线效用。OOD success 的 future 因果效应仍待独立研究。
+held-out 离线效用；针对 Camera 等变性缺口的当前 G3 配方也没有形成单任务 Pilot
+的闭环收益。OOD success 的 future 总体因果效应仍待独立研究。
 
 ## 2. 相关工作
 
@@ -283,14 +300,16 @@ A0 用于分离“新增 Adapter/训练”与“future 内容”的影响；它�
 - **RQ5：** 现有证据是否足以回答 future 能否改善 OOD success？
 - **RQ6：** 最严重的 Camera OOD 缺口更符合 geometry unreadability、action
   interface gap，还是 camera equivariance gap？
+- **RQ7：** 针对该缺口的 GeoEq 配方能否在单任务方向性 Pilot 中同时改善
+  representation、future utility 与 Camera rollout success？
 
 ## 4. 方法
 
 ### 4.1 总体证据阶梯
 
-![从 Thought 1 到 Thought 3 的 future-utility 证据阶梯](figures/figure5_evidence_chain.svg)
+![从 Thought 1 到 Thought 5 的分层证据阶梯](figures/figure5_evidence_chain.svg)
 
-五层证据使用独立 namespace 和输出目录。Thought 1/2 冻结后，Thought 3
+六层证据使用独立 namespace 和输出目录。Thought 1/2 冻结后，Thought 3
 不能修改其 runner、结果或 checkpoint。每一阶段只在前一阶段回答了更弱问题后
 进入更强干预；工程失败不登记为科学结果。
 
@@ -438,6 +457,30 @@ SE(3) motion。probe 选择只读 development；test/OOD 不参与层选择。�
 correct action L2 为 0。该实验只读取冻结表征和离线动作 tensor，不执行环境
 action，不读取 success，也不评测任何新方法。
 
+### 4.8 Thought 5：Camera-equivariant GeoEq 方向性 Pilot
+
+Thought4 的冻结分类只解锁一个新候选，而不预先保证其有效。我们在
+action-consumed `mot.video_kv_cache.15.v` 对应的 Video layer-15 K/V projection
+安装 rank-8 LoRA；G3 同时使用训练期 Geo-REPA、relative camera pose、per-token
+camera rays 与 equivariance/pose auxiliary objective。GeoProjector 在推理时移除，
+GT depth 不进入策略输入。G4 只打乱逐样本 Geo-REPA correspondence，保留与 G3
+相同的 RayPose、equivariance/pose loss 与 LoRA 训练，因此它是 specificity control，
+不是“所有 geometry 都被移除”的 control。B1/G3/G4 的 trainable parameter budget
+均为 1,335,320，Action DiT 保持冻结。
+
+Pilot 使用一个 `libero_goal` task、互斥的 8 train / 4 development / 4 pilot-test
+episode，并在三张 4090 上 matched 执行三条 track。预注册方向要求同时检查：
+
+1. G3 Camera representation gap 相对 B1 至少缩小 25%，且不能由 G4 解释；
+2. 主 K=1 future geometry error 改善；
+3. correct future 相对 null 的 absolute utility 为正，并优于 shuffle；
+4. Camera paired rollout success 提高且 Clean 不劣；
+5. training/development 方向与所有工程 hard checks 通过。
+
+Pilot 未过门后，当前 G3 recipe 与 formal 多任务阶段立即锁定。后续分析仅在
+CPU 上读取既有工件，逐 SHA 验证源文件前后不变；其 condition/sigma/RayPose
+结论属于 post-hoc exploratory diagnosis，不能反向修改上述 Gate。
+
 ## 5. 实验设置
 
 ### 5.1 模型与软件
@@ -464,6 +507,9 @@ LIBERO-Plus commit 分别为 `8f1084e...` 与 `4976dc30...`。
 | Phase 2 training | A0 / A1 objective | 5,600 / 5,600 |
 | Thought 4 | base state / paired render | 64 / 256 |
 | Thought 4 | feature row / intervention comparison | 12,544 / 36 |
+| Thought 5 Pilot | train / development / pilot-test episode | 8 / 4 / 4 |
+| Thought 5 Pilot | matched variant / condition rollout | 3 / 48 |
+| Thought 5 utility | variant × condition × flow objective | 3 × 2 × 128 |
 
 这些分母服务于不同研究问题，不能相加成一个“总样本量”，也不能将 Phase 1 的
 8/8 或 Phase 2 的 4/4 表述为机器人成功率。
@@ -479,6 +525,8 @@ sample，按预注册方向作描述性判定，不追加事后显著性检验�
 跨三 seed 报告 frozen control；Camera/Lighting 使用 exact-state paired gap，
 selected-coordinate contrast 使用按 base state 分组的 2,000 次 bootstrap。
 Robot-init 不满足 exact-state，因此不能进入同等级的机制判定。
+Thought5 只作单 task 方向门禁；每 condition 的 4 个 rollout 不做总体推断。
+只读 condition bootstrap 是结果后探索性定位，不替换 Pilot primary endpoint。
 
 ### 5.4 硬件与审计
 
@@ -488,7 +536,8 @@ Robot-init 不满足 exact-state，因此不能进入同等级的机制判定。
 reserved memory、状态文件、config fingerprint、source/checkpoint SHA 和
 artifact checksum。Thought4 formal v6 使用单张 RTX 4090，耗时 4,728.05 秒
 （1:18:48）；1,586-entry artifact manifest 的逐文件路径、大小与 SHA 已只读
-复核。
+复核。Thought5 Pilot 使用三张 4090 同波执行 B1/G3/G4，总墙钟约 2 小时 29 分，
+峰值显存 24,508.1 MiB；只读失败分解不使用 GPU、模型、仿真或新 rollout。
 
 ## 6. 结果
 
@@ -657,6 +706,37 @@ RQ6 的冻结答案是：**证据最符合 `camera_equivariance_gap`。** 推荐
 为 `Geo-REPA + relative pose / camera-ray equivariance`；该推荐是待检验假设，
 不是方法效果或 OOD success 结果。
 
+### 6.7 RQ7：针对性 GeoEq 配方产生弱表征变化，但未形成效用
+
+三条 matched track 与全部 collector 均执行完成；负判定不是运行故障。G3 的
+Camera representation gap 从 B1 的 0.002246 降至 0.001776，即缩小 20.94%，
+低于预注册 25% 门槛；G3−B1 grouped bootstrap interval
+`[−0.001146, 0.000175]` 跨 0。G4 的 gap 为 0.001666，反而缩小 25.82%，因此
+G3 的变化不能被归因于正确逐样本 Geo-REPA correspondence。
+
+主 Camera future-geometry RMSE 为 B1 0.341277、G3 0.341320、G4 0.341331，
+没有改善。aggregate correct-future utility（`loss(null)−loss(correct)`）由 B1
+的 −0.015649 缓解为 G3 的 −0.005231，但 G3 的 95% interval
+`[−0.008987, −0.001763]` 仍完全为负；correct 虽优于 shuffle，却仍劣于 null。
+paired rollout 中 B1/G3 的 Clean 与 Camera 均为 1/4，Lighting 与 Robot-init
+均为 4/4；Camera 没有 gain。training、representation、future geometry、future
+utility 与 rollout 五项方向 Gate 全为 false，`formal_unlocked=false`。
+
+![Thought5 单任务方向性 Pilot 与只读 condition 分解](figures/figure6_thought5_pilot.svg)
+
+只读失败分解显示，G3 utility 在 Clean 为 −0.015268，在 Camera 为 +0.004807；
+伤害主要集中于 effective sigma<0.5 的 flow objective。RayPose gate、梯度和
+residual injection 均非零，说明路径执行且更新；但没有 matched gate-zero
+checkpoint，LoRA 与 RayPose 又同时变化，故其独立因果贡献不可识别。G3/G4
+training total trajectory correlation 为 0.999986，Video-source feature-delta
+方向 cosine 均值为 0.938498，更符合共享 conditioning/auxiliary loss/regularization
+解释，而非已确认的正确 correspondence 学习；由于 G1/G2 未运行，解释之间仍
+不能选择。
+
+RQ7 的答案是：**当前 G3 配方没有通过单任务方向性 Pilot，不能扩展到正式多任务
+实验。** 该结果反对继续运行同一 recipe，而不否定 Thought4 的 Camera gap，也
+不等于 Geo-REPA 或 camera-ray conditioning 的普遍无效性。
+
 ## 7. 讨论
 
 ### 7.1 为什么“敏感”不等于“有用”
@@ -777,45 +857,17 @@ commit/SHA、deterministic seed、atomic artifact 和 checksum 降低风险，�
 不覆盖随后追加的 runtime/smoke/probe 字段。完整文件仍由 manifest 的文件 SHA
 覆盖；该作用域缺陷被保留和披露，不原地修补冻结结果。
 
-### 8.6 Thought5：单 task 定向干预与停止结果
+### 8.6 Thought5 的 Pilot 有效性边界
 
-Thought4 的冻结分类只解锁了一个独立后续分支：Fast-WAM-GeoEq。该分支在
-action-consumed `mot.video_kv_cache.15.v` 对应的 Video layer-15 K/V projection
-安装 rank-8 LoRA，以 simulator geometry 构造训练期 Geo-REPA target，并把
-relative camera pose 与 per-token rays 作为轻量 residual conditioning 注入同一
-K/V-producing hidden。Action DiT 保持冻结，GeoProjector 在推理时移除，GT
-depth 不进入策略输入。
-
-Future geometry 的评测不复用这个训练头。所有 backbone 都使用相同的 layer-15
-future-token signed projection（3072→128）与 linear-ridge probe；probe 仅在
-training cohort 拟合，development 冻结正则，formal 只读，以避免“G3 的 decoder
-被训练而 B1 的 decoder 未训练”这一混淆。
-
-Phase 5 预注册 B0、matched B1、G1、G2、G3 与 shuffled G4，并以互斥
-train/development/formal cohort 依次检验：Camera representation gap 是否至少
-缩小 25%，K=1 correct future 是否相对 null/shuffle 获得 held-out utility，以及
-Camera rollout success 是否提高且 Clean 不劣。完成 audit、CPU/mock 与真实 smoke
-后，我们在一个 `libero_goal` task 上以三张 4090 matched 运行 B1/G3/G4 Pilot v4
-（8 train、4 development、4 pilot-test episode）。
-
-G3 的 Camera representation gap 从 B1 的 0.002246 降至 0.001776，缩小
-20.94%，低于预注册的 25% 门槛；G4 为 0.001666，反而更小。主 future Camera
-geometry RMSE 从 0.341277 变为 0.341320，没有改善。G3 的 correct-future utility
-相对 B1 从 −0.015649 缓解为 −0.005231，但 absolute utility 仍为负；Camera
-rollout success 则为 B1=G3=1/4。training、representation、future geometry、
-future utility 与 rollout 五项方向 Gate 均为 false，故 `formal_unlocked=false`，
-当前 G3 recipe 按协议停止。这是有效的单 task 方向性负 Gate，不是 H1/H2/H3 的
-正式多任务否证。
-
-随后仅用已有工件做 post-hoc 只读失败分解。G3 utility 在 Clean 为 −0.015268，
-Camera 为 +0.004807；伤害集中于低 effective-sigma flow objective。RayPoseEncoder
-的 gate、记录梯度和重建 residual injection 均非零，但没有 gate-zero ablation，
-无法识别其独立因果贡献。G3/G4 的训练轨迹、参数与 video feature-delta 高度同向；
-又因 G4 只 shuffle Geo-REPA correspondence 而保留正确 equivariance/pose loss，
-现有结果不能把 G3 的表征变化归因于正确逐样本几何学习。完整预注册、Pilot 登记和
-只读边界分别见 [Thought5 协议](../thought5/protocol.md)、
+Thought5 的结果已在 6.7 节报告，但其外部与统计边界需要单列。该 Pilot 只有一个
+task、一个训练 seed、8/4/4 episode split 和每 condition 4 个 rollout；它只能
+决定当前 G3 recipe 是否值得进入 formal，不能作为 H1/H2/H3 的多任务否证。
+G4 只 shuffle Geo-REPA correspondence，仍保留正确 equivariance/pose loss 与
+RayPose，因此也不能把全部共享变化解释为普通正则化。结果后的 condition/sigma
+bootstrap 仅用于生成新假设，不能回改 25% 门槛、选择 checkpoint 或重新使用同一
+Pilot endpoint。完整边界见 [Thought5 协议](../thought5/protocol.md)、
 [Pilot v4 结果](../thought5/pilot_v4_results.md)与
-[失败分解](../thought5/pilot_v4_readonly_failure_analysis.md)。
+[只读失败分解](../thought5/pilot_v4_readonly_failure_analysis.md)。
 
 ## 9. 结论
 
@@ -854,9 +906,10 @@ low-noise mitigation 与 RayPose/regularization identification，不能用于放
 代码、配置、阶段协议、结果解释和自动作图脚本均位于本项目。机器权威结果保存在
 `outputs/`；论文数字来源与 SHA、重绘命令和实验入口见
 [复现文档](reproducibility.md)。论文图表不手工录入数字，由
-`scripts/build_paper_figures.py` 从冻结 JSON/JSONL 生成；Thought4 的冻结数值另
-收录于 [Thought4 结果表](tables/thought4_diagnosis.csv)，并由正式工件 SHA
-与 manifest 追溯。
+`scripts/build_paper_figures.py` 从冻结 JSON/JSONL 生成；Thought4 与 Thought5
+的冻结数值分别收录于 [Thought4 结果表](tables/thought4_diagnosis.csv)和
+[Thought5 Pilot/诊断表](tables/thought5_pilot_diagnostics.csv)，并由正式工件
+SHA 与 figure manifest 追溯。
 
 ## 伦理与安全声明
 
@@ -918,7 +971,8 @@ arXiv:2301.04104, 2023.
 | Camera representation gap 大于 Lighting | 支持 | exact-state paired panel；冻结 layer/probe |
 | rank-3 geometry subspace 影响动作 | 支持 | 12 test state×3 seed；离线 tensor intervention |
 | Robot-init 是独立同类机制 | 不支持 | 非 exact-state；distinct-pattern=false |
-| Geo-REPA / relative pose / camera rays 改善 OOD | 未回答 | 方法未训练、未 rollout |
+| 当前 G3 GeoEq 配方改善 Camera OOD | Pilot 不支持 | 单 task 8/4/4；gap 未过门；future utility<0；Camera 1/4=1/4 |
+| Geo-REPA / RayPose 普遍有效或无效 | 未回答 | G4 非完整 geometry control；缺 G1/G2/gate-zero 与多任务 formal |
 
 ## 附录 B：关键资源开销
 
@@ -931,6 +985,8 @@ arXiv:2301.04104, 2023.
 | Phase 1 correct−null | +258.95 ms（+6.17%） | 执行约 13.01 GiB | K=1 在线增量，n=8 |
 | Phase 2 training | 约 17.3 s/update | 13,277 MiB | 训练更新，不是推理 |
 | Thought4 smoke v8 | 10:55.90 total | 未作为部署显存 | 数值/干预门禁，不是科学结果 |
+| Thought4 formal v6 | 1:18:48 total | 单张 RTX 4090 | 机制诊断，不是 rollout |
+| Thought5 Pilot v4 | 2:29 total | 24,508 MiB | 三卡单 task 方向性 Pilot；formal 未运行 |
 | Thought4 formal v6 | 1:18:48 total | 单张 RTX 4090 | 冻结离线机制诊断，不是 rollout |
 
 ## 附录 C：工程失败与科学负结果

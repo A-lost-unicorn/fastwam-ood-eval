@@ -45,6 +45,9 @@ Thought 5：Geo-REPA + relative pose/rays 单 task Pilot
 [论文证据链](paper/evidence_chain.md)；可直接修改投稿的正文见
 [完整论文草稿](paper/manuscript.md)。
 
+2026-07-27—08-06 的逐日时间线、关键实验数字、逻辑链和简历价值点已统一冻结在
+[最近工作档案](shared/recent_work_2026-07-27_to_2026-08-06.md)。
+
 ## 维护规则
 
 1. 新实验先写协议，再运行，再写结果；协议与结果不混写。

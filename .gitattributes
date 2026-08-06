@@ -1,0 +1,2 @@
+# Matplotlib emits multiline SVG path data with a trailing separator.
+docs/paper/figures/*.svg whitespace=-trailing-space

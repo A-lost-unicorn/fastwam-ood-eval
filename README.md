@@ -52,6 +52,13 @@ A0 高 3.624%，4/4 development sample 更差。冻结分类为
 反事实复验、OOD rollout、A2/A4 和 outcome-driven 调参均未解锁。当前论文
 结论是“future sensitivity 不等于 future utility”，不是“future 普遍无用”。
 
+Thought4 随后用 64 个 base state、256 个 paired sample 与 36 个可逆 hidden
+intervention 将最严重的 Camera 缺口冻结为 `camera_equivariance_gap`。Thought5
+实现 1.335M 参数 GeoEq 候选并完成三卡单 task B1/G3/G4 Pilot：G3 Camera gap
+缩小 20.94% 但未过 25% 门槛，future utility 仍为 −0.005231，Camera success
+与基线同为 1/4。五项方向 Gate 全 false，当前 recipe 停止、formal 锁定；
+post-hoc 只读分解只生成 Clean/低 sigma 与 RayPose identification 新假设。
+
 当前 pinned Fast-WAM 代码与 release 权重带来四个结论边界：
 
 - 跨环境：可评测。训练配置只列标准 LIBERO 数据，LIBERO-Plus 官方变体可作为 unseen environment shift。
@@ -66,12 +73,16 @@ A0 高 3.624%，4/4 development sample 更差。冻结分类为
 
 - [文档中心](docs/)：按 shared、Thought 1/2/3 和 paper 分类的总入口。
 - [完整论文草稿](docs/paper/manuscript.md)：传统论文结构、图表、结果与限制。
-- [论文证据链](docs/paper/evidence_chain.md)：Phase 1→2、Thought 1→3 及从 0 到 1 的过程。
+- [论文证据链](docs/paper/evidence_chain.md)：Phase 1→2、Thought 1→5 及从 0 到 1 的过程。
 - [Thought 1](docs/thought1/) / [Thought 2](docs/thought2/) /
-  [Thought 3](docs/thought3/)：各阶段协议、结果和结论边界。
+  [Thought 3](docs/thought3/) / [Thought 4](docs/thought4/) /
+  [Thought 5](docs/thought5/)：各阶段协议、结果和结论边界。
 - [研究总控](docs/shared/research_index.md) /
   [实验台账](docs/shared/experiment_ledger.md) /
   [工程与简历素材](docs/shared/engineering_highlights.md)：跨阶段记录。
+- [最近工作冻结档案](docs/shared/recent_work_2026-07-27_to_2026-08-06.md)：
+  07-27—08-06 时间线、关键数据、逻辑链和简历价值点。
+- [简历材料](docs/resume/)：一页简版、详细面试版及对应 Word 文档。
 
 ## 4. 项目架构图
 

@@ -5,6 +5,7 @@
 | 文档 | 用途 |
 | --- | --- |
 | [research_index.md](research_index.md) | 研究总控、证据等级与当前状态 |
+| [recent_work_2026-07-27_to_2026-08-06.md](recent_work_2026-07-27_to_2026-08-06.md) | 最近十天时间线、数据、逻辑链与简历价值点冻结档案 |
 | [experiment_ledger.md](experiment_ledger.md) | 每次实验、失败尝试、卡点和结论台账 |
 | [engineering_highlights.md](engineering_highlights.md) | 工程难点、量化成果与简历素材 |
 | [architecture.md](architecture.md) | 评测系统架构 |
@@ -16,4 +17,3 @@
 
 论文阅读不需要顺序通读本目录；优先从
 [论文证据链](../paper/evidence_chain.md)开始，再按证据引用回查。
-

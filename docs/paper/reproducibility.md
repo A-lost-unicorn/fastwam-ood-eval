@@ -20,6 +20,13 @@
 | Thought 4 intervention | `outputs/thought4/phase4_geometry_action_diagnosis_v6/intervention_results.json` | `8aeaf2fda57870f512787c9f63ff67b86b9c161c30d3f13b3a81af4aaa601b9c` |
 | Thought 4 method selection | `outputs/thought4/phase4_geometry_action_diagnosis_v6/method_selection.json` | `8fdd9417803b072ec4af160eb395a06d792d0e613c437d27c68a05ccec68c79b` |
 | Thought 4 artifact manifest | `outputs/thought4/phase4_geometry_action_diagnosis_v6/artifact_manifest.json` | `d1c5ef118a0cc5950790b5d425f25c8c89c32ec0183c2d376b2baf01004912af` |
+| Thought 5 Pilot direction | `outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/pilot_direction.json` | `1bb2944d196253b7002daaa87f340bbad61c86e4e7e2a3e05f0c0fbe46a98c3d` |
+| Thought 5 representation | `outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/representation_results.json` | `5604d8ff8f6de52ae1744feb856f0678dcddb19e3f5e953fdfef6be52b8a5efa` |
+| Thought 5 future geometry | `outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/future_geometry_results.json` | `582d836ff2b28eb2febef5627007975c460be7a83c73bbc2f5ebe7b1bbdaa4a2` |
+| Thought 5 future utility | `outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/future_utility_results.json` | `612c8f8cecdf9d3ade8e033aa6d996de4dd083d676c8a03bcd382a543d998bba` |
+| Thought 5 rollout | `outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/rollout_results.json` | `fac48a4b92a59820c77efcd6ca1e64bdc24ca0640fa26202b0782a2da943aa3e` |
+| Thought 5 read-only diagnosis | `outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4_readonly_failure_v1/analysis_result.json` | `a5d5c99808773ea2f1fd84bb198d0c1f034dee4841cef4db84754bd5c7826f1f` |
+| Thought 5 derived manifest | `outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4_readonly_failure_v1/artifact_manifest.json` | `c94f924586d033002b7b4143241bc4e138a3e70bcb81800b4767537edcc19911` |
 
 作图脚本会重新计算并记录这些 SHA，见
 [figure data manifest](figures/data_manifest.json)。若任一来源 hash 变化，应先
@@ -57,12 +64,15 @@ MPLCONFIGDIR=/tmp/fastwam-paper-mpl \
 - `docs/paper/figures/figure3_sensitivity_vs_utility.svg`
 - `docs/paper/figures/figure4_phase2_per_sample.svg`
 - `docs/paper/figures/figure5_evidence_chain.svg`
+- `docs/paper/figures/figure6_thought5_pilot.svg`
 - `docs/paper/tables/core_results.csv`
 - `docs/paper/tables/phase2_per_sample.csv`
+- `docs/paper/tables/thought5_pilot_diagnostics.csv`
 
-Thought4 暂未加入五张旧图的自动生成脚本；其冻结数值以
-[`tables/thought4_diagnosis.csv`](tables/thought4_diagnosis.csv) 保存，并逐项
-追溯到 formal v6 JSON。不得把该 CSV 当成独立机器权威来源。
+Thought4 的冻结数值以 [`tables/thought4_diagnosis.csv`](tables/thought4_diagnosis.csv)
+保存；Thought5 Pilot 与只读诊断由脚本生成
+[`tables/thought5_pilot_diagnostics.csv`](tables/thought5_pilot_diagnostics.csv)。
+两份 CSV 都是论文派生表，不是独立机器权威来源；必须追溯对应 JSON 与 SHA。
 
 图 1 的误差线来自 Thought 1 row-bootstrap CI；图 2 的差值区间来自 40 task
 等权、suite-stratified task-cluster bootstrap 10,000 次。图 3 的 Phase 1
@@ -149,6 +159,29 @@ v8 smoke 耗时 655.90 秒；formal v6 耗时 4,728.05 秒，冻结分类为
 `camera_equivariance_gap`。完整数值、claim boundary 与下一分支见
 [formal v6 结果报告](../thought4/formal_v6_results.md)。
 
+### Thought 5：三卡 Pilot 与 CPU-only 只读分解
+
+Pilot v4 已完成并触发停止规则。以下命令只登记原入口；不得覆盖、resume 或用同一
+Pilot endpoint 调参后重跑：
+
+```bash
+CONFIRM_THOUGHT5_PILOT=YES \
+THOUGHT5_GPU_IDS=0,1,2 \
+bash scripts/run_thought5_pilot.sh
+```
+
+权威运行约 2 小时 29 分，`formal_unlocked=false`。因此 formal 命令当前禁止执行。
+现有工件的失败分解可以 CPU-only 重建到独立 sibling namespace；它不会加载模型、
+GPU、仿真或新 outcome：
+
+```bash
+bash scripts/run_thought5_pilot_v4_readonly_failure_analysis.sh
+```
+
+分析前后验证 25 项 source SHA 不变。完整停止边界见
+[Pilot v4 结果](../thought5/pilot_v4_results.md)和
+[只读失败分解](../thought5/pilot_v4_readonly_failure_analysis.md)。
+
 Thought 1 和 Thought 2 的完整首次运行命令、显存门禁、后台运行及恢复方式分别见
 [Thought 1 手册](../thought1/execution_guide.md)和
 [Thought 2 手册](../thought2/execution_guide.md)。
@@ -166,6 +199,9 @@ python scripts/check_docs.py
 ```bash
 .conda/envs/fastwam-ood/bin/pytest -q
 ```
+
+2026-08-06 的当前全量结果为 `504 passed, 5 warnings`；5 个 warning 均来自
+测试环境无法初始化 NVML，不是断言失败。
 
 格式与路径：
 

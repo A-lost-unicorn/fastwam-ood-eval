@@ -190,12 +190,75 @@
           "grade": "Offline negative result \u00b7 STOP",
           "question": "Does K=1 improve\nheld-out utility?",
           "title": "Thought 3 \u00b7 Phase 2"
+        },
+        {
+          "color": "#FBE7D6",
+          "evidence": "64 states / 36 interventions",
+          "finding": "Camera gap > Lighting\n36/36 action effect",
+          "grade": "Frozen mechanism diagnosis",
+          "question": "Where is the dominant\nCamera failure localized?",
+          "title": "Thought 4"
+        },
+        {
+          "color": "#F5DADA",
+          "evidence": "3-GPU matched pilot; 8/4/4",
+          "finding": "Gap \u221220.94%; utility < 0\nNo Camera success gain",
+          "grade": "Directional pilot \u00b7 STOP",
+          "question": "Does targeted GeoEq\nrepair utility?",
+          "title": "Thought 5"
         }
       ]
+    },
+    "figure6_thought5_pilot.svg": {
+      "camera_future_geometry_rmse": {
+        "B1": 0.3412765085319087,
+        "G3": 0.3413198196775955,
+        "G4": 0.3413307979940417
+      },
+      "camera_representation_gap": {
+        "B1": 0.0022461169864982367,
+        "G3": 0.0017757044018556674,
+        "G4": 0.0016662330987552802
+      },
+      "future_utility_by_condition": {
+        "B1": {
+          "Camera": -0.009729654758757533,
+          "Clean": -0.02156910815097035
+        },
+        "G3": {
+          "Camera": 0.00480727901958744,
+          "Clean": -0.015268401824187094
+        },
+        "G4": {
+          "Camera": -0.0038922400367482624,
+          "Clean": -0.018711703793314882
+        }
+      },
+      "pilot_success_rate": {
+        "B1": [
+          0.25,
+          0.25,
+          1.0,
+          1.0
+        ],
+        "G3": [
+          0.25,
+          0.25,
+          1.0,
+          1.0
+        ],
+        "G4": [
+          0.25,
+          0.0,
+          1.0,
+          1.0
+        ]
+      },
+      "preregistered_g3_threshold": 0.0016845877398736775
     }
   },
   "generator": "scripts/build_paper_figures.py",
-  "schema_version": "fastwam_ood.paper_figures.v1",
+  "schema_version": "fastwam_ood.paper_figures.v2",
   "source_artifacts": {
     "thought1": {
       "path": "outputs/thought1/fastwam/combined/summary/metrics.json",
@@ -220,6 +283,34 @@
     "thought3_phase2_a1_samples": {
       "path": "outputs/thought3/phase2_full_28_4_a0_a1_v1/tracks/a1/development_final_objectives.jsonl",
       "sha256": "7f4f02412c0d4121870b0839350e10ec63af239eae8779cb67df0b9e049e7ee1"
+    },
+    "thought4_evidence": {
+      "path": "outputs/thought4/phase4_geometry_action_diagnosis_v6/diagnostic_evidence.json",
+      "sha256": "0542a72b5c733a018e1fd99341bfdbfe501b8bd05a4a88d16566c5685bc14c6b"
+    },
+    "thought5_direction": {
+      "path": "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/pilot_direction.json",
+      "sha256": "1bb2944d196253b7002daaa87f340bbad61c86e4e7e2a3e05f0c0fbe46a98c3d"
+    },
+    "thought5_future_geometry": {
+      "path": "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/future_geometry_results.json",
+      "sha256": "582d836ff2b28eb2febef5627007975c460be7a83c73bbc2f5ebe7b1bbdaa4a2"
+    },
+    "thought5_future_utility": {
+      "path": "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/future_utility_results.json",
+      "sha256": "612c8f8cecdf9d3ade8e033aa6d996de4dd083d676c8a03bcd382a543d998bba"
+    },
+    "thought5_readonly": {
+      "path": "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4_readonly_failure_v1/analysis_result.json",
+      "sha256": "a5d5c99808773ea2f1fd84bb198d0c1f034dee4841cef4db84754bd5c7826f1f"
+    },
+    "thought5_representation": {
+      "path": "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/representation_results.json",
+      "sha256": "5604d8ff8f6de52ae1744feb856f0678dcddb19e3f5e953fdfef6be52b8a5efa"
+    },
+    "thought5_rollout": {
+      "path": "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/rollout_results.json",
+      "sha256": "fac48a4b92a59820c77efcd6ca1e64bdc24ca0640fa26202b0782a2da943aa3e"
     }
   }
 }

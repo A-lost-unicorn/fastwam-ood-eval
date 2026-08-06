@@ -2,16 +2,16 @@
 
 ## 一、项目基本信息
 
-**项目名称：** 机器人世界动作模型的 OOD 泛化评测与未来效用审计  
-**项目角色：** 独立研究与工程实现  
-**项目时间：** 2026.07–2026.08
+**项目名称：** 机器人世界动作模型的 OOD 泛化与 Future Utility 机制证伪<br>
+**项目角色：** 独立研究与工程实现<br>
+**项目时间：** 2026.07–2026.08<br>
 **技术栈：** Python、PyTorch、CUDA/EGL、MuJoCo、Fast-WAM、LIBERO/LIBERO-Plus、torchrun、pytest、YAML、safetensors、Bootstrap
 
-**项目简介：** 围绕“Fast-WAM 在标准环境表现接近饱和时，面对相机、光照、背景、物体布局和机器人初态变化是否仍然可靠，以及显式 future 是否真正改善动作”这一问题，搭建覆盖在线行为评测、离线 future 一致性诊断、动作输入反事实、轻量 Adapter 效用验证、geometry–action 缺口定位和针对性方法干预的六层研究与工程系统。项目强调同 checkpoint 公平比较、全过程 provenance、可恢复计算和结论边界，既给出大规模 OOD 鲁棒性结果，也连续保留未观察到 future utility/GeoEq gain 的有效负结果。
+**项目简介：** 围绕“Fast-WAM 在标准环境表现接近饱和时，面对相机、光照、背景、物体布局和机器人初态变化是否仍然可靠，以及显式 future 是否真正改善动作”这一问题，搭建 Failure→Representation→Sensitivity→Geometry→Intervention→Failure analysis 的六层研究系统。原假设是 Camera Equivariance Gap 可通过 Geo-REPA 和 Pose/Ray 修复，并进一步恢复 future utility 与 Camera success；实验不支持这条完整机制链。项目因而冻结负结果、停止追求正结果的调参，并用只读失败分解将下一问题从“几何不够好”收敛为“future utility 具有 condition/noise-stage dependence”，形成完整的 hypothesis–intervention–falsification 闭环。
 
 ## 二、可直接放入详细简历的版本
 
-**机器人世界动作模型的 OOD 泛化评测与未来效用审计**｜独立研究与工程实现｜2026.07–08
+**机器人世界动作模型的 OOD 泛化与 Future Utility 机制证伪**｜独立研究与工程实现｜2026.07–08
 
 - 审计 Fast-WAM 官方推理链路与训练配置，将模糊的“未来想象能否改善泛化”拆成行为鲁棒性、观察关联、动作技术依赖、任务效用、缺口定位与针对性干预六层问题，避免把不同 checkpoint 对比或离线相关性包装成因果收益。
 - 从 0 到 1 实现配置驱动的 Clean/OOD 评测框架：以进程级 adapter 隔离原版 LIBERO 与 LIBERO-Plus 的同名 Python 包，复用官方 checkpoint loader、观测/动作预后处理和成功判定；通过受信路径校验兼容 PyTorch 2.6+ 的旧 init-state 加载。
@@ -24,8 +24,9 @@
 - 执行双 GPU、K=0/K=1 matched Adapter 训练，共完成 `11,200` 个训练 objective、8 个可恢复 checkpoint 和 12/12 hard checks；固定 step-200 上 K=0 held-out loss 改善 `1.845%`，K=1 恶化 `1.712%`，K=1 最终 loss 比 K=0 高 `3.624%` 且 `4/4` development sample 更差，遂按预注册规则停止 Phase 3/OOD rollout，避免 outcome-driven 调参。
 - 设计冻结 geometry–action diagnosis：在 `64` 个 base state 上构造 `256` 个 exact-state/探索配对样本并捕获 `12,544` 条特征；测得 Video Camera−Clean geometry gap `+0.020273 m`，高于 Lighting `+0.011660 m`，且 rank-3 subspace shuffle 在 `36/36` 次干预中改变动作而 correct control 逐位恢复，将下一假设定位为 `camera_equivariance_gap`，不越界声称新方法或成功率收益。
 - 基于 Thought4 诊断实现 `1,335,320` 参数 Fast-WAM-GeoEq：在 action-consumed layer-15 K/V projection 安装 rank-8 LoRA，加入 RayPose/relative-pose residual 与训练期 Geo-REPA，并以 shuffled-target G4 作为 specificity control；Action DiT 冻结、GeoProjector 推理移除、GT depth 不进入策略。
-- 在 `3×RTX 4090` 上完成单 task 8-train/4-development/4-test 的 B1/G3/G4 matched Pilot（约 `2h29m`）：G3 Camera gap 缩小 `20.94%<25%`，主 future geometry RMSE 未改善，future utility 为 `−0.005231`，Camera success 与 B1 同为 `1/4`；五项 Gate 全 false 后停止预计 `28–45 h` formal，避免结果后扩大计算。
-- 对 Pilot 的 25 项冻结输入做 CPU-only 只读失败分解，定位 G3 Clean utility `−0.015268`、Camera `+0.004807` 与低 effective-sigma 伤害；验证 RayPose gate/grad/injection 非零，同时因缺少 gate-zero/G1/G2 对照而拒绝独立因果归因，并用 G3/G4 轨迹相关 `0.999986` 识别共享正则混淆。
+- 在 `3×RTX 4090` 上完成单 task 8-train/4-development/4-test 的 B1/G3/G4 matched Pilot（约 `2h29m`）：G3 Camera gap 缩小 `20.94%<25%`，主 future geometry RMSE 未改善，future utility 为 `−0.005231`，Camera success 与 B1 同为 `1/4`；G4 gap 反而缩小 `25.82%`，正确 Geo-REPA correspondence 的特异贡献未被识别。
+- 五项 Gate 全 false 后冻结当前 recipe，停止预计 `28–45 h` formal，不通过更多 LR/checkpoint/outcome 追求正结果；对 25 项冻结输入做 CPU-only 只读分解，发现 G3 Clean utility `−0.015268`、Camera 均值 `+0.004807`，且低 sigma bucket 效用低至 `−0.049520`，将下一假设收窄为 condition/noise-stage dependence。
+- 验证 RayPose gate/grad/injection 非零，但因缺少 gate-zero/G1/G2 对照而拒绝独立因果归因；最终得到“Camera gap 存在，但当前 Geo-REPA + Pose/Ray 不能恢复 aggregate future utility/success”的完整证伪闭环，而非一个被调参掩盖的负性能结果。
 - 建立覆盖配置、分片、resume、RNG 隔离、cache、Adapter 冻结、反事实、FP32 reconstruction、三卡 worker 和旧 CLI 回归的测试体系；当前全量测试为 `504 passed`、5 个仅与不可用 NVML 相关的环境 warning。
 
 ## 三、心路历程与决策考量
@@ -71,14 +72,26 @@ BF16 reconstruction 伪差。
 
 ### 6. 针对性方法也要经过 specificity、utility 与 rollout 三重门禁
 
-Thought5 没有把方法推荐当成方法有效，而是实现 matched B1/G3/G4：G3 使用正确
+进入 Thought5 时，我把原假设冻结成一条必须逐环成立的机制链：
+
+```text
+Camera Equivariance Gap
+        → Geo-REPA + Pose/Ray 特异修复 representation
+        → future geometry 改善
+        → correct future utility 转正
+        → Camera rollout success 提升
+```
+
+任意关键箭头未通过，都不能用前一环的弱正信号替代整链收益。Thought5 因而
+没有把方法推荐当成方法有效，而是实现 matched B1/G3/G4：G3 使用正确
 Geo-REPA correspondence，G4 只打乱 correspondence，二者共享 RayPose、auxiliary
 loss 与 LoRA。G3 虽缩小 20.94% Camera gap，却低于 25% 门槛且 G4 更小；future
 utility 仍负、Camera success 没有提升。因此停止预计 28–45 小时 formal。
 
 停止后只解析已有工件，发现伤害集中在 Clean/低 sigma，同时 RayPose 路径虽非零
-但缺少独立 ablation。这个步骤生成了下一假设，却没有改变旧 Gate，也没有用 Pilot
-继续调参。
+但缺少独立 ablation。这个步骤没有挽救旧假设，而是生成了一个更窄的新问题：
+future utility 是否取决于 condition 与 effective-noise regime。因此，项目的闭环不是
+“方法涨点”，而是“假设被充分干预并得到明确否证”。
 
 ### 7. 整体决策链
 
@@ -101,8 +114,15 @@ Camera 缺口更符合哪类机制？
 针对性 GeoEq 是否通过 representation/utility/rollout Gate？
         │  没有：弱且非特异、utility<0、success 无 gain
         ▼
-停止 formal；只读定位下一条 condition-aware/low-noise 假设
+冻结负结果并停止 formal；只读定位 condition/noise-stage dependence
+        │
+        ▼
+原机制链被否证，但研究问题得到回答
 ```
+
+这条链路的核心价值是：前一阶段的弱正证据只用于解锁下一个更强问题，
+不用于遮蔽后一阶段的负结果。这是完整的 hypothesis–intervention–falsification
+闭环，只是不是正向性能闭环。
 
 ## 四、项目重难点、解决方案与亮点
 
@@ -127,7 +147,8 @@ Camera 缺口更符合哪类机制？
 ### 研究亮点
 
 - 没有把“模型能生成 future”“动作会随 future 改变”“future 提高任务表现”混为同一命题，而是用六层证据逐级验证、定位 Camera 缺口并审计针对性修复。
-- 正式报告负结果，并用冻结停止规则阻止事后选择，体现了比单一正指标更强的实验设计能力。
+- 正式报告负结果，并用冻结停止规则阻止事后选择；最终不是“没有做成方法”，而是“完整机制假设已经被实验回答”。
+- 将失败分析与调参分开：只读分解只负责将新假设收窄到 condition/noise-stage dependence，不回改旧 Gate 或重启已停止 recipe。
 - 对所有结论标记证据等级：正式 rollout、post-run 关联分析、技术 smoke 和离线 development 结果各自使用不同措辞。
 
 ### 工程亮点
@@ -142,7 +163,7 @@ Camera 缺口更符合哪类机制？
 - `7,571` 次真实 rollout，Clean→OOD 下降 `49.55 pp`，相机视角成功率仅 `15.13%`。
 - `732` episode / `1,010` probe 的 shadow diagnostic 显示 OOD future proxy 系统性变差。
 - `1.371M` 参数 Adapter 的反事实证明 future 内容确实改变动作，但完整 matched 训练未观察到 held-out utility，形成“future sensitivity ≠ future utility”的清晰结论。
-- `1.335M` 参数 GeoEq Pilot 将 Camera gap 缩小 20.94% 但未过门、future utility 仍为负且 success 无 gain；按规则停止 formal，并定位 Clean/低 sigma 与 RayPose 因果缺口。
+- `1.335M` 参数 GeoEq Pilot 将 Camera gap 缩小 20.94% 但未过门、future utility 仍为负且 success 无 gain；按规则停止 formal，并将结论从 geometry insufficiency 收窄到 condition/noise-stage-dependent utility。
 
 ## 六、面试伏笔与回答提纲
 
@@ -194,6 +215,15 @@ utility、rollout 与 training 五项 Gate 都未通过；此时继续 formal �
 未达方向门的配方，并把 Pilot 变成调参集。我冻结负结果，只做不加载模型和 outcome
 的只读分解；下一方法必须使用新预注册、新 cohort 与单变量对照。
 
+### 伏笔 11：方法没有涨点，为什么这个项目仍然是完整的？
+
+因为项目目标不是为了找到一组能涨点的参数，而是检验一条可证伪机制：Camera
+Equivariance Gap 能否由 Geo-REPA + Pose/Ray 修复，并恢复 future utility 和
+Camera success。Thought4 支持 gap 诊断，但 Thought5 的特异性、future geometry、
+absolute utility 和 rollout Gate 均未通过，所以完整机制链已被回答为“不支持”。
+我没有继续调参改写结论，而是冻结负结果并用只读分析生成下一个更窄假设。
+因此它是完整的 hypothesis–intervention–falsification 闭环，只是不是正向性能闭环。
+
 ## 七、不同岗位的强调方式
 
 ### 投递算法/具身智能岗位
@@ -221,9 +251,10 @@ utility、rollout 与 training 五项 Gate 都未通过；此时继续 formal �
 - Thought5 是单 task 8/4/4 的方向性 Pilot；`1/4` 是每 condition 四条 rollout，
   不能作总体成功率推断。G3 未通过当前 recipe 的 Gate，不等于 Geo-REPA、RayPose
   或 future 普遍无效。
-- Thought5 只读分解是 post-hoc exploratory；Clean/Camera 与 sigma 结果只能生成
-  新假设，不能回改 25% 门槛或解锁 formal。RayPose 路径执行非零不等于其独立
-  因果贡献已识别。
+- Thought5 只读分解是 post-hoc exploratory；G3 Camera utility 的 `+0.004807`
+  只是点估计，95% CI `[−0.009028, +0.018498]` 跨 0。condition/sigma 结果只能
+  生成新假设，不能回改 25% 门槛或解锁 formal；RayPose 路径执行非零也不等于
+  其独立因果贡献已识别。
 - 当前没有完成失败视频的人工 taxonomy；可以写“保存并审计 3,563 个失败视频”，不能写“人工归纳出若干失败模式”。
 - 仿真结果不能外推为真机、跨机器人平台、unseen task 或 unseen object 结论。
 

@@ -2,12 +2,15 @@
 
 本目录包含两份可直接使用的项目经历，每份同时提供 Markdown 源文档和 Word 版本：
 
-- 简略版：[Markdown](FastWAM项目经历_简略版.md) / [Word](FastWAM项目经历_简略版.docx)。适合一页中文简历，保留从 OOD 评测到 Thought5 负向 Pilot 的核心成果和 30 秒项目叙述。
-- 详细版：[Markdown](FastWAM项目经历_详细版.md) / [Word](FastWAM项目经历_详细版.docx)。包含完整项目描述、决策历程、重难点、面试伏笔和回答口径。
+- 简略版：[Markdown](FastWAM项目经历_简略版.md) / [Word](FastWAM项目经历_简略版.docx)。适合一页中文简历，保留 Thought1–5 的核心数据、机制证伪闭环和 30 秒项目叙述。
+- 详细版：[Markdown](FastWAM项目经历_详细版.md) / [Word](FastWAM项目经历_详细版.docx)。包含原假设、完整实验数据、停止决策、只读失败分解、重难点、面试伏笔和证据边界。
 
 文档中的时间按仓库提交记录写为 `2026.07`，角色按单一 Git 作者记录写为“独立研究与工程实现”。如果实际存在团队协作，请在投递前把角色改成真实职责。
 
 所有量化结果均来自仓库中的正式报告或本地测试；其中 Thought 2 是非因果关联分析，Thought 3 的 `8/8` 是动作敏感性而非成功率，Thought4 的 `36/36` 是离线 tensor 干预，Thought5 的 `1/4` 是单 task Pilot。详细使用边界见详细版附录，统一时间线见[最近工作冻结档案](../shared/recent_work_2026-07-27_to_2026-08-06.md)。
+核心口径是：方法没有提升 Camera success，但“Geo-REPA + Pose/Ray 修复 Camera
+Equivariance Gap 并恢复 future utility”的完整假设已经被实验回答；这是
+hypothesis–intervention–falsification 闭环，不是正向性能闭环。
 
 Markdown 是可编辑事实源；更新后用项目环境重建两份 Word：
 

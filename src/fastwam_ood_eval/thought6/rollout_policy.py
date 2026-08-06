@@ -559,6 +559,7 @@ def run_phase6a_smoke(cfg: Any) -> dict[str, Any]:
     print(json.dumps({"phase": "6A", "stage": "model_load_started"}), flush=True)
     runtime = None
     try:
+        torch.cuda.reset_peak_memory_stats(cfg.device)
         runtime = load_frozen_fastwam(_loader_config(cfg))
         adapter, adapter_manifest = load_frozen_adapter(cfg, device=cfg.device)
         freeze_for_phase6(runtime.model, adapter)
@@ -727,6 +728,9 @@ def run_phase6a_smoke(cfg: Any) -> dict[str, Any]:
             ]
         )
         passed = all(all_checks)
+        peak_memory_mib = float(torch.cuda.max_memory_allocated(cfg.device) / 2**20)
+        memory_passed = peak_memory_mib < cfg.max_gpu_memory_gb * 1024.0
+        passed = passed and memory_passed
         result = seal_full_object(
             {
                 "schema_version": "thought6.phase6a.smoke_result.v1",
@@ -736,6 +740,9 @@ def run_phase6a_smoke(cfg: Any) -> dict[str, Any]:
                 "states": 2,
                 "samples": sample_results,
                 "execution_integrity": integrity,
+                "peak_memory_mib": peak_memory_mib,
+                "memory_limit_gib": cfg.max_gpu_memory_gb,
+                "memory_contract_passed": memory_passed,
                 "contract_checks_passed": passed,
                 "phase6b_unlocked": passed,
             }
@@ -743,6 +750,18 @@ def run_phase6a_smoke(cfg: Any) -> dict[str, Any]:
         write_stage_json(output / "phase6a_smoke_results.json", result)
         print(json.dumps({"phase": "6A", "stage": "smoke_complete", "passed": passed}), flush=True)
         return result
+    except BaseException as exc:
+        write_stage_json(
+            output / "phase6a_smoke_results.json",
+            {
+                "schema_version": "thought6.phase6a.smoke_result.v1",
+                "status": "error",
+                "scientific_result": False,
+                "phase6b_unlocked": False,
+                "error": f"{type(exc).__name__}: {exc}",
+            },
+        )
+        raise
     finally:
         if runtime is not None:
             release_fastwam(runtime)

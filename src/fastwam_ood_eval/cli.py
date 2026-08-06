@@ -584,6 +584,37 @@ def build_parser() -> argparse.ArgumentParser:
             "--device",
             help="Logical runtime device; physical cards are mapped by the runner",
         )
+    for name, help_text in (
+        ("thought6-audit", "Run the read-only Phase 6 checkpoint/scheduler/cohort audit"),
+        ("thought6-dry-run", "Run Phase 6 CPU/mock contract validation"),
+        ("thought6-phase6a-smoke", "Run the confirmed one-GPU Phase 6A technical smoke"),
+        ("thought6-phase6b-utility", "Run the gated three-GPU Phase 6B utility panel"),
+        ("thought6-phase6c-stage1", "Run the gated Phase 6C Stage 1 rollout panel"),
+        ("thought6-phase6c-stage2", "Run the separately confirmed Stage 2 expansion"),
+    ):
+        command = subparsers.add_parser(name, help=help_text)
+        command.add_argument("--config", required=True, type=Path)
+        command.add_argument(
+            "--set",
+            action="append",
+            default=[],
+            metavar="KEY=VALUE",
+            help="Present for consistency; Thought6 forbids all overrides",
+        )
+        command.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Validate only; never load Fast-WAM, MuJoCo, or a GPU",
+        )
+        command.add_argument(
+            "--resume",
+            action="store_true",
+            help="Reserved for checksum-valid non-complete artifacts",
+        )
+        command.add_argument(
+            "--device",
+            help="Logical device; physical cards are mapped by the launcher",
+        )
     return parser
 
 
@@ -1113,6 +1144,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.command.startswith("thought6-"):
+            # Keep Torch, MuJoCo and the 5B model behind explicit real-stage
+            # confirmation; audit and dry-run remain CPU/read-only.
+            from fastwam_ood_eval.thought6.cli import dispatch
+
+            return dispatch(args)
         if args.command.startswith("thought5-"):
             # Keep torch, MuJoCo, and Fast-WAM behind the confirmed real branch.
             from fastwam_ood_eval.thought5.cli import dispatch

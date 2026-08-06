@@ -1,0 +1,19 @@
+schema_version: thought6.config.v1
+experiment: {name: phase6_sigma_aware_future_fusion_v1, stage: phase6b, output_dir: outputs/thought6/phase6_sigma_aware_future_fusion_v1, seed: 6607}
+runtime: {device: "cuda:0", dtype: bfloat16, action_denoise_steps: 20, max_gpu_memory_gb: 23.5}
+backbone: {checkpoint_path: checkpoints/fastwam_release/libero_uncond_2cam224.pt, checkpoint_sha256: 1000437cfcf55c000094f79a2600634c502bcb5b492476b94bf8509883a49579, frozen_parameter_sha256: ac0dd59de78495dc8ed5c5601e24951b78f3fd6ad40843d76b83106eccceb4f8, dataset_stats_path: checkpoints/fastwam_release/libero_uncond_2cam224_dataset_stats.json, dataset_stats_sha256: 30f81ad7d5076e97323e3328bce003e01a04cb21327b5bacd21bb72846768638, fastwam_commit: 45d8e1458921d83f8ad6cf9ce993d371208dabd0}
+adapter: {thought3_config_path: configs/thought3/phase_e6_fresh_cohort_replication.yaml, phase2_result_path: outputs/thought3/phase2_full_28_4_a0_a1_v1/phase2_training_result.json, checkpoint_path: outputs/thought3/phase2_full_28_4_a0_a1_v1/tracks/a1/checkpoints/step_00000200, manifest_path: outputs/thought3/phase2_full_28_4_a0_a1_v1/tracks/a1/checkpoints/step_00000200/manifest.json, file_sha256: 0ebff4705039c4ca0a1e77330a9480f0ed4b6bc0b21235b447153417b64730b0, state_sha256: cf8c7d4c2aa7bafef37e4e52719481f3da5ecf6909372f74feb4e4de0e159dd7, trainable_parameter_count: 1371137}
+scheduler: {source_path: third_party/FastWAM/src/fastwam/models/wan22/schedulers/scheduler_continuous.py, shift: 5.0, num_train_timesteps: 1000, future_k: 1}
+cohort:
+  suites: [libero_spatial, libero_object, libero_goal, libero_10]
+  dataset_roots: {libero_spatial: data/libero_mujoco3.3.2/libero_spatial_no_noops_lerobot, libero_object: data/libero_mujoco3.3.2/libero_object_no_noops_lerobot, libero_goal: data/libero_mujoco3.3.2/libero_goal_no_noops_lerobot, libero_10: data/libero_mujoco3.3.2/libero_10_no_noops_lerobot}
+  dataset_revisions: {libero_spatial: null, libero_object: null, libero_goal: 117413dc0ca99c7cd64036c4eaa4a316c537d692, libero_10: null}
+  classification_path: third_party/LIBERO-plus/libero/libero/benchmark/task_classification.json
+  tasks_per_suite: 2
+  utility_episodes_per_task: 4
+  utility_flow_slots: 32
+  stage1_states_per_task: 10
+  stage2_total_states_per_task: 20
+statistics: {bootstrap_replicates: 10000, bootstrap_seed: 6607}
+gates: {clean_utility_margin: -0.002, clean_rollout_margin_pp: -5.0}
+rollout: {max_steps: {libero_spatial: 400, libero_object: 400, libero_goal: 400, libero_10: 700}}

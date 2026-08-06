@@ -1,6 +1,58 @@
 {
   "figures": {
-    "figure1_ood_success.svg": {
+    "figure1_research_chain.svg": {
+      "stages": [
+        {
+          "color": "#DCE8F7",
+          "evidence": "Thought 1 \u00b7 7,571 rollouts",
+          "finding": "OOD drop 49.55 pp\nCamera SR 15.13%",
+          "grade": "Behavioral failure",
+          "question": "Where does the\npolicy fail?",
+          "title": "1 \u00b7 Failure"
+        },
+        {
+          "color": "#FBE7D6",
+          "evidence": "Thought 2 \u00b7 732 episodes",
+          "finding": "OOD distance +0.0316\nAssociation, not cause",
+          "grade": "Representation audit",
+          "question": "Does the shadow future\ntrack realized change?",
+          "title": "2 \u00b7 Representation"
+        },
+        {
+          "color": "#DCEFE7",
+          "evidence": "Thought 3 \u00b7 n=8 + matched 28/4",
+          "finding": "Action changed 8/8\nK=1 loss +3.624% vs K=0",
+          "grade": "Sensitivity \u2260 utility",
+          "question": "Does future content\naffect action and utility?",
+          "title": "3 \u00b7 Sensitivity"
+        },
+        {
+          "color": "#FBE7D6",
+          "evidence": "64 states / 36 interventions",
+          "finding": "Gap 0.0203 m vs 0.0117 m\n36/36 action effect",
+          "grade": "Thought 4 \u00b7 localization",
+          "question": "Is Camera failure a\ngeometry-equivariance gap?",
+          "title": "4 \u00b7 Geometry"
+        },
+        {
+          "color": "#F5DADA",
+          "evidence": "3-GPU matched pilot; 8/4/4",
+          "finding": "Gap \u221220.94% (<25%)\nUtility -0.005231; Camera 1/4=1/4",
+          "grade": "Thought 5 \u00b7 falsification",
+          "question": "Can Geo-REPA +\nPose/Ray repair utility?",
+          "title": "5 \u00b7 Intervention"
+        },
+        {
+          "color": "#F5DADA",
+          "evidence": "Read-only post-hoc audit",
+          "finding": "Clean utility -0.0153\nLow-\u03c3 utility -0.0495",
+          "grade": "Condition / noise dependence",
+          "question": "Where does the\nintervention still fail?",
+          "title": "6 \u00b7 Failure analysis"
+        }
+      ]
+    },
+    "figure2_ood_success.svg": {
       "attempted": [
         800,
         6771,
@@ -47,7 +99,7 @@
         81.88050930460334
       ]
     },
-    "figure2_future_consistency.svg": {
+    "figure3_future_consistency.svg": {
       "clean_vs_ood": {
         "future_latent_cosine_distance": {
           "bootstrap_replicates": 10000,
@@ -103,7 +155,7 @@
         "success_task_equal_mean": 0.12171653449720354
       }
     },
-    "figure3_sensitivity_vs_utility.svg": {
+    "figure4_sensitivity_vs_utility.svg": {
       "phase1_action_l2": {
         "B0\u2013null": {
           "mean": 0.0,
@@ -125,95 +177,31 @@
         "initial": 0.004234103628760977
       }
     },
-    "figure4_phase2_per_sample.svg": {
-      "samples": [
-        {
-          "A0_final_mean_loss": 0.006007501776707613,
-          "A1_final_mean_loss": 0.006041887596893503,
-          "A1_minus_A0": 3.4385820185889315e-05,
-          "A1_vs_A0_percent": 0.5723813569096324,
-          "sample_id": "253c241e7c66e1c8b46432b143db546cf91802b971bd3121a374e04f8b58ba21"
-        },
-        {
-          "A0_final_mean_loss": 0.0025318133659766318,
-          "A1_final_mean_loss": 0.002811739691310322,
-          "A1_minus_A0": 0.00027992632533369033,
-          "A1_vs_A0_percent": 11.056357040192433,
-          "sample_id": "9c54127523fc7b7befea9e5110c1c30448d73a72333efd69258f68a854c4daaf"
-        },
-        {
-          "A0_final_mean_loss": 0.005217952793600489,
-          "A1_final_mean_loss": 0.0053370639236618445,
-          "A1_minus_A0": 0.00011911113006135565,
-          "A1_vs_A0_percent": 2.2827176629010215,
-          "sample_id": "30d329649c06076b86596da2172ff7613bb14e73b81b22d774ea32756053a208"
-        },
-        {
-          "A0_final_mean_loss": 0.002866646233769643,
-          "A1_final_mean_loss": 0.003035638969095089,
-          "A1_minus_A0": 0.00016899273532544612,
-          "A1_vs_A0_percent": 5.895137437423538,
-          "sample_id": "08e50da358c8e5d4c91981b36138ed0a20f85005c5f64ba0ae7c4c35d855a588"
-        }
-      ]
+    "figure5_camera_equivariance_gap.svg": {
+      "action_shuffle_above_floor_fraction": 1.0,
+      "camera_minus_lighting": {
+        "estimate": 0.14628397735456625,
+        "group_count": 6,
+        "lower": 0.08851858228445053,
+        "replicates": 2000,
+        "seed": 4934,
+        "upper": 0.20030984459444873
+      },
+      "geometry_subspace_shift": {
+        "Camera": 0.2950931787490845,
+        "Lighting": 0.14880920139451823,
+        "Robot init.*": 0.09647600228587787
+      },
+      "probe_gap": {
+        "Camera": 0.02027315051398344,
+        "Lighting": 0.011659724534385733
+      }
     },
-    "figure5_evidence_chain.svg": {
-      "stages": [
-        {
-          "color": "#DCE8F7",
-          "evidence": "7,571 attempted rollouts",
-          "finding": "97.25% \u2192 47.70% success",
-          "grade": "Behavioral evaluation",
-          "question": "Is Fast-WAM robust\nto environment shift?",
-          "title": "Thought 1"
-        },
-        {
-          "color": "#FBE7D6",
-          "evidence": "732 episodes / 1,010 probes",
-          "finding": "OOD distance +0.0316\nDirection \u22120.1898",
-          "grade": "Observational association",
-          "question": "Does the shadow future\ntrack realized change?",
-          "title": "Thought 2"
-        },
-        {
-          "color": "#DCEFE7",
-          "evidence": "correct / null / shuffle; n=8",
-          "finding": "Action hash changed in 8/8",
-          "grade": "Technical causal intervention",
-          "question": "Does future content\naffect the action?",
-          "title": "Thought 3 \u00b7 Phase 1"
-        },
-        {
-          "color": "#F5DADA",
-          "evidence": "Matched 28 train /\n4 development",
-          "finding": "A1 3.624% worse than A0",
-          "grade": "Offline negative result \u00b7 STOP",
-          "question": "Does K=1 improve\nheld-out utility?",
-          "title": "Thought 3 \u00b7 Phase 2"
-        },
-        {
-          "color": "#FBE7D6",
-          "evidence": "64 states / 36 interventions",
-          "finding": "Camera gap > Lighting\n36/36 action effect",
-          "grade": "Frozen mechanism diagnosis",
-          "question": "Where is the dominant\nCamera failure localized?",
-          "title": "Thought 4"
-        },
-        {
-          "color": "#F5DADA",
-          "evidence": "3-GPU matched pilot; 8/4/4",
-          "finding": "Gap \u221220.94%; utility < 0\nNo Camera success gain",
-          "grade": "Directional pilot \u00b7 STOP",
-          "question": "Does targeted GeoEq\nrepair utility?",
-          "title": "Thought 5"
-        }
-      ]
-    },
-    "figure6_thought5_pilot.svg": {
-      "camera_future_geometry_rmse": {
-        "B1": 0.3412765085319087,
-        "G3": 0.3413198196775955,
-        "G4": 0.3413307979940417
+    "figure6_phase5_failure_decomposition.svg": {
+      "aggregate_future_utility": {
+        "B1": -0.015649381454863942,
+        "G3": -0.005230561402299827,
+        "G4": -0.011301971915031572
       },
       "camera_representation_gap": {
         "B1": 0.0022461169864982367,
@@ -234,31 +222,18 @@
           "Clean": -0.018711703793314882
         }
       },
-      "pilot_success_rate": {
-        "B1": [
-          0.25,
-          0.25,
-          1.0,
-          1.0
-        ],
-        "G3": [
-          0.25,
-          0.25,
-          1.0,
-          1.0
-        ],
-        "G4": [
-          0.25,
-          0.0,
-          1.0,
-          1.0
-        ]
+      "g3_sigma_bucket_utility": {
+        ".25\u2013.50": -0.040456653013825415,
+        ".50\u2013.75": 0.0028213132172822952,
+        ".75\u20131": 0.0012164055640570513,
+        "0\u2013.25": -0.0495200850483444
       },
+      "g3_sigma_utility_pearson": 0.4459142534955562,
       "preregistered_g3_threshold": 0.0016845877398736775
     }
   },
   "generator": "scripts/build_paper_figures.py",
-  "schema_version": "fastwam_ood.paper_figures.v2",
+  "schema_version": "fastwam_ood.paper_figures.v3",
   "source_artifacts": {
     "thought1": {
       "path": "outputs/thought1/fastwam/combined/summary/metrics.json",
@@ -288,6 +263,10 @@
       "path": "outputs/thought4/phase4_geometry_action_diagnosis_v6/diagnostic_evidence.json",
       "sha256": "0542a72b5c733a018e1fd99341bfdbfe501b8bd05a4a88d16566c5685bc14c6b"
     },
+    "thought4_intervention": {
+      "path": "outputs/thought4/phase4_geometry_action_diagnosis_v6/intervention_results.json",
+      "sha256": "8aeaf2fda57870f512787c9f63ff67b86b9c161c30d3f13b3a81af4aaa601b9c"
+    },
     "thought5_direction": {
       "path": "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/pilot_direction.json",
       "sha256": "1bb2944d196253b7002daaa87f340bbad61c86e4e7e2a3e05f0c0fbe46a98c3d"
@@ -311,6 +290,10 @@
     "thought5_rollout": {
       "path": "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/rollout_results.json",
       "sha256": "fac48a4b92a59820c77efcd6ca1e64bdc24ca0640fa26202b0782a2da943aa3e"
+    },
+    "thought5_training": {
+      "path": "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/training_results.json",
+      "sha256": "2c46a539bb4c2fc27c138f593694d29fa26d755bd069dece16ad3f0ed6313b36"
     }
   }
 }

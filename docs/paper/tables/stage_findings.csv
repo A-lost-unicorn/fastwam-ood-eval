@@ -1,0 +1,7 @@
+stage,role,intervention,finding,decision
+Thought1,Failure,Environment shift,Clean 97.25%; OOD 47.70%; Camera 15.13%,OOD robustness gap established
+Thought2,Representation,Control-isolated shadow future,Distance +0.0316; direction cosine -0.1898,Association established; causality unresolved
+Thought3,Sensitivity / utility,correct/null/shuffle + matched K0/K1,8/8 action sensitivity; K1 3.624% worse than K0,Sensitivity does not imply utility
+Thought4,Geometry,Exact-state probes + rank-3 shuffle,Camera gap 0.020273 m; Lighting 0.011660 m; 36/36 action effect,camera_equivariance_gap
+Thought5,Intervention,B1/G3/G4 Geo-REPA + Pose/Ray pilot,G3 gap -20.94%; utility -0.005231; Camera 1/4=1/4,Full mechanism chain not supported; STOP
+Thought5-readonly,Failure analysis,Immutable post-hoc decomposition,Clean utility -0.015268; sigma<0.25 utility -0.049520,Condition/noise-stage dependence hypothesis

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Build the paper figures from frozen Thought1–Thought5 result artifacts.
+"""Build the six core paper figures from frozen Thought1–Thought5 artifacts.
 
 The script is read-only with respect to ``outputs/``.  It writes deterministic
-SVG figures, compact CSV tables, and a manifest under ``docs/paper/``.
+SVG figures, evidence tables, and a manifest under ``docs/paper/``.
 """
 
 from __future__ import annotations
@@ -40,8 +40,12 @@ SOURCES = {
     / "outputs/thought3/phase2_full_28_4_a0_a1_v1/tracks/a1/development_final_objectives.jsonl",
     "thought4_evidence": ROOT
     / "outputs/thought4/phase4_geometry_action_diagnosis_v6/diagnostic_evidence.json",
+    "thought4_intervention": ROOT
+    / "outputs/thought4/phase4_geometry_action_diagnosis_v6/intervention_results.json",
     "thought5_direction": ROOT
     / "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/pilot_direction.json",
+    "thought5_training": ROOT
+    / "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/training_results.json",
     "thought5_representation": ROOT
     / "outputs/thought5/phase5_camera_equivariant_geo_repa_pilot_v4/representation_results.json",
     "thought5_future_geometry": ROOT
@@ -197,7 +201,7 @@ def figure_ood_success(thought1: dict[str, Any]) -> dict[str, Any]:
         fontsize=9,
     )
     fig.tight_layout()
-    save_svg(fig, "figure1_ood_success.svg")
+    save_svg(fig, "figure2_ood_success.svg")
 
     return {
         "labels": labels,
@@ -319,7 +323,7 @@ def figure_future_consistency(thought2: dict[str, Any]) -> dict[str, Any]:
         fontsize=12,
     )
     fig.tight_layout()
-    save_svg(fig, "figure2_future_consistency.svg")
+    save_svg(fig, "figure3_future_consistency.svg")
 
     return {
         "clean_vs_ood": {
@@ -401,7 +405,7 @@ def figure_sensitivity_utility(
     )
     fig.suptitle("Future sensitivity is not evidence of future utility", y=1.02, fontsize=12)
     fig.tight_layout()
-    save_svg(fig, "figure3_sensitivity_vs_utility.svg")
+    save_svg(fig, "figure4_sensitivity_vs_utility.svg")
 
     return {
         "phase1_action_l2": {
@@ -449,77 +453,108 @@ def aggregate_development_samples(
     return result
 
 
-def figure_phase2_samples(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    labels = [row["sample_id"][:12] for row in rows]
-    values = [row["A1_vs_A0_percent"] for row in rows]
-    fig, ax = plt.subplots(figsize=(7.4, 3.8))
-    bars = ax.barh(labels, values, color=COLORS["red"], alpha=0.86)
-    ax.axvline(0.0, color="#111827", linewidth=0.9)
-    ax.set_xlabel("A1 loss relative to A0 (%)  → worse")
-    ax.set_title("K=1 is worse than matched K=0 on all four development samples")
-    ax.invert_yaxis()
-    for bar, value in zip(bars, values):
-        ax.text(
-            value + 0.22,
-            bar.get_y() + bar.get_height() / 2,
-            f"+{value:.2f}%",
-            va="center",
-            fontsize=8.5,
-        )
-    ax.set_xlim(0, max(values) * 1.18)
-    fig.tight_layout()
-    save_svg(fig, "figure4_phase2_per_sample.svg")
-    return {"samples": rows}
+def aggregate_variant_utility(
+    condition_data: dict[str, Any], variant: str
+) -> float:
+    """Average Clean/Camera utility; both conditions have 128 matched rows."""
+    return sum(
+        condition_data[variant]["conditions"][condition][
+            "mean_utility_a0_minus_a1"
+        ]
+        for condition in ("clean", "camera")
+    ) / 2.0
 
 
-def figure_evidence_chain() -> dict[str, Any]:
+def figure_evidence_chain(
+    thought1: dict[str, Any],
+    thought2: dict[str, Any],
+    phase1: dict[str, Any],
+    phase2: dict[str, Any],
+    thought4: dict[str, Any],
+    representation: dict[str, Any],
+    rollout: dict[str, Any],
+    readonly: dict[str, Any],
+) -> dict[str, Any]:
+    distance = select_metric(
+        thought2["primary_contrasts"], "future_latent_cosine_distance"
+    )
+    category_rows = {
+        row["perturbation_category"]: row
+        for row in thought1["by_perturbation"]
+        if row["condition"] == "ood"
+    }
+    a0_loss = phase2["tracks"]["A0"]["development_final_mean_loss"]
+    a1_loss = phase2["tracks"]["A1"]["development_final_mean_loss"]
+    condition_data = readonly["questions"]["condition_failure"]
+    g3_utility = aggregate_variant_utility(condition_data, "G3")
+    g3_sigma = readonly["questions"]["flow_and_action_localization"][
+        "flow_objective"
+    ]["variants"]["G3"]
     stages = [
         {
-            "title": "Thought 1",
-            "question": "Is Fast-WAM robust\nto environment shift?",
-            "evidence": "7,571 attempted rollouts",
-            "finding": "97.25% → 47.70% success",
-            "grade": "Behavioral evaluation",
+            "title": "1 · Failure",
+            "question": "Where does the\npolicy fail?",
+            "evidence": f"Thought 1 · {thought1['clean']['attempted'] + thought1['ood']['attempted']:,} rollouts",
+            "finding": (
+                f"OOD drop {(thought1['clean']['success_rate'] - thought1['ood']['success_rate']) * 100:.2f} pp\n"
+                f"Camera SR {category_rows['camera_viewpoints']['success_rate'] * 100:.2f}%"
+            ),
+            "grade": "Behavioral failure",
             "color": COLORS["light_blue"],
         },
         {
-            "title": "Thought 2",
+            "title": "2 · Representation",
             "question": "Does the shadow future\ntrack realized change?",
-            "evidence": "732 episodes / 1,010 probes",
-            "finding": "OOD distance +0.0316\nDirection −0.1898",
-            "grade": "Observational association",
+            "evidence": "Thought 2 · 732 episodes",
+            "finding": f"OOD distance {distance['ood_minus_clean']:+.4f}\nAssociation, not cause",
+            "grade": "Representation audit",
             "color": COLORS["light_orange"],
         },
         {
-            "title": "Thought 3 · Phase 1",
-            "question": "Does future content\naffect the action?",
-            "evidence": "correct / null / shuffle; n=8",
-            "finding": "Action hash changed in 8/8",
-            "grade": "Technical causal intervention",
+            "title": "3 · Sensitivity",
+            "question": "Does future content\naffect action and utility?",
+            "evidence": f"Thought 3 · n={phase1['sample_count']} + matched 28/4",
+            "finding": (
+                f"Action changed {phase1['sample_count']}/{phase1['sample_count']}\n"
+                f"K=1 loss {(a1_loss / a0_loss - 1) * 100:+.3f}% vs K=0"
+            ),
+            "grade": "Sensitivity ≠ utility",
             "color": COLORS["light_green"],
         },
         {
-            "title": "Thought 3 · Phase 2",
-            "question": "Does K=1 improve\nheld-out utility?",
-            "evidence": "Matched 28 train /\n4 development",
-            "finding": "A1 3.624% worse than A0",
-            "grade": "Offline negative result · STOP",
-            "color": COLORS["light_red"],
-        },
-        {
-            "title": "Thought 4",
-            "question": "Where is the dominant\nCamera failure localized?",
+            "title": "4 · Geometry",
+            "question": "Is Camera failure a\ngeometry-equivariance gap?",
             "evidence": "64 states / 36 interventions",
-            "finding": "Camera gap > Lighting\n36/36 action effect",
-            "grade": "Frozen mechanism diagnosis",
+            "finding": (
+                f"Gap {thought4['camera_paired_gap']['estimate_mean']:.4f} m vs "
+                f"{thought4['lighting_paired_gap']['estimate_mean']:.4f} m\n"
+                "36/36 action effect"
+            ),
+            "grade": "Thought 4 · localization",
             "color": COLORS["light_orange"],
         },
         {
-            "title": "Thought 5",
-            "question": "Does targeted GeoEq\nrepair utility?",
+            "title": "5 · Intervention",
+            "question": "Can Geo-REPA +\nPose/Ray repair utility?",
             "evidence": "3-GPU matched pilot; 8/4/4",
-            "finding": "Gap −20.94%; utility < 0\nNo Camera success gain",
-            "grade": "Directional pilot · STOP",
+            "finding": (
+                f"Gap −{representation['gap_reduction_fraction'] * 100:.2f}% (<25%)\n"
+                f"Utility {g3_utility:+.6f}; Camera "
+                f"{round(4 * rollout['summaries']['B1:camera']['success_rate'])}/4="
+                f"{round(4 * rollout['summaries']['G3:camera']['success_rate'])}/4"
+            ),
+            "grade": "Thought 5 · falsification",
+            "color": COLORS["light_red"],
+        },
+        {
+            "title": "6 · Failure analysis",
+            "question": "Where does the\nintervention still fail?",
+            "evidence": "Read-only post-hoc audit",
+            "finding": (
+                f"Clean utility {condition_data['G3']['conditions']['clean']['mean_utility_a0_minus_a1']:+.4f}\n"
+                f"Low-σ utility {g3_sigma['noise_bins']['[0.00,0.25)']['mean_utility']:+.4f}"
+            ),
+            "grade": "Condition / noise dependence",
             "color": COLORS["light_red"],
         },
     ]
@@ -583,20 +618,125 @@ def figure_evidence_chain() -> dict[str, Any]:
     ax.text(
         0.5,
         0.06,
-        "Evidence ladder: robustness → association → sensitivity → utility → localization → targeted intervention",
+        "Hypothesis → intervention → falsification: a Camera-equivariance repair did not restore aggregate future utility",
         ha="center",
         fontsize=10,
         color="#1F2937",
     )
     fig.tight_layout()
-    save_svg(fig, "figure5_evidence_chain.svg")
+    save_svg(fig, "figure1_research_chain.svg")
     return {"stages": stages}
 
 
-def figure_thought5_pilot(
+def figure_camera_equivariance_gap(
+    evidence: dict[str, Any], intervention: dict[str, Any]
+) -> dict[str, Any]:
+    gap_rows = [evidence["camera_paired_gap"], evidence["lighting_paired_gap"]]
+    gap_labels = ["Camera", "Lighting"]
+    gap_values = [row["estimate_mean"] for row in gap_rows]
+    gap_lower = [row["estimate_mean"] - row["lower_min"] for row in gap_rows]
+    gap_upper = [row["upper_max"] - row["estimate_mean"] for row in gap_rows]
+
+    shift_data = intervention["geometry_coordinate_condition_shift"][
+        "condition_summaries"
+    ]
+    shift_keys = ["camera", "lighting", "robot_init"]
+    shift_labels = ["Camera", "Lighting", "Robot init.*"]
+    shift_rows = [
+        shift_data[key]["coordinate_l2_grouped_bootstrap"] for key in shift_keys
+    ]
+    shift_values = [row["estimate"] for row in shift_rows]
+    shift_lower = [row["estimate"] - row["lower"] for row in shift_rows]
+    shift_upper = [row["upper"] - row["estimate"] for row in shift_rows]
+
+    fig, axes = plt.subplots(1, 2, figsize=(10.2, 4.1))
+    bars = axes[0].bar(
+        gap_labels,
+        gap_values,
+        yerr=[gap_lower, gap_upper],
+        capsize=4,
+        color=[COLORS["red"], COLORS["green"]],
+    )
+    axes[0].set_ylabel("Paired geometry RMSE gap (m) ↓")
+    axes[0].set_title("Exact-state probe gap")
+    axes[0].set_ylim(0, max(row["upper_max"] for row in gap_rows) * 1.18)
+    for bar, value in zip(bars, gap_values):
+        axes[0].text(
+            bar.get_x() + bar.get_width() / 2,
+            value + 0.002,
+            f"{value:.6f}",
+            ha="center",
+            fontsize=8.5,
+        )
+    axes[0].text(
+        0.5,
+        0.94,
+        "Camera is 73.87% larger than Lighting",
+        transform=axes[0].transAxes,
+        ha="center",
+        va="top",
+        fontsize=8.2,
+        color=COLORS["gray"],
+    )
+
+    shift_bars = axes[1].bar(
+        shift_labels,
+        shift_values,
+        yerr=[shift_lower, shift_upper],
+        capsize=4,
+        color=[COLORS["red"], COLORS["green"], COLORS["gray"]],
+    )
+    axes[1].set_ylabel("Rank-3 geometry-subspace shift ↓")
+    axes[1].set_title("Probe-defined geometry coordinates")
+    axes[1].set_ylim(0, max(row["upper"] for row in shift_rows) * 1.18)
+    for bar, value in zip(shift_bars, shift_values):
+        axes[1].text(
+            bar.get_x() + bar.get_width() / 2,
+            value + 0.012,
+            f"{value:.3f}",
+            ha="center",
+            fontsize=8.5,
+        )
+    axes[1].text(
+        0.5,
+        0.94,
+        "Camera−Lighting=+0.146 [0.089, 0.200]\n36/36 shuffles changed action",
+        transform=axes[1].transAxes,
+        ha="center",
+        va="top",
+        fontsize=8.0,
+        color=COLORS["gray"],
+    )
+    axes[1].text(
+        0.5,
+        -0.19,
+        "* Robot-init is not an exact-state pair and is exploratory only.",
+        transform=axes[1].transAxes,
+        ha="center",
+        fontsize=7.5,
+        color=COLORS["gray"],
+    )
+    fig.suptitle(
+        "Camera shift creates the largest frozen geometry-equivariance gap",
+        y=1.02,
+        fontsize=12,
+    )
+    fig.tight_layout()
+    save_svg(fig, "figure5_camera_equivariance_gap.svg")
+    return {
+        "probe_gap": dict(zip(gap_labels, gap_values)),
+        "geometry_subspace_shift": dict(zip(shift_labels, shift_values)),
+        "camera_minus_lighting": evidence[
+            "geometry_coordinate_camera_minus_lighting"
+        ],
+        "action_shuffle_above_floor_fraction": evidence[
+            "intervention_fraction_above_floor"
+        ],
+    }
+
+
+def figure_phase5_failure_decomposition(
     representation: dict[str, Any],
-    future_geometry: dict[str, Any],
-    rollout: dict[str, Any],
     readonly: dict[str, Any],
 ) -> dict[str, Any]:
     variants = ["B1", "G3", "G4"]
@@ -616,16 +756,6 @@ def figure_thought5_pilot(
         condition_data[variant]["conditions"]["camera"]["mean_utility_a0_minus_a1"]
         for variant in variants
     ]
-
-    conditions = ["clean", "camera", "lighting", "robot_init"]
-    condition_labels = ["Clean", "Camera", "Lighting", "Robot init."]
-    success = {
-        variant: [
-            rollout["summaries"][f"{variant}:{condition}"]["success_rate"]
-            for condition in conditions
-        ]
-        for variant in variants
-    }
 
     fig, axes = plt.subplots(1, 3, figsize=(13.2, 4.1))
 
@@ -663,87 +793,99 @@ def figure_thought5_pilot(
         color=COLORS["gray"],
     )
 
-    x_positions = list(range(len(variants)))
-    width = 0.35
-    axes[1].bar(
-        [position - width / 2 for position in x_positions],
-        clean_utility,
-        width,
-        label="Clean",
-        color=COLORS["blue"],
-    )
-    axes[1].bar(
-        [position + width / 2 for position in x_positions],
-        camera_utility,
-        width,
-        label="Camera",
-        color=COLORS["orange"],
+    aggregate_utility = [
+        aggregate_variant_utility(condition_data, variant) for variant in variants
+    ]
+    utility_bars = axes[1].bar(
+        variants,
+        aggregate_utility,
+        color=[COLORS["gray"], COLORS["blue"], COLORS["orange"]],
     )
     axes[1].axhline(0.0, color="#111827", linewidth=0.9)
-    axes[1].set_xticks(x_positions, variants)
-    axes[1].set_ylim(-0.027, 0.010)
+    axes[1].set_ylim(-0.019, 0.003)
     axes[1].set_ylabel("Future utility: loss(null) − loss(correct)")
-    axes[1].set_title("Post-hoc harm localizes to Clean")
-    axes[1].legend(frameon=False, fontsize=8)
-    for index, values in enumerate(zip(clean_utility, camera_utility)):
-        for offset, value in zip((-width / 2, width / 2), values):
-            axes[1].text(
-                index + offset,
-                value + (0.0014 if value >= 0 else -0.0025),
-                f"{value:+.4f}",
-                ha="center",
-                va="bottom" if value >= 0 else "top",
-                fontsize=7.2,
-            )
-
-    rollout_x = list(range(len(conditions)))
-    rollout_width = 0.24
-    offsets = [-rollout_width, 0.0, rollout_width]
-    rollout_colors = [COLORS["gray"], COLORS["blue"], COLORS["orange"]]
-    for variant, offset, color in zip(variants, offsets, rollout_colors):
-        axes[2].bar(
-            [position + offset for position in rollout_x],
-            success[variant],
-            rollout_width,
-            label=variant,
-            color=color,
+    axes[1].set_title("Aggregate future utility remains negative")
+    for bar, value in zip(utility_bars, aggregate_utility):
+        axes[1].text(
+            bar.get_x() + bar.get_width() / 2,
+            value - 0.0007,
+            f"{value:+.6f}",
+            ha="center",
+            va="top",
+            fontsize=8.0,
         )
-    axes[2].set_xticks(rollout_x, condition_labels, rotation=18)
-    axes[2].set_ylim(0, 1.12)
-    axes[2].set_ylabel("Pilot success rate")
-    axes[2].set_title("No paired Camera success gain (n=4)")
-    axes[2].legend(frameon=False, fontsize=8, ncol=3)
+    axes[1].text(
+        0.5,
+        0.06,
+        "G3 reduces harm but does not cross zero",
+        transform=axes[1].transAxes,
+        ha="center",
+        fontsize=7.8,
+        color=COLORS["gray"],
+    )
 
-    camera_rmse = future_geometry["main_camera_error"]
+    sigma_rows = readonly["questions"]["flow_and_action_localization"][
+        "flow_objective"
+    ]["variants"]["G3"]
+    sigma_labels = ["0–.25", ".25–.50", ".50–.75", ".75–1"]
+    sigma_bins = list(sigma_rows["noise_bins"].values())
+    sigma_values = [row["mean_utility"] for row in sigma_bins]
+    sigma_clean = [row["by_condition"]["clean"]["mean_utility"] for row in sigma_bins]
+    sigma_camera = [row["by_condition"]["camera"]["mean_utility"] for row in sigma_bins]
+    x_positions = list(range(len(sigma_labels)))
+    sigma_bars = axes[2].bar(
+        x_positions,
+        sigma_values,
+        color=[COLORS["red"] if value < 0 else COLORS["green"] for value in sigma_values],
+        alpha=0.82,
+        label="Overall",
+    )
+    axes[2].plot(x_positions, sigma_clean, "o-", color=COLORS["blue"], label="Clean")
+    axes[2].plot(x_positions, sigma_camera, "s-", color=COLORS["orange"], label="Camera")
+    axes[2].axhline(0.0, color="#111827", linewidth=0.9)
+    axes[2].set_xticks(x_positions, sigma_labels)
+    axes[2].set_ylim(-0.07, 0.025)
+    axes[2].set_xlabel("Effective sigma bucket")
+    axes[2].set_ylabel("G3 future utility")
+    axes[2].set_title("Post-hoc harm concentrates at low σ")
+    axes[2].legend(frameon=False, fontsize=7.6, ncol=3)
+    axes[2].text(
+        0.5,
+        0.05,
+        f"Pearson r={sigma_rows['pearson_sigma_utility']:+.3f}; read-only exploratory",
+        transform=axes[2].transAxes,
+        ha="center",
+        fontsize=7.4,
+        color=COLORS["gray"],
+    )
+    for bar, value in zip(sigma_bars, sigma_values):
+        axes[2].text(
+            bar.get_x() + bar.get_width() / 2,
+            value + (0.002 if value >= 0 else -0.004),
+            f"{value:+.3f}",
+            ha="center",
+            va="bottom" if value >= 0 else "top",
+            fontsize=7.0,
+        )
+
     fig.suptitle(
-        "Thought 5 directional pilot: representation movement does not become future or rollout utility",
+        "Phase 5: weak representation movement does not restore aggregate future utility",
         y=1.02,
         fontsize=11.5,
     )
-    fig.text(
-        0.5,
-        -0.015,
-        (
-            "Primary Camera future-geometry RMSE: "
-            f"B1 {camera_rmse['B1']:.6f} → G3 {camera_rmse['G3']:.6f}; "
-            "formal remains locked"
-        ),
-        ha="center",
-        fontsize=8.2,
-        color=COLORS["gray"],
-    )
     fig.tight_layout()
-    save_svg(fig, "figure6_thought5_pilot.svg")
+    save_svg(fig, "figure6_phase5_failure_decomposition.svg")
 
     return {
         "camera_representation_gap": dict(zip(variants, gaps)),
         "preregistered_g3_threshold": threshold,
+        "aggregate_future_utility": dict(zip(variants, aggregate_utility)),
         "future_utility_by_condition": {
             variant: {"Clean": clean, "Camera": camera}
             for variant, clean, camera in zip(variants, clean_utility, camera_utility)
         },
-        "pilot_success_rate": success,
-        "camera_future_geometry_rmse": camera_rmse,
+        "g3_sigma_bucket_utility": dict(zip(sigma_labels, sigma_values)),
+        "g3_sigma_utility_pearson": sigma_rows["pearson_sigma_utility"],
     }
 
 
@@ -753,6 +895,9 @@ def write_tables(
     phase1_data: dict[str, Any],
     phase2_data: dict[str, Any],
     sample_rows: list[dict[str, Any]],
+    thought4_evidence: dict[str, Any],
+    thought4_intervention: dict[str, Any],
+    thought5_training: dict[str, Any],
     thought5_representation: dict[str, Any],
     thought5_future_geometry: dict[str, Any],
     thought5_future_utility: dict[str, Any],
@@ -761,7 +906,7 @@ def write_tables(
 ) -> None:
     core_path = TABLE_DIR / "core_results.csv"
     with core_path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.writer(handle)
+        writer = csv.writer(handle, lineterminator="\n")
         writer.writerow(
             ["stage", "comparison", "metric", "estimate", "ci95_low", "ci95_high", "unit"]
         )
@@ -827,6 +972,57 @@ def write_tables(
                     "",
                     "",
                     "action_objective",
+                ]
+            )
+        for condition, row in (
+            ("Camera", thought4_evidence["camera_paired_gap"]),
+            ("Lighting", thought4_evidence["lighting_paired_gap"]),
+        ):
+            writer.writerow(
+                [
+                    "Thought4",
+                    f"{condition}_minus_Clean",
+                    "video_translation_rmse_gap",
+                    row["estimate_mean"],
+                    row["lower_min"],
+                    row["upper_max"],
+                    "m_conservative_three_seed_envelope",
+                ]
+            )
+        writer.writerow(
+            [
+                "Thought4",
+                "Camera_minus_Lighting",
+                "rank3_geometry_subspace_shift",
+                thought4_evidence["geometry_coordinate_camera_minus_lighting"][
+                    "estimate"
+                ],
+                thought4_evidence["geometry_coordinate_camera_minus_lighting"][
+                    "lower"
+                ],
+                thought4_evidence["geometry_coordinate_camera_minus_lighting"][
+                    "upper"
+                ],
+                "coordinate_l2",
+            ]
+        )
+        for variant, value in zip(
+            ("B1", "G3", "G4"),
+            (
+                thought5_representation["b1_camera_gap"],
+                thought5_representation["g3_camera_gap"],
+                thought5_representation["g4_camera_gap"],
+            ),
+        ):
+            writer.writerow(
+                [
+                    "Thought5",
+                    variant,
+                    "camera_representation_gap",
+                    value,
+                    "",
+                    "",
+                    "probe_error",
                 ]
             )
 
@@ -959,6 +1155,125 @@ def write_tables(
         writer.writerow(header)
         writer.writerows(rows)
 
+    cohort_rows = [
+        ["Thought1", "Clean online rollout", "4 suites / 40 tasks", thought1_data["clean"]["attempted"], "FORMAL"],
+        ["Thought1", "OOD online rollout", "5 perturbation categories", thought1_data["ood"]["attempted"], "FORMAL"],
+        ["Thought2", "Shadow diagnostic episode", "200 Clean + 532 OOD", 732, "FORMAL-COLLECTION / POST-RUN"],
+        ["Thought2", "Future probe", "2,020 aligned frames", 1010, "POST-RUN ASSOCIATION"],
+        ["Thought3-Phase1", "Fixed action counterfactual sample", "correct/null/shuffle", phase1_data["sample_count"], "SMOKE"],
+        ["Thought3-Phase2", "Train / development sample", "single LIBERO-Goal task", "28 / 4", "VALID OFFLINE DEVELOPMENT"],
+        ["Thought4", "Base state / paired render", "40/12/12 split; 4 conditions", "64 / 256", "FORMAL DIAGNOSTIC"],
+        ["Thought4", "Action intervention", "12 held-out states × 3 seeds", 36, "FORMAL DIAGNOSTIC"],
+        ["Thought5", "Train / development / pilot-test", "single task; disjoint episodes", "8 / 4 / 4", "DIRECTIONAL PILOT"],
+        ["Thought5", "Matched condition rollout", "B1/G3/G4 × 4 conditions × 4 episodes", 48, "DIRECTIONAL PILOT"],
+        ["Thought5", "Future-utility objective", "3 variants × 2 conditions × 128", 768, "DIRECTIONAL PILOT"],
+    ]
+    with (TABLE_DIR / "cohort_scale.csv").open(
+        "w", encoding="utf-8", newline=""
+    ) as handle:
+        writer = csv.writer(handle, lineterminator="\n")
+        writer.writerow(["stage", "unit", "scope", "count", "evidence_grade"])
+        writer.writerows(cohort_rows)
+
+    condition_data = thought5_readonly["questions"]["condition_failure"]
+    sigma_data = thought5_readonly["questions"]["flow_and_action_localization"][
+        "flow_objective"
+    ]["variants"]["G3"]
+    stage_rows = [
+        ["Thought1", "Failure", "Environment shift", "Clean 97.25%; OOD 47.70%; Camera 15.13%", "OOD robustness gap established"],
+        ["Thought2", "Representation", "Control-isolated shadow future", "Distance +0.0316; direction cosine -0.1898", "Association established; causality unresolved"],
+        ["Thought3", "Sensitivity / utility", "correct/null/shuffle + matched K0/K1", "8/8 action sensitivity; K1 3.624% worse than K0", "Sensitivity does not imply utility"],
+        ["Thought4", "Geometry", "Exact-state probes + rank-3 shuffle", "Camera gap 0.020273 m; Lighting 0.011660 m; 36/36 action effect", "camera_equivariance_gap"],
+        ["Thought5", "Intervention", "B1/G3/G4 Geo-REPA + Pose/Ray pilot", f"G3 gap -{thought5_representation['gap_reduction_fraction'] * 100:.2f}%; utility {aggregate_variant_utility(condition_data, 'G3'):+.6f}; Camera 1/4=1/4", "Full mechanism chain not supported; STOP"],
+        ["Thought5-readonly", "Failure analysis", "Immutable post-hoc decomposition", f"Clean utility {condition_data['G3']['conditions']['clean']['mean_utility_a0_minus_a1']:+.6f}; sigma<0.25 utility {sigma_data['noise_bins']['[0.00,0.25)']['mean_utility']:+.6f}", "Condition/noise-stage dependence hypothesis"],
+    ]
+    with (TABLE_DIR / "stage_findings.csv").open(
+        "w", encoding="utf-8", newline=""
+    ) as handle:
+        writer = csv.writer(handle, lineterminator="\n")
+        writer.writerow(["stage", "role", "intervention", "finding", "decision"])
+        writer.writerows(stage_rows)
+
+    def selected_development_row(variant: str) -> dict[str, Any]:
+        track = thought5_training["tracks"][variant]
+        matches = [
+            row
+            for row in track["development_rows"]
+            if row["step"] == track["selected_step"]
+        ]
+        if len(matches) != 1:
+            raise RuntimeError(f"Expected one selected development row for {variant}")
+        return matches[0]
+
+    phase5_rows = []
+    for variant, gap in zip(
+        ("B1", "G3", "G4"),
+        (
+            thought5_representation["b1_camera_gap"],
+            thought5_representation["g3_camera_gap"],
+            thought5_representation["g4_camera_gap"],
+        ),
+    ):
+        selected = selected_development_row(variant)
+        aggregate_utility = aggregate_variant_utility(condition_data, variant)
+        phase5_rows.append(
+            [
+                variant,
+                selected["selection_objective"],
+                selected["original_fastwam"],
+                gap,
+                (thought5_representation["b1_camera_gap"] - gap)
+                / thought5_representation["b1_camera_gap"],
+                thought5_future_geometry["main_camera_error"][variant],
+                aggregate_utility,
+                condition_data[variant]["conditions"]["clean"]["mean_utility_a0_minus_a1"],
+                condition_data[variant]["conditions"]["camera"]["mean_utility_a0_minus_a1"],
+                thought5_rollout["summaries"][f"{variant}:clean"]["success_rate"],
+                thought5_rollout["summaries"][f"{variant}:camera"]["success_rate"],
+                thought5_rollout["summaries"][f"{variant}:lighting"]["success_rate"],
+                thought5_rollout["summaries"][f"{variant}:robot_init"]["success_rate"],
+            ]
+        )
+    with (TABLE_DIR / "phase5_b1_g3_g4.csv").open(
+        "w", encoding="utf-8", newline=""
+    ) as handle:
+        writer = csv.writer(handle, lineterminator="\n")
+        writer.writerow(
+            [
+                "variant",
+                "development_selection_objective",
+                "development_original_fastwam_loss",
+                "camera_representation_gap",
+                "gap_reduction_vs_b1",
+                "camera_future_geometry_rmse",
+                "aggregate_future_utility",
+                "clean_future_utility_posthoc",
+                "camera_future_utility_posthoc",
+                "clean_success_rate_n4",
+                "camera_success_rate_n4",
+                "lighting_success_rate_n4",
+                "robot_init_success_rate_n4",
+            ]
+        )
+        writer.writerows(phase5_rows)
+
+    boundary_rows = [
+        ["Fast-WAM is fragile under the evaluated LIBERO-Plus shifts", "supported", "Fixed release checkpoint; simulation only"],
+        ["OOD shadow-future consistency degrades", "supported association", "Decoded-frame proxy; not a causal failure explanation"],
+        ["K=1 future content changes actions", "supported technical sensitivity", "One checkpoint/task; n=8; not success"],
+        ["K=1 improves held-out utility", "negative in frozen recipe", "Single task/seed; 28/4; offline objective"],
+        ["Camera equivariance is the unique cause of failure", "not supported", "Thought4 localizes a gap but does not establish sufficiency"],
+        ["Current Geo-REPA + Pose/Ray recipe restores future utility", "pilot not supported", "G3 misses H1/H2/H3 gates; formal locked"],
+        ["Geo-REPA or RayPose is universally ineffective", "not answered", "G4 is not a complete geometry control; G1/G2 absent"],
+        ["Future utility is condition/noise-stage dependent", "exploratory hypothesis", "Read-only single-task post-hoc decomposition"],
+    ]
+    with (TABLE_DIR / "evidence_boundaries.csv").open(
+        "w", encoding="utf-8", newline=""
+    ) as handle:
+        writer = csv.writer(handle, lineterminator="\n")
+        writer.writerow(["claim", "status", "required_boundary"])
+        writer.writerows(boundary_rows)
+
 
 def main() -> None:
     FIGURE_DIR.mkdir(parents=True, exist_ok=True)
@@ -969,6 +1284,9 @@ def main() -> None:
     thought2 = load_json(SOURCES["thought2"])
     phase1 = load_json(SOURCES["thought3_phase1"])
     phase2 = load_json(SOURCES["thought3_phase2"])
+    thought4_evidence = load_json(SOURCES["thought4_evidence"])
+    thought4_intervention = load_json(SOURCES["thought4_intervention"])
+    thought5_training = load_json(SOURCES["thought5_training"])
     thought5_representation = load_json(SOURCES["thought5_representation"])
     thought5_future_geometry = load_json(SOURCES["thought5_future_geometry"])
     thought5_future_utility = load_json(SOURCES["thought5_future_utility"])
@@ -980,17 +1298,26 @@ def main() -> None:
     )
 
     figure_data = {
-        "figure1_ood_success.svg": figure_ood_success(thought1),
-        "figure2_future_consistency.svg": figure_future_consistency(thought2),
-        "figure3_sensitivity_vs_utility.svg": figure_sensitivity_utility(
+        "figure1_research_chain.svg": figure_evidence_chain(
+            thought1,
+            thought2,
+            phase1,
+            phase2,
+            thought4_evidence,
+            thought5_representation,
+            thought5_rollout,
+            thought5_readonly,
+        ),
+        "figure2_ood_success.svg": figure_ood_success(thought1),
+        "figure3_future_consistency.svg": figure_future_consistency(thought2),
+        "figure4_sensitivity_vs_utility.svg": figure_sensitivity_utility(
             phase1, phase2
         ),
-        "figure4_phase2_per_sample.svg": figure_phase2_samples(sample_rows),
-        "figure5_evidence_chain.svg": figure_evidence_chain(),
-        "figure6_thought5_pilot.svg": figure_thought5_pilot(
+        "figure5_camera_equivariance_gap.svg": figure_camera_equivariance_gap(
+            thought4_evidence, thought4_intervention
+        ),
+        "figure6_phase5_failure_decomposition.svg": figure_phase5_failure_decomposition(
             thought5_representation,
-            thought5_future_geometry,
-            thought5_rollout,
             thought5_readonly,
         ),
     }
@@ -1000,6 +1327,9 @@ def main() -> None:
         phase1,
         phase2,
         sample_rows,
+        thought4_evidence,
+        thought4_intervention,
+        thought5_training,
         thought5_representation,
         thought5_future_geometry,
         thought5_future_utility,
@@ -1008,7 +1338,7 @@ def main() -> None:
     )
 
     manifest = {
-        "schema_version": "fastwam_ood.paper_figures.v2",
+        "schema_version": "fastwam_ood.paper_figures.v3",
         "generator": "scripts/build_paper_figures.py",
         "source_artifacts": {
             key: {

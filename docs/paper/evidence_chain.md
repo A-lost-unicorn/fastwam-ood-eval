@@ -6,11 +6,13 @@ LIBERO-Plus、本项目冻结的 K=1 Future-to-Action Adapter 配方，以及 Th
 冻结的 geometry–action diagnosis，以及 Thought5 的方法、单 task Pilot v4 和
 只读失败分解；Thought5 formal 多任务效果仍未运行。
 
-![Thought1 到 Thought5 的证据阶梯](figures/figure5_evidence_chain.svg)
+![Failure→Representation→Sensitivity→Geometry→Intervention→Failure analysis 研究链](figures/figure1_research_chain.svg)
 
 ## 1. 总结
 
-整条研究路线不是一次模型对比，而是六层逐级收紧的问题：
+原假设是 Camera Equivariance Gap 可由 Geo-REPA + Pose/Ray 修复，并进一步
+恢复 future utility 和 Camera success。整条研究路线不是一次模型对比，
+而是六层逐级收紧的问题：
 
 1. **行为事实**：Fast-WAM 在环境 OOD 下是否掉点？
 2. **观察关联**：模型生成的 shadow future 在 OOD 下是否更不一致，并与失败相关？
@@ -18,8 +20,8 @@ LIBERO-Plus、本项目冻结的 K=1 Future-to-Action Adapter 配方，以及 Th
 4. **任务效用**：让动作读取 K=1 future 后，是否真的改善 held-out 目标或 OOD success？
 5. **缺口定位**：Camera OOD 的主要问题更接近 geometry unreadability、
    action interface gap，还是 camera equivariance gap？
-6. **针对性干预**：按机制诊断设计的 GeoEq 配方，能否同时改善表征、future
-   utility 与 Camera rollout success？
+6. **干预与失败分解**：按机制诊断设计的 GeoEq 配方，能否改善表征、
+   future utility 与 Camera success；若不能，失败集中在何种 condition/flow regime？
 
 前三层分别得到“是、是、是”；第四层在当前冻结配方上的离线答案是“没有观察到
 改善”。第五层进一步发现 Clean geometry 在 Video/Action 表征中可读、Camera
@@ -27,7 +29,9 @@ LIBERO-Plus、本项目冻结的 K=1 Future-to-Action Adapter 配方，以及 Th
 subspace 干预会改变动作，因此将下一方法假设定位为 `camera_equivariance_gap`。
 第六层的 Thought5 又验证了一个更具体的机制配方：G3 将 Camera representation gap 缩小
 20.94%，但未达到 25% 门槛，absolute future utility 仍为负且 Camera rollout
-未改善。因此论文最稳健的主结论仍是：
+未改善。冻结负结果后的只读分解把下一问题收窄到 condition/noise-stage
+dependence。因此这是完整的 hypothesis–intervention–falsification 闭环，
+而非正向性能闭环。论文最稳健的主结论仍是：
 
 > Future sensitivity is not future utility：future 内容能够改变动作，但这一
 > 技术敏感性没有自动转化为 held-out 控制收益。
@@ -75,7 +79,7 @@ success 的总体因果效应。
 全部完成，0 exception。成功率下降并不是由推理变慢解释的，因为两种条件的
 单次 policy latency 近似相同。
 
-![Fast-WAM 的 Clean/OOD 成功率](figures/figure1_ood_success.svg)
+![Fast-WAM 的 Clean/OOD 成功率](figures/figure2_ood_success.svg)
 
 阶段一支持“存在大幅环境鲁棒性缺口”，但无法区分：
 
@@ -97,7 +101,7 @@ future、受保护原动作、实际后续画面与 outcome；同次运行内
 | Future latent L1 ↓ | 0.1431 | 0.1708 | +0.0277 | [0.0238, 0.0317] |
 | Motion-direction cosine ↑ | 0.7416 | 0.5518 | −0.1898 | [−0.2134, −0.1664] |
 
-![Future consistency 的 ID/OOD 与成败对比](figures/figure2_future_consistency.svg)
+![Future consistency 的 ID/OOD 与成败对比](figures/figure3_future_consistency.svg)
 
 从阶段一到阶段二可以形成以下链条：
 
@@ -162,9 +166,7 @@ A1 final 比 A0 高 0.000150604（3.624%），且四条 development sample
 全部为 A1 更差。12/12 hard checks 通过，排除了梯度断链、两轨训练不匹配、
 checkpoint 损坏和 backbone 被更新等工程解释。
 
-![动作敏感性与 held-out 效用](figures/figure3_sensitivity_vs_utility.svg)
-
-![Phase 2 逐样本 A1 相对 A0](figures/figure4_phase2_per_sample.svg)
+![动作敏感性与 held-out 效用](figures/figure4_sensitivity_vs_utility.svg)
 
 因此 Phase 1→Phase 2 的逻辑结论是：
 
@@ -235,6 +237,8 @@ geometry subspace：
 推荐 `Geo-REPA + relative pose / camera-ray equivariance`，不能写成该方法
 已经改善 representation、action 或 rollout success。
 
+![Camera/Lighting probe gap 与几何子空间 shift](figures/figure5_camera_equivariance_gap.svg)
+
 ## 7. Thought5：定向干预、负 Gate 与失败定位
 
 [Thought5 Pilot v4 结果](../thought5/pilot_v4_results.md)在单一
@@ -247,7 +251,7 @@ geometry subspace：
 | Correct future utility | −0.015649 | −0.005231 | −0.011302 | G3 缓解伤害但仍为负 |
 | Camera rollout success | 1/4 | 1/4 | 0/4 | G3 对 B1 无提升 |
 
-![Thought5 单任务 Pilot 与只读 condition 分解](figures/figure6_thought5_pilot.svg)
+![Thought5 表征、future utility 与 sigma-bucket 失败分解](figures/figure6_phase5_failure_decomposition.svg)
 
 所有 worker/collector 均 complete，但 training、representation、future geometry、
 future utility 和 rollout 五项方向 Gate 全 false，因此 `formal_unlocked=false`。

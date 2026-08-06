@@ -1,0 +1,12 @@
+stage,unit,scope,count,evidence_grade
+Thought1,Clean online rollout,4 suites / 40 tasks,800,FORMAL
+Thought1,OOD online rollout,5 perturbation categories,6771,FORMAL
+Thought2,Shadow diagnostic episode,200 Clean + 532 OOD,732,FORMAL-COLLECTION / POST-RUN
+Thought2,Future probe,"2,020 aligned frames",1010,POST-RUN ASSOCIATION
+Thought3-Phase1,Fixed action counterfactual sample,correct/null/shuffle,8,SMOKE
+Thought3-Phase2,Train / development sample,single LIBERO-Goal task,28 / 4,VALID OFFLINE DEVELOPMENT
+Thought4,Base state / paired render,40/12/12 split; 4 conditions,64 / 256,FORMAL DIAGNOSTIC
+Thought4,Action intervention,12 held-out states × 3 seeds,36,FORMAL DIAGNOSTIC
+Thought5,Train / development / pilot-test,single task; disjoint episodes,8 / 4 / 4,DIRECTIONAL PILOT
+Thought5,Matched condition rollout,B1/G3/G4 × 4 conditions × 4 episodes,48,DIRECTIONAL PILOT
+Thought5,Future-utility objective,3 variants × 2 conditions × 128,768,DIRECTIONAL PILOT

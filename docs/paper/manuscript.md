@@ -1,6 +1,6 @@
-# 未来敏感性不等于未来效用：Fast-WAM 在 LIBERO-Plus OOD 环境中的分层审计
+# 未来敏感性不等于未来效用：从 Camera Equivariance Gap 到条件与噪声阶段依赖
 
-## Future Sensitivity Is Not Future Utility: A Layered Audit of Fast-WAM under LIBERO-Plus Distribution Shifts
+## Future Sensitivity Is Not Future Utility: Falsifying a Camera-Equivariance Repair Hypothesis for Fast-WAM under LIBERO-Plus Shifts
 
 **作者：** 待填写  
 **单位：** 待填写  
@@ -14,8 +14,11 @@
 世界动作模型可以在生成机器人动作的同时建模视觉未来，但测试时是否必须显式
 想象未来，尤其在环境分布外（out-of-distribution, OOD）条件下，仍缺少分层且
 可识别的实证分析。本文以官方 Fast-WAM `libero_uncond_2cam224` checkpoint
-为对象，构建从行为评测、离线一致性、技术反事实、轻量 Adapter 效用、机制
-定位到针对性方法干预的六层证据链。首先，在冻结权重、动作接口和基础任务后，
+为对象，检验一条完整机制假设：Camera Equivariance Gap 可由 Geo-REPA
+与 Pose/Ray conditioning 修复，表征改善将继而恢复 future utility 和 Camera
+success。为此，我们构建 Failure→Representation→Sensitivity→Geometry→
+Intervention→Failure analysis 的六层证据链。首先，在冻结权重、动作接口
+和基础任务后，
 我们完成 800 个标准 LIBERO
 与 6,771 个 runnable LIBERO-Plus rollout。成功率从 97.25% 降至 47.70%，
 绝对下降 49.55 个百分点；相机视角扰动最严重，成功率仅 15.13%。其次，在
@@ -38,9 +41,13 @@ control 逐位恢复。冻结分类为 `camera_equivariance_gap`。基于该诊�
 预注册并三卡运行单任务 Fast-WAM-GeoEq Pilot：G3 使 Camera representation
 gap 缩小 20.94%，未达到 25% 门槛，主 future geometry RMSE 未改善，correct
 future utility 仍为 −0.005231，Camera success 与基线同为 1/4。五项方向门禁
-均为 false，故停止当前配方并锁定正式多任务实验。只读失败分解进一步将伤害
-定位于 Clean/低 effective-sigma objective，但不能独立识别 RayPose 的因果贡献。
-结果表明，**future 内容能影响动作并不意味着 future 对控制有用**。本文既不
+均为 false，故我们没有继续调参追求正结果，而是冻结负结果并锁定正式多任务
+实验。只读失败分解显示，G3 的伤害集中于 Clean 与低 effective-sigma
+objective，而 Camera 均值的 future utility 转为弱正值；这是条件/噪声阶段关联，
+不是新的因果结论，也不能独立识别 RayPose 贡献。因此，完整的“几何修复→
+future utility→success”机制链不被数据支持；问题从“几何不够好”收敛为
+“future 效用具有条件与噪声阶段依赖”。结果表明，**future 内容能影响动作并不
+意味着 future 对控制有用**。本文既不
 证明 Fast-WAM 在 OOD 中普遍不需要未来，也不证明未来无效；它给出一个可复现的
 负结果与方法学结论：future prediction、future-conditioned action sensitivity
 和任务效用必须分别验证。
@@ -52,9 +59,11 @@ future utility 仍为 −0.005231，Camera success 与基线同为 1/4。五项�
 
 World action models can jointly model visual futures and robot actions, yet it
 remains unclear whether explicit test-time future imagination is necessary,
-particularly under out-of-distribution (OOD) environment shifts. We present a
-six-level evidence audit of the released Fast-WAM
-`libero_uncond_2cam224` checkpoint, separating behavioral robustness,
+particularly under out-of-distribution (OOD) environment shifts. We test a
+complete mechanism hypothesis on the released Fast-WAM
+`libero_uncond_2cam224` checkpoint: Geo-REPA and Pose/Ray conditioning should
+repair a Camera Equivariance Gap, thereby restoring future utility and Camera
+success. The six-level audit separates behavioral robustness,
 observational future consistency, technical action sensitivity, downstream
 utility, mechanism localization, and targeted intervention. First, with model
 weights, action interfaces, and base tasks frozen,
@@ -85,10 +94,14 @@ the correct reconstruction is bitwise exact. This yields the frozen diagnosis
 Fast-WAM-GeoEq pilot. G3 reduces the Camera representation gap by 20.94%, below
 the 25% gate; the primary future-geometry RMSE does not improve, correct-future
 utility remains negative at −0.005231, and Camera success is unchanged at 1/4.
-All five directional gates are false, so the recipe is stopped before formal
-multitask evaluation. A post-hoc read-only decomposition localizes damage to
-Clean/low-effective-sigma objectives but cannot isolate the causal contribution
-of RayPose.
+All five directional gates are false. We therefore freeze the negative result
+instead of tuning toward a positive outcome, and stop before formal multitask
+evaluation. A post-hoc read-only decomposition localizes damage to
+Clean/low-effective-sigma objectives, while Camera-average utility becomes
+weakly positive; this is exploratory condition/noise-stage association and
+cannot isolate RayPose's causal contribution. The full geometry-repair →
+future-utility → success chain is thus unsupported. The resulting hypothesis
+is narrower: future utility may depend on condition and denoising-noise regime.
 Our central finding is that **future sensitivity is not future utility**.
 The study does not establish that future imagination is universally
 unnecessary; instead, it provides a reproducible negative result and an
@@ -133,6 +146,16 @@ matched K=0/K=1 训练检查这种依赖能否转化为 held-out action objectiv
 并用冻结的 geometry–action probe 与离线 subspace intervention 定位最严重的
 Camera 缺口属于哪一类机制；最后预注册针对该机制的 GeoEq Pilot，检验表征变化
 是否能进一步转化为 future utility 与 paired rollout success。
+
+贯穿 Thought 1–5 的原假设可写为一条必须逐环成立的机制链：
+
+> **H-full:** Camera OOD failure 伴随可定位的 equivariance gap；Geo-REPA +
+> Pose/Ray 会特异性地减小该 gap，改善 future geometry，使 correct future
+> utility 转正，并最终提高 Camera success。
+
+这是一个合取假设：任一关键箭头失败，都不能用前一环的正证据替代整链收益。
+本文的成果因而是一个完整的 hypothesis–intervention–falsification 闭环，
+而不是正向性能闭环。
 
 本文的主要贡献如下：
 
@@ -307,7 +330,7 @@ A0 用于分离“新增 Adapter/训练”与“future 内容”的影响；它�
 
 ### 4.1 总体证据阶梯
 
-![从 Thought 1 到 Thought 5 的分层证据阶梯](figures/figure5_evidence_chain.svg)
+![图 1：整篇研究链路。各阶段只回答前一个未决问题，最终形成一个负向但完整的 hypothesis–intervention–falsification 闭环。](figures/figure1_research_chain.svg)
 
 六层证据使用独立 namespace 和输出目录。Thought 1/2 冻结后，Thought 3
 不能修改其 runner、结果或 checkpoint。每一阶段只在前一阶段回答了更弱问题后
@@ -541,6 +564,18 @@ artifact checksum。Thought4 formal v6 使用单张 RTX 4090，耗时 4,728.05 �
 
 ## 6. 结果
 
+五个思考点与结果后只读分解的逻辑关系如下。表中“结论”指该阶段所能
+支持的最强命题，不向上替代更强的 outcome 证据。
+
+| 阶段 | 背景/问题 | 干预或对照 | 主要结果 | 决策 |
+| --- | --- | --- | --- | --- |
+| Thought 1 · Failure | Clean 高成功率是否掩盖 OOD 缺口？ | 冻结 Fast-WAM，Clean/OOD 大规模 rollout | 97.25%→47.70%；Camera 15.13% | 建立行为失败事实 |
+| Thought 2 · Representation | future 在 OOD 下是否更不一致？ | 不反馈控制的 shadow future | distance +0.0316；direction −0.1898 | 建立关联，不宣称因果 |
+| Thought 3 · Sensitivity | future 是否进入动作，并产生效用？ | correct/null/shuffle；matched K=0/K=1 | 8/8 动作改变；K=1 loss 比 K=0 高 3.624% | sensitivity ≠ utility |
+| Thought 4 · Geometry | Camera 缺口是否符合几何等变性问题？ | exact-state probe；rank-3 shuffle | Camera gap 0.020273 m，Lighting 0.011660 m；36/36 动作效应 | 冻结 `camera_equivariance_gap` 诊断 |
+| Thought 5 · Intervention | Geo-REPA + Pose/Ray 能否恢复 utility/success？ | matched B1/G3/G4 单任务 Pilot | G3 gap −20.94%；utility −0.005231；Camera 1/4=1/4 | 五项 Gate 均 false，停止正式扩展 |
+| 只读 Failure analysis | 负效用集中在哪些条件/流程？ | 冻结工件的 condition/sigma 分解 | G3 Clean −0.015268；σ<0.25 为 −0.049520 | 新假设收窄为 condition/noise-stage dependence |
+
 ### 6.1 RQ1：Fast-WAM 在环境 OOD 下大幅掉点
 
 800 个 Clean rollout 全部 attempted，成功 778 个；6,771 个 runnable OOD
@@ -554,7 +589,7 @@ rollout 全部完成，成功 3,230 个。两部分均无 exception、重复或�
 绝对下降为 49.55 个百分点，相对下降为 50.95%。Clean 与 OOD 平均 policy
 latency 只差约 2.22 ms，因此掉点不能归因于 OOD 推理速度下降。
 
-![图 1：Clean、OOD 总体及五类扰动成功率；误差线为 95% row-bootstrap CI。](figures/figure1_ood_success.svg)
+![图 2：Clean、OOD 总体及五类扰动成功率；误差线为 95% row-bootstrap CI。](figures/figure2_ood_success.svg)
 
 五类扰动差异明显：
 
@@ -583,7 +618,7 @@ action 在同一运行内 1,010/1,010 保持不变。
 | Future latent L1 ↓ | 0.1431 | 0.1708 | **+0.0277** | [0.0238, 0.0317] |
 | Motion-direction cosine ↑ | 0.7416 | 0.5518 | **−0.1898** | [−0.2134, −0.1664] |
 
-![图 2：Shadow future 的 Clean/OOD 差异与 OOD 成败关联。区间为 task-cluster bootstrap 的差值区间。](figures/figure2_future_consistency.svg)
+![图 3：Shadow future 的 Clean/OOD 差异与 OOD 成败关联。区间为 task-cluster bootstrap 的差值区间。](figures/figure3_future_consistency.svg)
 
 在 OOD outcome 对比中，排除两条 Phase 1/2 outcome mismatch 后，255 个 success
 与 275 个 failure episode 同时覆盖 40 个 task。Failure 相对 success 的
@@ -637,7 +672,7 @@ schedule 和 development flow 完全匹配，冻结 Fast-WAM 参数 SHA 前后�
 
 A1 final mean 比 A0 高 0.000150604，即相对 A0 高 3.624%。
 
-![图 3：左侧证明 future 内容改变动作；右侧显示这种敏感性没有形成 held-out objective 收益。](figures/figure3_sensitivity_vs_utility.svg)
+![图 4：左侧的 correct/null/shuffle 对照证明 future 内容改变动作；右侧显示这种敏感性没有形成 held-out objective 收益。](figures/figure4_sensitivity_vs_utility.svg)
 
 逐样本结果方向一致：
 
@@ -647,8 +682,6 @@ A1 final mean 比 A0 高 0.000150604，即相对 A0 高 3.624%。
 | `9c54127523fc` | 0.00253181 | 0.00281174 | +11.056% |
 | `30d329649c06` | 0.00521795 | 0.00533706 | +2.283% |
 | `08e50da358c` | 0.00286665 | 0.00303564 | +5.895% |
-
-![图 4：四条 development sample 上，A1 loss 均高于 matched A0。](figures/figure4_phase2_per_sample.svg)
 
 训练确实打开了 Adapter，而非梯度断链：两轨第一步仅 zero gate 有非零梯度，
 第二步起 attention、future projector 等参数均获得非零梯度；step-200 gate
@@ -702,6 +735,8 @@ rotation difference mean 为 `0.001094/0.000410`，gripper difference 为 0。
 这证明 probe-defined geometry coordinates 对动作 tensor 有技术因果影响，但
 动作没有在环境中执行，不能推断任务价值。
 
+![图 5：Camera Equivariance Gap。左：Camera/Lighting exact-state probe gap 及三 seed 保守包络；右：Camera、Lighting 与探索性 Robot-init 的 rank-3 几何子空间 shift。](figures/figure5_camera_equivariance_gap.svg)
+
 RQ6 的冻结答案是：**证据最符合 `camera_equivariance_gap`。** 推荐的下一方法
 为 `Geo-REPA + relative pose / camera-ray equivariance`；该推荐是待检验假设，
 不是方法效果或 OOD success 结果。
@@ -714,6 +749,19 @@ Camera representation gap 从 B1 的 0.002246 降至 0.001776，即缩小 20.94%
 `[−0.001146, 0.000175]` 跨 0。G4 的 gap 为 0.001666，反而缩小 25.82%，因此
 G3 的变化不能被归因于正确逐样本 Geo-REPA correspondence。
 
+| Phase 5 endpoint | B1 | G3 | G4 | 证据角色 |
+| --- | ---: | ---: | ---: | --- |
+| Development selection objective | 0.035865 | 0.048300 | 0.048728 | 固定 step-100 |
+| Original Fast-WAM loss | 0.035865 | 0.035921 | 0.035904 | 训练对齐检查 |
+| Camera representation gap | 0.002246 | 0.001776 | 0.001666 | H1；G3 未过 25% 门槛 |
+| 相对 B1 的 gap reduction | 0 | 20.94% | 25.82% | G4 更小，特异性未识别 |
+| Camera future-geometry RMSE | 0.341277 | 0.341320 | 0.341331 | H2；无改善 |
+| Aggregate future utility | −0.015649 | −0.005231 | −0.011302 | H3；正值才表示 correct 优于 null |
+| Clean future utility | −0.021569 | −0.015268 | −0.018712 | 结果后只读 |
+| Camera future utility | −0.009730 | +0.004807 | −0.003892 | 结果后只读 |
+| Clean / Camera success | 1/4 / 1/4 | 1/4 / 1/4 | 1/4 / 0/4 | H4；方向性 Pilot |
+| Lighting / Robot-init success | 4/4 / 4/4 | 4/4 / 4/4 | 4/4 / 4/4 | 方向性 Pilot |
+
 主 Camera future-geometry RMSE 为 B1 0.341277、G3 0.341320、G4 0.341331，
 没有改善。aggregate correct-future utility（`loss(null)−loss(correct)`）由 B1
 的 −0.015649 缓解为 G3 的 −0.005231，但 G3 的 95% interval
@@ -722,10 +770,21 @@ paired rollout 中 B1/G3 的 Clean 与 Camera 均为 1/4，Lighting 与 Robot-in
 均为 4/4；Camera 没有 gain。training、representation、future geometry、future
 utility 与 rollout 五项方向 Gate 全为 false，`formal_unlocked=false`。
 
-![Thought5 单任务方向性 Pilot 与只读 condition 分解](figures/figure6_thought5_pilot.svg)
+![图 6：Phase 5 与失败分解。左：B1/G3/G4 Camera representation gap；中：aggregate future utility；右：G3 在 effective-sigma bucket 上的条件分解，只作结果后探索。](figures/figure6_phase5_failure_decomposition.svg)
 
 只读失败分解显示，G3 utility 在 Clean 为 −0.015268，在 Camera 为 +0.004807；
-伤害主要集中于 effective sigma<0.5 的 flow objective。RayPose gate、梯度和
+伤害主要集中于 effective sigma<0.5 的 flow objective。具体分解为：
+
+| G3 effective-sigma bucket | n | Overall utility | Clean | Camera | 负 utility 比例 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| [0.00, 0.25) | 18 | **−0.049520** | −0.059421 | −0.037143 | 88.9% |
+| [0.25, 0.50) | 20 | **−0.040457** | −0.062250 | +0.010396 | 85.0% |
+| [0.50, 0.75) | 60 | +0.002821 | −0.012122 | +0.015048 | 40.0% |
+| [0.75, 1.00] | 158 | +0.001216 | −0.002095 | +0.004365 | 49.4% |
+
+effective sigma 与 utility 的 Pearson correlation 为 +0.445914。该结果只说明关联：
+effective sigma 是既有 flow objective 的分箱变量，不能换成“去噪阶段导致效用”的因果
+命题。RayPose gate、梯度和
 residual injection 均非零，说明路径执行且更新；但没有 matched gate-zero
 checkpoint，LoRA 与 RayPose 又同时变化，故其独立因果贡献不可识别。G3/G4
 training total trajectory correlation 为 0.999986，Video-source feature-delta
@@ -869,6 +928,19 @@ Pilot endpoint。完整边界见 [Thought5 协议](../thought5/protocol.md)、
 [Pilot v4 结果](../thought5/pilot_v4_results.md)与
 [只读失败分解](../thought5/pilot_v4_readonly_failure_analysis.md)。
 
+### 8.7 证据边界：可以声称与不能声称
+
+| 命题 | 状态 | 最小必要边界 |
+| --- | --- | --- |
+| Fast-WAM 对所测 LIBERO-Plus shift 敏感 | **可以声称** | 固定 release checkpoint；仿真环境 shift |
+| OOD shadow-future consistency 下降 | **可以声称关联** | decoded-frame proxy；shadow future 不反馈控制 |
+| K=1 future 内容会改变动作 | **可以声称技术敏感性** | 一个 checkpoint/task；n=8；非 success |
+| K=1 改善 held-out utility | **当前配方不支持** | 单 task/seed；28/4；离线 objective |
+| Camera equivariance 是失败的唯一原因 | **不能声称** | Thought 4 定位 gap，但没有证明充分性 |
+| 当前 Geo-REPA + Pose/Ray 恢复 future utility | **Pilot 不支持** | G3 未通过 H1/H2/H3 与 rollout Gate |
+| Geo-REPA 或 RayPose 普遍无效 | **不能声称** | G4 不是完整 geometry control；缺 G1/G2/gate-zero |
+| Future utility 具有 condition/noise-stage dependence | **可作为新假设** | 单任务、结果后只读分解；尚未独立验证 |
+
 ## 9. 结论
 
 本文围绕“Fast-WAM 在 OOD 环境中真的不需要未来想象吗？”建立了一条由弱到强
@@ -888,6 +960,13 @@ geometry/motion 可读，Camera 的 exact-state representation gap 大于 Lighti
 非特异的 representation 变化，却没有获得 positive future utility 或 Camera
 success，因而停止在 formal 之前。
 
+这些结果直接回答了 H-full：Camera gap 的诊断成立，但“针对性几何干预→
+特异表征修复→future geometry 改善→future utility 转正→Camera success 提升”
+的完整链条不成立。方法没有提高成功率，但实验问题已经得到回答。我们
+因而冻结负结果，不继续在同一 Pilot endpoint 上调参。只读分解进一步把问题
+从“几何不够好”收敛到“future 效用可能具有 condition 与 noise-stage dependence”。
+这一新命题是后续可预注册验证的假设，不是本文已经确认的因果机制。
+
 因此，本文最强且不过界的结论是：
 
 > **Future sensitivity is not future utility.**
@@ -899,7 +978,8 @@ future”。它支持一种更严格的研究范式：先验证鲁棒性缺口�
 机制诊断可以指导下一方法选择，但也必须在独立 held-out representation、SE(3)
 与 Camera rollout 上重新验证。当前只读分解只把下一问题收窄到 condition-aware /
 low-noise mitigation 与 RayPose/regularization identification，不能用于放宽旧门槛
-或重启已停止的 G3 recipe。
+或重启已停止的 G3 recipe。这是一个完整的
+hypothesis–intervention–falsification 闭环，只是不是正向性能闭环。
 
 ## 数据、代码与复现声明
 
@@ -909,7 +989,10 @@ low-noise mitigation 与 RayPose/regularization identification，不能用于放
 `scripts/build_paper_figures.py` 从冻结 JSON/JSONL 生成；Thought4 与 Thought5
 的冻结数值分别收录于 [Thought4 结果表](tables/thought4_diagnosis.csv)和
 [Thought5 Pilot/诊断表](tables/thought5_pilot_diagnostics.csv)，并由正式工件
-SHA 与 figure manifest 追溯。
+SHA 与 figure manifest 追溯。正文四类主表的机器可读版本为
+[cohort 与规模](tables/cohort_scale.csv)、[各阶段发现](tables/stage_findings.csv)、
+[Phase 5 B1/G3/G4](tables/phase5_b1_g3_g4.csv)与
+[可以/不能声称的证据边界](tables/evidence_boundaries.csv)。
 
 ## 伦理与安全声明
 

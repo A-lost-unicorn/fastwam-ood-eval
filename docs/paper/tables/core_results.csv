@@ -9,3 +9,9 @@ Thought3_Phase1,correct_null,action_l2_rms,0.01105219020973891,,0.01573820379562
 Thought3_Phase1,correct_shuffle,action_l2_rms,0.012091711862012744,,0.01769042545929551,normalized_action
 Thought3_Phase2,A0,development_final_mean_loss,0.004155978542513594,,,action_objective
 Thought3_Phase2,A1,development_final_mean_loss,0.00430658254524019,,,action_objective
+Thought4,Camera_minus_Clean,video_translation_rmse_gap,0.02027315051398344,0.002091659621025125,0.04079905820544808,m_conservative_three_seed_envelope
+Thought4,Lighting_minus_Clean,video_translation_rmse_gap,0.011659724534385733,0.0007723008360092839,0.020449603276210832,m_conservative_three_seed_envelope
+Thought4,Camera_minus_Lighting,rank3_geometry_subspace_shift,0.14628397735456625,0.08851858228445053,0.20030984459444873,coordinate_l2
+Thought5,B1,camera_representation_gap,0.0022461169864982367,,,probe_error
+Thought5,G3,camera_representation_gap,0.0017757044018556674,,,probe_error
+Thought5,G4,camera_representation_gap,0.0016662330987552802,,,probe_error

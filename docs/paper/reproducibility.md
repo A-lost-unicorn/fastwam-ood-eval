@@ -59,25 +59,31 @@ MPLCONFIGDIR=/tmp/fastwam-paper-mpl \
 
 输出：
 
-- `docs/paper/figures/figure1_ood_success.svg`
-- `docs/paper/figures/figure2_future_consistency.svg`
-- `docs/paper/figures/figure3_sensitivity_vs_utility.svg`
-- `docs/paper/figures/figure4_phase2_per_sample.svg`
-- `docs/paper/figures/figure5_evidence_chain.svg`
-- `docs/paper/figures/figure6_thought5_pilot.svg`
+- `docs/paper/figures/figure1_research_chain.svg`
+- `docs/paper/figures/figure2_ood_success.svg`
+- `docs/paper/figures/figure3_future_consistency.svg`
+- `docs/paper/figures/figure4_sensitivity_vs_utility.svg`
+- `docs/paper/figures/figure5_camera_equivariance_gap.svg`
+- `docs/paper/figures/figure6_phase5_failure_decomposition.svg`
 - `docs/paper/tables/core_results.csv`
 - `docs/paper/tables/phase2_per_sample.csv`
 - `docs/paper/tables/thought5_pilot_diagnostics.csv`
+- `docs/paper/tables/cohort_scale.csv`
+- `docs/paper/tables/stage_findings.csv`
+- `docs/paper/tables/phase5_b1_g3_g4.csv`
+- `docs/paper/tables/evidence_boundaries.csv`
 
 Thought4 的冻结数值以 [`tables/thought4_diagnosis.csv`](tables/thought4_diagnosis.csv)
 保存；Thought5 Pilot 与只读诊断由脚本生成
 [`tables/thought5_pilot_diagnostics.csv`](tables/thought5_pilot_diagnostics.csv)。
 两份 CSV 都是论文派生表，不是独立机器权威来源；必须追溯对应 JSON 与 SHA。
 
-图 1 的误差线来自 Thought 1 row-bootstrap CI；图 2 的差值区间来自 40 task
-等权、suite-stratified task-cluster bootstrap 10,000 次。图 3 的 Phase 1
-黑色横线表示 p95，不是置信区间。图 4 是四条 development sample 各自 32 个
-匹配 flow 的均值。
+图 1 汇总 Failure→Representation→Sensitivity→Geometry→Intervention→
+Failure analysis 闭环。图 2 的误差线来自 Thought 1 row-bootstrap CI；
+图 3 的差值区间来自 40 task 等权、suite-stratified task-cluster bootstrap
+10,000 次。图 4 的 Phase 1 黑色横线表示 p95，不是置信区间。图 5
+使用 Thought4 的三 seed 保守包络与 grouped-bootstrap CI。图 6 的 condition/sigma
+分解是结果后只读探索，不替换 Phase 5 的预注册 primary endpoint。
 
 ## 4. 只读重算 Thought 2 统计
 
